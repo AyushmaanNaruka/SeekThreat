@@ -1,0 +1,33 @@
+# SeekThreat development stack.
+# Lab targets live in lab/docker-compose.yml — kept separate on purpose.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-seekthreat}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-seekthreat}
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seekthreat}"]
+      interval: 10s
+      retries: 5
+
+  neo4j:
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme}
+    ports: ["7474:7474", "7687:7687"]
+    volumes: [neo4jdata:/data]
+
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+
+  # TODO: api, worker, web services once apps/ is implemented
+
+volumes:
+  pgdata:
+  neo4jdata:

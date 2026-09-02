@@ -1,0 +1,29 @@
+name: third-party register check
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail if vendor/ changed without THIRD_PARTY.md
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          CHANGED=$(git diff --name-only "$BASE"...HEAD)
+
+          echo "$CHANGED" | grep -q '^vendor/' && VENDOR=1 || VENDOR=0
+          echo "$CHANGED" | grep -q '^THIRD_PARTY.md$' && REGISTER=1 || REGISTER=0
+
+          if [ "$VENDOR" = "1" ] && [ "$REGISTER" = "0" ]; then
+            echo "::error::vendor/ changed but THIRD_PARTY.md did not."
+            echo "Every piece of third-party code needs a register entry in the same PR."
+            exit 1
+          fi
+
+          echo "OK"

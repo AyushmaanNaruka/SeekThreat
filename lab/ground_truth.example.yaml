@@ -1,0 +1,51 @@
+# Ground truth for lab configuration "baseline"
+# Copy to ground_truth.yaml and keep it accurate. Every metric depends on it.
+
+configuration: baseline
+description: DMZ web tier -> internal app tier -> database segment
+created: 2026-08-05
+
+network:
+  dmz: 172.20.1.0/24
+  internal: 172.20.2.0/24
+  data: 172.20.3.0/24
+
+hosts:
+  - name: dvwa
+    ip: 172.20.1.10
+    segment: dmz
+    reachable_from_outside: true
+    services:
+      - port: 80
+        service: http
+        product: apache
+        version: "2.4.49"
+    expected_cves:
+      - id: CVE-2021-41773
+        confidence: certain      # certain | likely | possible
+        note: path traversal, deliberately unpatched
+
+  - name: internal-api
+    ip: 172.20.2.10
+    segment: internal
+    reachable_from_outside: false
+    reachable_from: [dvwa]
+    services:
+      - port: 8080
+        service: http
+        product: example-app
+        version: "1.0.0"
+    expected_cves: []
+
+# Chains the path engine should discover. This is what we grade against.
+expected_attack_paths:
+  - id: path-1
+    description: External -> DVWA path traversal -> reach internal-api
+    steps:
+      - CVE-2021-41773 on dvwa
+      - network reachability dvwa -> internal-api
+    severity: high
+
+# Findings scanners commonly report here that are NOT real.
+# Used to measure false positive rate.
+known_false_positives: []

@@ -1,0 +1,37 @@
+# Deliberately vulnerable test network.
+#
+# ISOLATED BY DESIGN. Internal networks, no egress from targets.
+# Never expose these to anything but the scanner.
+#
+# Target: 8-12 hosts across three segments with real multi-hop chains.
+# Keep lab/ground_truth.yaml in sync — every metric depends on it.
+
+services:
+  dvwa:
+    image: vulnerables/web-dvwa
+    networks:
+      dmz: { ipv4_address: 172.20.1.10 }
+    # no ports: — reachable from the scanner network only
+
+  juiceshop:
+    image: bkimminich/juice-shop
+    networks:
+      dmz: { ipv4_address: 172.20.1.11 }
+
+  # TODO: add internal app tier and database segment hosts.
+  # The multi-hop chains are what the path engine exists to find —
+  # without them there is nothing to demo.
+
+networks:
+  dmz:
+    internal: true
+    ipam:
+      config: [{ subnet: 172.20.1.0/24 }]
+  internal:
+    internal: true
+    ipam:
+      config: [{ subnet: 172.20.2.0/24 }]
+  data:
+    internal: true
+    ipam:
+      config: [{ subnet: 172.20.3.0/24 }]
