@@ -11,7 +11,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 
-from .base import ScannerAdapter, ScanRequest
+from .base import Observation, ScannerAdapter, ScanRequest
 
 
 class NmapAdapter(ScannerAdapter):
@@ -39,7 +39,7 @@ class NmapAdapter(ScannerAdapter):
         )
         return result.stdout
 
-    def _parse(self, raw: str, request: ScanRequest) -> list:
+    def _parse(self, raw: str, request: ScanRequest) -> list[Observation]:
         # TODO: parse XML into Finding + Asset objects from packages.schema.
         # Each Finding must carry source="nmap" and the raw XML fragment.
         # Do not assign severity here — that belongs to services.enrichment.

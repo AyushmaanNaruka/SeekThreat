@@ -6,9 +6,13 @@ Every scanner integration implements ScannerAdapter. The contract:
   1. Adapters NEVER scan without an authorization record. Enforced here, not by callers.
   2. Adapters invoke tools as subprocesses or containers and parse their output.
      We do not vendor or link scanner source code.
-  3. Adapters emit Finding objects from packages.schema. Raw tool output is preserved
-     in Finding.raw for provenance.
+  3. Adapters emit Observation objects from packages.schema. Raw tool output is
+     preserved as a RawArtifact for provenance.
   4. Adapters do not enrich. Severity, EPSS and scoring belong to services.enrichment.
+
+Adapters must be constructible with no arguments — tests/architecture discovers
+every subclass by reflection and instantiates it to prove the authorization gate
+holds.
 
 See docs/01-open-source-policy.md before adding an adapter for a new tool.
 """
@@ -16,36 +20,21 @@ See docs/01-open-source-policy.md before adding an adapter for a new tool.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
+
+from packages.schema.models.engagement import Authorization, ScanRequest
+from packages.schema.models.observation import Observation
+
+__all__ = [
+    "Authorization",
+    "AuthorizationError",
+    "Observation",
+    "ScanRequest",
+    "ScannerAdapter",
+]
 
 
 class AuthorizationError(Exception):
     """Raised when a scan is attempted without valid authorization."""
-
-
-@dataclass(frozen=True)
-class Authorization:
-    """Proof that this scan is permitted. No scan runs without one."""
-
-    engagement_id: str
-    authorized_by: str          # named human, not a service account
-    allowlist: list[str]        # hostnames or CIDRs
-    granted_at: datetime
-    expires_at: datetime
-
-    def permits(self, target: str) -> bool:
-        """TODO: proper CIDR and wildcard-subdomain matching."""
-        if datetime.now(timezone.utc) > self.expires_at:
-            return False
-        return target in self.allowlist
-
-
-@dataclass
-class ScanRequest:
-    target: str
-    authorization: Authorization
-    options: dict = field(default_factory=dict)
 
 
 class ScannerAdapter(ABC):
@@ -54,7 +43,7 @@ class ScannerAdapter(ABC):
     name: str
     version_command: list[str]
 
-    def scan(self, request: ScanRequest) -> list:
+    def scan(self, request: ScanRequest) -> list[Observation]:
         """Entry point. Do not override — override _execute and _parse."""
         if not request.authorization.permits(request.target):
             raise AuthorizationError(
@@ -69,8 +58,8 @@ class ScannerAdapter(ABC):
         """Invoke the tool. Return its raw output."""
 
     @abstractmethod
-    def _parse(self, raw: str, request: ScanRequest) -> list:
-        """Convert raw output into Finding objects. Preserve raw in each Finding."""
+    def _parse(self, raw: str, request: ScanRequest) -> list[Observation]:
+        """Convert raw output into Observation objects. Preserve the raw artifact."""
 
     @abstractmethod
     def is_available(self) -> bool:

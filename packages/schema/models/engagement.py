@@ -11,8 +11,9 @@ from __future__ import annotations
 import ipaddress
 from datetime import datetime, timezone
 from fnmatch import fnmatch
+from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.schema.models._time import require_aware
 
@@ -88,3 +89,34 @@ class Authorization(BaseModel):
         if datetime.now(timezone.utc) > self.expires_at:
             return False
         return any(target_matches(target, entry) for entry in self.allowlist)
+
+
+class Engagement(BaseModel):
+    """A scoped piece of authorized work. Scopes every row downstream."""
+
+    engagement_id: str
+    name: str
+    authorization: Authorization
+    created_at: datetime
+
+    @field_validator("created_at")
+    @classmethod
+    def _created_aware(cls, value: datetime) -> datetime:
+        return require_aware(value)
+
+    @model_validator(mode="after")
+    def _authorization_is_for_this_engagement(self) -> Engagement:
+        if self.authorization.engagement_id != self.engagement_id:
+            raise ValueError(
+                "engagement_id must match the authorization's engagement_id "
+                f"({self.engagement_id!r} != {self.authorization.engagement_id!r})"
+            )
+        return self
+
+
+class ScanRequest(BaseModel):
+    """One scan of one target, under one authorization."""
+
+    target: str
+    authorization: Authorization
+    options: dict[str, Any] = Field(default_factory=dict)
