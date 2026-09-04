@@ -35,3 +35,9 @@ data/
 models/
 *.gguf
 *.safetensors
+# The bare `models/` rule above targets downloaded LLM weight directories, but it also
+# matches packages/schema/models/, which is tracked Pydantic source (Provenance, etc).
+# Un-ignore that specific package.
+!packages/schema/models/
+!packages/schema/models/**
+packages/schema/models/**/__pycache__/
