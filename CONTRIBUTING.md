@@ -25,8 +25,9 @@ chore: bump celery
 
 ## Before you open a PR
 
-- [ ] It runs
-- [ ] Tests pass
+- [ ] `ruff check .` and `ruff format --check .` pass
+- [ ] `mypy packages services` passes
+- [ ] `pytest tests` passes, including `tests/architecture`
 - [ ] New logic in `services/graph` or `services/enrichment` has tests
 - [ ] No secrets, no real target hostnames, no scan output committed
 - [ ] `THIRD_PARTY.md` updated if you touched `vendor/`
@@ -39,6 +40,7 @@ chore: bump celery
 - Anything letting a scan run without an authorization record
 - LLM output used to construct graph edges
 - Fabricated metrics or placeholder data presented as measured results
+- Weakening or skipping a test in `tests/architecture/` instead of fixing the violation
 
 ## Review
 

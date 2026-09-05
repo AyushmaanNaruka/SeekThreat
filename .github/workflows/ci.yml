@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Format check
+        run: ruff format --check .
+
+      - name: Types
+        run: mypy packages services
+
+      - name: Tests
+        run: pytest tests -v
+
+      - name: Architecture guards
+        # Run these explicitly too, so a failure names the rule that broke.
+        run: |
+          echo "The LLM never creates graph edges; no scan without authorization."
+          pytest tests/architecture -v
