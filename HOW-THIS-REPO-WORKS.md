@@ -60,8 +60,13 @@ docs/             Scope, policy, architecture
 git clone <repo-url>
 cd seekthreat
 cp .env.example .env        # fill in your API keys
-docker compose -f infra/docker-compose.yml up
+pip install -r requirements-dev.txt
+docker compose -f infra/docker-compose.yml --profile core up -d
 ```
+
+**Nothing starts without a profile.** The full stack does not fit in 16 GB, so you
+choose what to run: `core` (Postgres, Redis), `model` (Ollama), `viz` (Neo4j, from
+November). The lab is a separate file. See `docs/02-architecture.md`.
 
 Then bring up the lab separately:
 

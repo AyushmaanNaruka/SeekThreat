@@ -1,9 +1,17 @@
 # SeekThreat development stack.
 # Lab targets live in lab/docker-compose.yml — kept separate on purpose.
+#
+# NOTHING starts without a profile. On a 16 GB laptop the whole stack does not
+# fit at once, so choosing what to run is deliberate. See docs/02-architecture.md.
+#
+#   docker compose -f infra/docker-compose.yml --profile core up -d
+#   docker compose -f infra/docker-compose.yml --profile core --profile model up -d
+#   docker compose -f infra/docker-compose.yml --profile viz up -d
 
 services:
   postgres:
-    image: postgres:16-alpine
+    profiles: ["core"]
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-seekthreat}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
@@ -15,19 +23,33 @@ services:
       interval: 10s
       retries: 5
 
-  neo4j:
-    image: neo4j:5-community
-    environment:
-      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme}
-    ports: ["7474:7474", "7687:7687"]
-    volumes: [neo4jdata:/data]
-
   redis:
+    profiles: ["core"]
     image: redis:7-alpine
     ports: ["6379:6379"]
 
-  # TODO: api, worker, web services once apps/ is implemented
+  ollama:
+    profiles: ["model"]
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: [ollamadata:/root/.ollama]
+
+  neo4j:
+    # Read-only projection for visualization only (D-003). Not a source of truth.
+    # Lands with the graph builder in November.
+    profiles: ["viz"]
+    image: neo4j:5-community
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme}
+      NEO4J_server_memory_heap_initial__size: 512m
+      NEO4J_server_memory_heap_max__size: 1G
+      NEO4J_server_memory_pagecache__size: 512m
+    ports: ["7474:7474", "7687:7687"]
+    volumes: [neo4jdata:/data]
+
+  # TODO: api and worker services join the core profile once apps/ is implemented.
 
 volumes:
   pgdata:
   neo4jdata:
+  ollamadata:

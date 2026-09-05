@@ -59,8 +59,8 @@ five minutes.
 
 ```bash
 cp .env.example .env
-docker compose -f infra/docker-compose.yml up
-docker compose -f lab/docker-compose.yml up      # the test network
+docker compose -f infra/docker-compose.yml --profile core up -d
+docker compose -f lab/docker-compose.yml up -d        # the test network
 ```
 
 Never point a scan at anything outside `lab/` without an authorization record.
