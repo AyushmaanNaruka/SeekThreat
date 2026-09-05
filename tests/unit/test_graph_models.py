@@ -40,6 +40,36 @@ def test_edge_is_immutable() -> None:
         _edge().rule_name = "something_else"  # type: ignore[misc]
 
 
+def test_evidence_cannot_be_mutated_in_place() -> None:
+    edge = _edge()
+    with pytest.raises(AttributeError):
+        edge.evidence.append("obs-002")  # type: ignore[attr-defined]
+
+
+def test_path_edges_cannot_be_mutated_in_place() -> None:
+    path = AttackPath(path_id="path-1", edges=[_edge()])
+    with pytest.raises(AttributeError):
+        path.edges.append(_edge())  # type: ignore[attr-defined]
+
+
+def test_attack_path_is_immutable() -> None:
+    path = AttackPath(path_id="path-1", edges=[_edge()])
+    with pytest.raises(ValidationError):
+        path.path_id = "path-2"  # type: ignore[misc]
+
+
+def test_rule_preconditions_cannot_be_mutated_in_place() -> None:
+    rule = Rule(
+        name="remote_code_execution_on_exposed_service",
+        description="An exposed service with a known RCE grants code execution",
+        preconditions=[{"kind": "service_version"}, {"kind": "vuln_candidate"}],
+        effect="code_execution",
+        citation="CAPEC-233",
+    )
+    with pytest.raises(AttributeError):
+        rule.preconditions.append({"kind": "reachability"})  # type: ignore[attr-defined]
+
+
 def test_attack_path_has_no_narration_by_default() -> None:
     path = AttackPath(path_id="path-1", edges=[_edge()])
     assert path.narration is None

@@ -50,6 +50,12 @@ def test_explain_names_every_component_with_its_source() -> None:
     assert "0.70" in text
 
 
+def test_components_cannot_be_mutated_in_place() -> None:
+    score = ExposureRiskScore(value=0.7, components=_components())
+    with pytest.raises(AttributeError):
+        score.components.append(_component("kev_listed", 1.0, 0.3, Source.KEV))  # type: ignore[attr-defined]
+
+
 def test_component_requires_an_explanation() -> None:
     with pytest.raises(ValidationError, match="explanation"):
         ScoreComponent(

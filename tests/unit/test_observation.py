@@ -29,6 +29,17 @@ def test_observation_is_immutable() -> None:
         obs.subject = "172.20.1.11:80"  # type: ignore[misc]
 
 
+def test_attributes_dict_is_mutable_in_place_a_known_limitation() -> None:
+    """Pydantic has no frozen-dict type, so `attributes` stays mutable in place
+    even though Observation itself is frozen. Accepted limitation, documented
+    above the field in packages/schema/models/observation.py — this test makes
+    it visible rather than silent.
+    """
+    obs = _observation()
+    obs.attributes["version"] = "tampered"
+    assert obs.attributes["version"] == "tampered"
+
+
 def test_observation_carries_provenance_and_artifact() -> None:
     obs = _observation()
     assert obs.provenance.source is Source.SCANNER

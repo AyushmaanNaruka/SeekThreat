@@ -51,6 +51,8 @@ class Observation(BaseModel):
     scanner: str
     kind: ObservationKind
     subject: str
+    # NOTE: dict values remain mutable in-place even though Observation is frozen;
+    # Pydantic has no frozen-dict type. Accepted limitation — see final review, Phase 0.
     attributes: dict[str, str] = Field(default_factory=dict)
     artifact_id: str
     observed_at: datetime

@@ -42,7 +42,7 @@ class ExposureRiskScore(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     value: float
-    components: list[ScoreComponent]
+    components: tuple[ScoreComponent, ...]
 
     @model_validator(mode="after")
     def _value_accounts_for_its_components(self) -> ExposureRiskScore:
