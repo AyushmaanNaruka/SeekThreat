@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from packages.schema.models.provenance import Confidence, Provenance, Source
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 
-NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
 
 def _component(name: str, value: float, weight: float, source: Source) -> ScoreComponent:
@@ -57,7 +57,5 @@ def test_component_requires_an_explanation() -> None:
             value=0.8,
             weight=0.5,
             explanation="   ",
-            provenance=Provenance(
-                source=Source.EPSS, confidence=Confidence.HIGH, retrieved_at=NOW
-            ),
+            provenance=Provenance(source=Source.EPSS, confidence=Confidence.HIGH, retrieved_at=NOW),
         )

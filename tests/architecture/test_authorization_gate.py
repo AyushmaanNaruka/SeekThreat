@@ -10,7 +10,7 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -18,7 +18,7 @@ import services.scanners as scanners_pkg
 from packages.schema import Authorization, ScanRequest
 from services.scanners.base import AuthorizationError, ScannerAdapter
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 UNAUTHORIZED_TARGET = "203.0.113.10"  # TEST-NET-3, never in an allowlist
 
 
@@ -30,9 +30,7 @@ def _all_subclasses(cls: type) -> set[type]:
 
 
 def _concrete_adapters() -> list[type[ScannerAdapter]]:
-    for module in pkgutil.walk_packages(
-        scanners_pkg.__path__, scanners_pkg.__name__ + "."
-    ):
+    for module in pkgutil.walk_packages(scanners_pkg.__path__, scanners_pkg.__name__ + "."):
         importlib.import_module(module.name)
     return sorted(
         (c for c in _all_subclasses(ScannerAdapter) if not inspect.isabstract(c)),

@@ -25,8 +25,9 @@ class NmapAdapter(ScannerAdapter):
         # -oX - writes XML to stdout
         cmd = [
             "nmap",
-            "-sV",                       # service/version detection
-            "-oX", "-",
+            "-sV",  # service/version detection
+            "-oX",
+            "-",
             *request.options.get("extra_args", []),
             request.target,
         ]

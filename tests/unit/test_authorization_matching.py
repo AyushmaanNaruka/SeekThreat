@@ -1,11 +1,11 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from pydantic import ValidationError
 
 from packages.schema.models.engagement import Authorization, target_matches
 
-NOW = datetime.now(timezone.utc)
+NOW = datetime.now(UTC)
 
 
 def _auth(allowlist: list[str], expires_in: timedelta = timedelta(hours=1)) -> Authorization:

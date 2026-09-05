@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -10,7 +10,7 @@ from packages.schema.models.provenance import (
     Source,
 )
 
-NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
 
 def _prov() -> Provenance:

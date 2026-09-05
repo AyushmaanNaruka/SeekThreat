@@ -9,7 +9,7 @@ pattern.
 from __future__ import annotations
 
 import ipaddress
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from fnmatch import fnmatch
 from typing import Any
 
@@ -86,7 +86,7 @@ class Authorization(BaseModel):
         return value
 
     def permits(self, target: str) -> bool:
-        if datetime.now(timezone.utc) > self.expires_at:
+        if datetime.now(UTC) > self.expires_at:
             return False
         return any(target_matches(target, entry) for entry in self.allowlist)
 

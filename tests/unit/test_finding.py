@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -7,7 +7,7 @@ from packages.schema.models.asset import Asset, Service
 from packages.schema.models.finding import EnrichedFinding, Finding
 from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
 
-NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
 
 def _prov(source: Source = Source.CVE_ORG) -> Provenance:
@@ -84,8 +84,8 @@ def test_enriched_finding_has_no_score_until_one_is_computed() -> None:
 
 
 def test_enriched_finding_accepts_a_score() -> None:
-    from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
     from packages.schema.models.provenance import Confidence, Provenance, Source
+    from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 
     finding = Finding(
         finding_id="fnd-001",
@@ -98,8 +98,11 @@ def test_enriched_finding_accepts_a_score() -> None:
     prov = Provenance(source=Source.EPSS, confidence=Confidence.HIGH, retrieved_at=NOW)
     components = [
         ScoreComponent(
-            name="epss", value=0.8, weight=0.5,
-            explanation="epss contributed 0.8", provenance=prov,
+            name="epss",
+            value=0.8,
+            weight=0.5,
+            explanation="epss contributed 0.8",
+            provenance=prov,
         ),
     ]
     enriched = EnrichedFinding(

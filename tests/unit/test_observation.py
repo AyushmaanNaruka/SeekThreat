@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -6,7 +6,7 @@ from pydantic import ValidationError
 from packages.schema.models.observation import Observation, ObservationKind, RawArtifact
 from packages.schema.models.provenance import Confidence, Provenance, Source
 
-NOW = datetime(2026, 9, 5, 12, 0, tzinfo=timezone.utc)
+NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
 
 def _observation() -> Observation:
@@ -19,9 +19,7 @@ def _observation() -> Observation:
         attributes={"product": "apache", "version": "2.4.49"},
         artifact_id="art-001",
         observed_at=NOW,
-        provenance=Provenance(
-            source=Source.SCANNER, confidence=Confidence.HIGH, retrieved_at=NOW
-        ),
+        provenance=Provenance(source=Source.SCANNER, confidence=Confidence.HIGH, retrieved_at=NOW),
     )
 
 

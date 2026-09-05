@@ -876,9 +876,7 @@ def _observation() -> Observation:
         attributes={"product": "apache", "version": "2.4.49"},
         artifact_id="art-001",
         observed_at=NOW,
-        provenance=Provenance(
-            source=Source.SCANNER, confidence=Confidence.HIGH, retrieved_at=NOW
-        ),
+        provenance=Provenance(source=Source.SCANNER, confidence=Confidence.HIGH, retrieved_at=NOW),
     )
 
 
@@ -1352,9 +1350,7 @@ def test_component_requires_an_explanation() -> None:
             value=0.8,
             weight=0.5,
             explanation="   ",
-            provenance=Provenance(
-                source=Source.EPSS, confidence=Confidence.HIGH, retrieved_at=NOW
-            ),
+            provenance=Provenance(source=Source.EPSS, confidence=Confidence.HIGH, retrieved_at=NOW),
         )
 
 
@@ -1893,9 +1889,7 @@ def _all_subclasses(cls: type) -> set[type]:
 
 
 def _concrete_adapters() -> list[type[ScannerAdapter]]:
-    for module in pkgutil.walk_packages(
-        scanners_pkg.__path__, scanners_pkg.__name__ + "."
-    ):
+    for module in pkgutil.walk_packages(scanners_pkg.__path__, scanners_pkg.__name__ + "."):
         importlib.import_module(module.name)
     return sorted(
         (c for c in _all_subclasses(ScannerAdapter) if not inspect.isabstract(c)),
@@ -2120,8 +2114,7 @@ def forbidden_imports_in(path: Path) -> list[str]:
                 continue
             for name in names:
                 if any(
-                    name == prefix or name.startswith(prefix + ".")
-                    for prefix in FORBIDDEN_PREFIXES
+                    name == prefix or name.startswith(prefix + ".") for prefix in FORBIDDEN_PREFIXES
                 ):
                     rel = py_file.relative_to(REPO_ROOT)
                     violations.append(f"{rel}: imports {name}")
@@ -2146,8 +2139,7 @@ def test_checker_detects_a_planted_violation(tmp_path: Path) -> None:
     """A checker that always returns [] would pass silently. Prove it bites."""
     offender = tmp_path / "bad.py"
     offender.write_text(
-        "from services.graph.builder import build_graph\n"
-        "import services.enrichment\n",
+        "from services.graph.builder import build_graph\nimport services.enrichment\n",
         encoding="utf-8",
     )
     violations = forbidden_imports_in(tmp_path)
