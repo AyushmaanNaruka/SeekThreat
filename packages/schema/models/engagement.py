@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import ipaddress
 from datetime import UTC, datetime
-from fnmatch import fnmatch
+from fnmatch import fnmatchcase
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -50,7 +50,7 @@ def target_matches(target: str, pattern: str) -> bool:
         return False
 
     if pattern.startswith("*."):
-        return fnmatch(target.lower(), pattern.lower())
+        return fnmatchcase(target.lower(), pattern.lower())
 
     return target.lower() == pattern.lower()
 
@@ -62,7 +62,7 @@ class Authorization(BaseModel):
 
     engagement_id: str
     authorized_by: str
-    allowlist: list[str]
+    allowlist: tuple[str, ...]
     granted_at: datetime
     expires_at: datetime
 
@@ -73,7 +73,7 @@ class Authorization(BaseModel):
 
     @field_validator("allowlist")
     @classmethod
-    def _allowlist_not_empty(cls, value: list[str]) -> list[str]:
+    def _allowlist_not_empty(cls, value: tuple[str, ...]) -> tuple[str, ...]:
         if not value:
             raise ValueError("allowlist must name at least one target")
         return value
@@ -85,8 +85,17 @@ class Authorization(BaseModel):
             raise ValueError("authorized_by must name a human, not be blank")
         return value
 
+    @model_validator(mode="after")
+    def _window_is_not_inverted(self) -> Authorization:
+        if self.expires_at <= self.granted_at:
+            raise ValueError(
+                f"expires_at must be after granted_at ({self.expires_at!r} <= {self.granted_at!r})"
+            )
+        return self
+
     def permits(self, target: str) -> bool:
-        if datetime.now(UTC) > self.expires_at:
+        now = datetime.now(UTC)
+        if now < self.granted_at or now > self.expires_at:
             return False
         return any(target_matches(target, entry) for entry in self.allowlist)
 

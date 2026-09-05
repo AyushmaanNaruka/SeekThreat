@@ -8,12 +8,16 @@ from packages.schema.models.engagement import Authorization, target_matches
 NOW = datetime.now(UTC)
 
 
-def _auth(allowlist: list[str], expires_in: timedelta = timedelta(hours=1)) -> Authorization:
+def _auth(
+    allowlist: list[str],
+    expires_in: timedelta = timedelta(hours=1),
+    granted_offset: timedelta = timedelta(0),
+) -> Authorization:
     return Authorization(
         engagement_id="eng-001",
         authorized_by="A. Named Human",
         allowlist=allowlist,
-        granted_at=NOW,
+        granted_at=NOW + granted_offset,
         expires_at=NOW + expires_in,
     )
 
@@ -58,7 +62,13 @@ def test_permits_rejects_target_outside_allowlist() -> None:
 
 
 def test_expired_authorization_permits_nothing() -> None:
-    auth = _auth(["172.20.0.0/16"], expires_in=timedelta(hours=-1))
+    # Granted two hours ago, expired one hour ago: a valid (non-inverted) window
+    # that has since closed.
+    auth = _auth(
+        ["172.20.0.0/16"],
+        expires_in=timedelta(hours=-1),
+        granted_offset=timedelta(hours=-2),
+    )
     assert auth.permits("172.20.1.10") is False
 
 
@@ -86,4 +96,34 @@ def test_authorization_rejects_naive_datetimes() -> None:
             allowlist=["172.20.0.0/16"],
             granted_at=datetime(2026, 9, 5, 12, 0),
             expires_at=datetime(2026, 9, 5, 13, 0),
+        )
+
+
+def test_allowlist_cannot_be_mutated_in_place() -> None:
+    auth = _auth(["172.20.0.0/16"])
+    with pytest.raises(AttributeError):
+        auth.allowlist.append("0.0.0.0/0")  # type: ignore[attr-defined]
+
+
+def test_not_yet_granted_authorization_permits_nothing() -> None:
+    # granted_at in the future: an otherwise-allowlisted, otherwise-unexpired
+    # target must still be rejected because the window has not opened yet.
+    future_auth = Authorization(
+        engagement_id="eng-001",
+        authorized_by="A. Named Human",
+        allowlist=["172.20.0.0/16"],
+        granted_at=NOW + timedelta(hours=1),
+        expires_at=NOW + timedelta(hours=2),
+    )
+    assert future_auth.permits("172.20.1.10") is False
+
+
+def test_authorization_rejects_inverted_or_zero_width_window() -> None:
+    with pytest.raises(ValidationError, match="expires_at"):
+        Authorization(
+            engagement_id="eng-001",
+            authorized_by="A. Named Human",
+            allowlist=["172.20.0.0/16"],
+            granted_at=NOW,
+            expires_at=NOW,
         )
