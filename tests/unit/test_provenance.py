@@ -29,12 +29,12 @@ def test_provenance_rejects_naive_datetime() -> None:
 def test_provenance_is_frozen() -> None:
     p = _prov()
     with pytest.raises(ValidationError):
-        p.source = Source.NVD
+        p.source = Source.NVD  # type: ignore[misc]
 
 
 def test_attributed_requires_provenance() -> None:
     with pytest.raises(ValidationError):
-        Attributed[str](value="9.8")
+        Attributed[str](value="9.8")  # type: ignore[call-arg]
 
 
 def test_attributed_carries_value_and_provenance() -> None:

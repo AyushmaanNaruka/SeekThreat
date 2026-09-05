@@ -26,7 +26,7 @@ def _observation() -> Observation:
 def test_observation_is_immutable() -> None:
     obs = _observation()
     with pytest.raises(ValidationError):
-        obs.subject = "172.20.1.11:80"
+        obs.subject = "172.20.1.11:80"  # type: ignore[misc]
 
 
 def test_observation_carries_provenance_and_artifact() -> None:
@@ -37,7 +37,7 @@ def test_observation_carries_provenance_and_artifact() -> None:
 
 def test_observation_requires_provenance() -> None:
     with pytest.raises(ValidationError):
-        Observation(
+        Observation(  # type: ignore[call-arg]
             observation_id="obs-002",
             engagement_id="eng-001",
             scanner="nmap",
@@ -87,4 +87,4 @@ def test_raw_artifact_is_immutable() -> None:
         captured_at=NOW,
     )
     with pytest.raises(ValidationError):
-        art.content = "tampered"
+        art.content = "tampered"  # type: ignore[misc]

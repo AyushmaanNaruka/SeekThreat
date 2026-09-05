@@ -37,7 +37,7 @@ def test_edge_requires_a_named_rule() -> None:
 
 def test_edge_is_immutable() -> None:
     with pytest.raises(ValidationError):
-        _edge().rule_name = "something_else"
+        _edge().rule_name = "something_else"  # type: ignore[misc]
 
 
 def test_attack_path_has_no_narration_by_default() -> None:
