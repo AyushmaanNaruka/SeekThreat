@@ -12,11 +12,12 @@ services:
   postgres:
     profiles: ["core"]
     image: pgvector/pgvector:pg16
+    env_file: ../.env
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-seekthreat}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       POSTGRES_DB: ${POSTGRES_DB:-seekthreat}
-    ports: ["5432:5432"]
+    ports: ["127.0.0.1:5432:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-seekthreat}"]
@@ -26,12 +27,12 @@ services:
   redis:
     profiles: ["core"]
     image: redis:7-alpine
-    ports: ["6379:6379"]
+    ports: ["127.0.0.1:6379:6379"]
 
   ollama:
     profiles: ["model"]
     image: ollama/ollama:latest
-    ports: ["11434:11434"]
+    ports: ["127.0.0.1:11434:11434"]
     volumes: [ollamadata:/root/.ollama]
 
   neo4j:
@@ -39,12 +40,13 @@ services:
     # Lands with the graph builder in November.
     profiles: ["viz"]
     image: neo4j:5-community
+    env_file: ../.env
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme}
       NEO4J_server_memory_heap_initial__size: 512m
       NEO4J_server_memory_heap_max__size: 1G
       NEO4J_server_memory_pagecache__size: 512m
-    ports: ["7474:7474", "7687:7687"]
+    ports: ["127.0.0.1:7474:7474", "127.0.0.1:7687:7687"]
     volumes: [neo4jdata:/data]
 
   # TODO: api and worker services join the core profile once apps/ is implemented.
