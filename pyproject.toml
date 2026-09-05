@@ -9,6 +9,11 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
+# UP042: this project deliberately uses `class X(str, Enum)` rather than `enum.StrEnum`
+# for its schema enums (Source, Confidence, ObservationKind in packages/schema/models/),
+# to keep JSON/Pydantic-v2 serialization behavior explicit and stable at the schema
+# boundary. See DECISIONS.md D-010.
+ignore = ["UP042"]
 
 [tool.mypy]
 python_version = "3.11"

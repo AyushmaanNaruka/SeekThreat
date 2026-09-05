@@ -47,6 +47,33 @@ Newest first.
 
 ---
 
+### D-010 — Keep str+Enum for schema enums; suppress ruff UP042 project-wide
+**Date:** 2026-09-05
+**Decided by:** Full team
+**Type:** Tool choice
+**Status:** Active
+
+**Decision**
+`Source`, `Confidence`, and `ObservationKind` in `packages/schema/models/` stay declared as
+`class X(str, Enum)` rather than converting to `enum.StrEnum`. Ruff's `UP042` rule, which
+suggests the conversion, is suppressed project-wide in `pyproject.toml`.
+
+**Why**
+`StrEnum` can subtly change `__str__` and serialization behavior compared to the `(str, Enum)`
+mixin, and these three enums sit at the schema package's JSON/Pydantic-v2 serialization
+boundary — exactly the kind of change `packages/schema/README.md` asks us to be careful with.
+Converting them as an incidental side effect of onboarding CI (rather than a deliberate,
+tested decision) would risk changing serialization behavior nobody asked to change.
+
+**Impact on plan**
+None. A lint rule is suppressed; no runtime behavior changes.
+
+**Cost if we're wrong**
+Very low. If we later want `StrEnum`, it is a small, deliberate, testable conversion — nothing
+about this decision blocks it, it only prevents it from happening accidentally.
+
+---
+
 ### D-009 — Pydantic v2 replaces dataclasses in packages/schema
 **Date:** 2026-09-05
 **Decided by:** Full team
