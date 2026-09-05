@@ -34,7 +34,6 @@ dependency manifests.
 
 | Project | Licence | Mode | What we use | Verified by | Date |
 |---|---|---|---|---|---|
-| _example — delete once real entries exist_ | | | | | |
 | BRON (MIT ALFA group) | *TO VERIFY* | Data | CVE→CWE→CAPEC→ATT&CK graph substrate | | |
 | DefectDojo | *TO VERIFY — believed BSD-3* | Study / Vendored | Scanner output parser patterns | | |
 | Nmap | NPSL | Service | Invoked as subprocess, XML output parsed. Source never vendored | | |

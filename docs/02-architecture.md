@@ -1,6 +1,6 @@
 # Architecture
 
-How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-009.
+How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-010.
 
 Read `docs/00-scope.md` for what we are building. This document is how.
 
@@ -166,11 +166,13 @@ Three tests in `tests/architecture/`:
 1. **Import ban.** Walks the AST of every file under `services/assistant/` and fails if any
    import resolves to `services.graph`, `services.enrichment` or `services.scanners`. A new
    file that violates it fails CI on the pull request that adds it.
-2. **Purity.** `build_graph(facts)` and `find_paths(graph, rules)` are called twice on a
-   fixture and their serialized output must be byte-identical. This catches dict ordering,
-   set iteration, timestamps leaking into edges, and any future model call sneaking in.
-3. **No narration upstream.** Every `AttackPath` returned by `services/graph` must have
-   `narration is None`. Narration attaches strictly downstream.
+2. **Purity** (lands with the graph builder in November). `build_graph(facts)` and
+   `find_paths(graph, rules)` are called twice on a fixture and their serialized output must
+   be byte-identical. This catches dict ordering, set iteration, timestamps leaking into
+   edges, and any future model call sneaking in.
+3. **No narration upstream** (lands with the graph builder in November). Every `AttackPath`
+   returned by `services/graph` must have `narration is None`. Narration attaches strictly
+   downstream.
 
 ### The authorization choke point
 
@@ -183,11 +185,12 @@ Every scan routes through one function. Two tests:
    target, assert `_execute` was never called. This proves the check happens before the tool
    runs rather than beside it.
 
-**Known live defect.** `services/scanners/base.py` implements `permits()` as
-`target in self.allowlist` — an exact string match. The allowlist in `.env.example` is
-`172.20.0.0/16`, so scanning `172.20.1.10` is currently rejected. It fails closed, which is
-the safe direction, but authorization does not presently work. Phase 0 replaces this with
-proper CIDR and wildcard-subdomain matching, with tests for both.
+**Fixed in Phase 0.** `services/scanners/base.py` previously implemented `permits()` as
+`target in self.allowlist` — an exact string match. An allowlist entry of `172.20.0.0/16`
+rejected a scan of `172.20.1.10` even though it fell inside that range. It failed closed,
+which was the safe direction, but authorization did not work as intended. Phase 0 replaced
+this with proper CIDR and wildcard-subdomain matching, verified in
+`tests/unit/test_authorization_matching.py`.
 
 ---
 
@@ -228,6 +231,7 @@ Full reasoning in `DECISIONS.md`.
 | D-007 | Row-level `engagement_id` scoping, not schema-per-tenant |
 | D-008 | ERS weights hand-tuned and documented. KEV membership validates, it does not train |
 | D-009 | Pydantic v2 replaces dataclasses in `packages/schema` |
+| D-010 | Keep str+Enum for schema enums; suppress ruff UP042 project-wide |
 
 ### Why the graph is not a database
 
@@ -265,10 +269,14 @@ components additively with stated weights, each rendering its own explanation th
 
 | Profile | Contains | Used for |
 |---|---|---|
-| `core` | Postgres, Redis, API, worker | Day-to-day development |
+| `core` | Postgres, Redis (API and worker land with Layer 1, see note) | Day-to-day development |
 | `lab` | The vulnerable target network | Collection work and ground-truth runs |
 | `model` | Ollama | Enrichment derivation, narration, assistant |
 | `viz` | Neo4j | Demo and graph inspection, from November |
+
+**Note:** `infra/docker-compose.yml` today only brings up Postgres and Redis under `core`,
+with a `TODO` marking where the API and worker containers join once `apps/api` is
+buildable. This is Phase 0 groundwork; the API and worker containers land with Layer 1.
 
 The lab stays in `lab/docker-compose.yml`, on internal networks with no egress, as it is now.
 
