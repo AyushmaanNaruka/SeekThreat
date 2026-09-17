@@ -22,6 +22,15 @@ services:
   # The multi-hop chains are what the path engine exists to find —
   # without them there is nothing to demo.
 
+  # Not a target — the only host on this network permitted to scan the others.
+  # Used to capture real nmap XML fixtures for tests/fixtures/nmap/. Never runs
+  # unattended: bring it up, run one scan, capture the output, take it back down.
+  scanner:
+    image: instrumentisto/nmap:latest
+    entrypoint: ["sleep", "infinity"]
+    networks:
+      dmz: { ipv4_address: 172.20.1.250 }
+
 networks:
   dmz:
     internal: true

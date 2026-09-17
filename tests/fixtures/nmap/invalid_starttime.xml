@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV -oX - 172.20.1.90" start="1700000000" startstr="Mon Nov 20 00:00:00 2023" version="7.98" xmloutputversion="1.05">
+<host starttime="notanumber"><status state="up" reason="syn-ack" reason_ttl="64"/>
+<address addr="172.20.1.90" addrtype="ipv4"/>
+</host>
+<runstats><finished time="1700000010" timestr="Mon Nov 20 00:00:10 2023" summary="done" elapsed="10.00" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

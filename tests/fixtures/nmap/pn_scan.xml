@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV -Pn -oX - 172.20.1.40" start="1700000000" startstr="Mon Nov 20 00:00:00 2023" version="7.98" xmloutputversion="1.05">
+<host starttime="1700000001" endtime="1700000006"><status state="up" reason="user-set" reason_ttl="0"/>
+<address addr="172.20.1.40" addrtype="ipv4"/>
+<ports>
+<port protocol="tcp" portid="443"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="https" product="nginx" version="1.24.0" method="probed" conf="10"/></port>
+</ports>
+</host>
+<runstats><finished time="1700000010" timestr="Mon Nov 20 00:00:10 2023" summary="done" elapsed="10.00" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

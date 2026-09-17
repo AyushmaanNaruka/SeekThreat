@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV -oX - 172.20.1.50" start="1700000000" startstr="Mon Nov 20 00:00:00 2023" version="7.98" xmloutputversion="1.05">
+<host starttime="1700000001" endtime="1700000006"><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.1.50" addrtype="ipv4"/>
+<address addr="2001:0db8::50" addrtype="ipv6"/>
+<address addr="AA:BB:CC:DD:EE:FF" addrtype="mac" vendor="Example Vendor"/>
+<hostnames>
+<hostname name="dual.lab.local" type="user"/>
+<hostname name="dual.lab.local" type="PTR"/>
+</hostnames>
+</host>
+<runstats><finished time="1700000010" timestr="Mon Nov 20 00:00:10 2023" summary="done" elapsed="10.00" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

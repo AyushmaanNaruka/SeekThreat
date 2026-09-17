@@ -1,6 +1,6 @@
 # Architecture
 
-How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-010.
+How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-013.
 
 Read `docs/00-scope.md` for what we are building. This document is how.
 
@@ -216,6 +216,33 @@ models for free.
 the map holds provenance while the value lives elsewhere; pairing them makes an unattributed
 value unrepresentable rather than merely discouraged.
 
+### The nmap observation taxonomy
+
+`services/scanners/nmap_xml.py` is the reference parser (D-011, D-012). `services/normalize`
+and `services/graph` will both key off its output, so the shape is recorded here rather than
+left implicit in the code.
+
+Three `ObservationKind`s are emitted from an `-sV` run: `HOST_UP`, `PORT_OPEN`,
+`SERVICE_VERSION`. Non-open ports and `method="table"` service guesses are deliberately not
+emitted as evidence — see D-012 for why, and note that nothing is lost, since the `RawArtifact`
+is retained verbatim and re-parsing recovers them later without rescanning.
+
+`subject` format, which downstream identity resolution keys on:
+
+| Kind | Subject | Example |
+|---|---|---|
+| `HOST_UP` | bare canonical address | `172.20.1.10`, `2001:db8::10`, `mac:aa:bb:cc:dd:ee:ff` |
+| `PORT_OPEN`, `SERVICE_VERSION` | `<host>:<port>/<proto>` | `172.20.1.10:80/tcp` |
+
+Canonical address selection prefers IPv4, then IPv6 (compressed form), then MAC — deterministic
+regardless of XML document order. Hostnames never appear in `subject`: DNS is mutable and PTR
+records are attacker-influenced, matching the stance `Authorization` matching already takes by
+never resolving DNS. They are carried as `hostname`/`hostnames` attributes instead.
+
+Both `artifact_id` and `observation_id` are content-derived (sha256 over their inputs), not
+random or clock-based — replaying the same `RawArtifact` through the parser always yields the
+same ids, which is what lets `tests/fixtures/observations/` stand in for a scan.
+
 ---
 
 ## Decisions
@@ -232,6 +259,9 @@ Full reasoning in `DECISIONS.md`.
 | D-008 | ERS weights hand-tuned and documented. KEV membership validates, it does not train |
 | D-009 | Pydantic v2 replaces dataclasses in `packages/schema` |
 | D-010 | Keep str+Enum for schema enums; suppress ruff UP042 project-wide |
+| D-011 | `ScannerAdapter.scan()` returns a `ScanResult` (artifact + observations), not a bare list |
+| D-012 | nmap parser taxonomy: open ports only; `method="table"` never yields `SERVICE_VERSION` |
+| D-013 | Stdlib `xml.etree.ElementTree` for nmap XML, not `defusedxml` |
 
 ### Why the graph is not a database
 

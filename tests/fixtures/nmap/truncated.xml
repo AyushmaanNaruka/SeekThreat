@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV -oX - 172.20.1.80" start="1700000000" startstr="Mon Nov 20 00:00:00 2023" version="7.98" xmloutputversion="1.05">
+<host starttime="1700000001" endtime="1700000006"><status state="up" reason="syn-ack" reason_ttl="64"/>
+<address addr="172.20.1.80" addrtype="ipv4"/>
+<ports>
+<port protocol="tcp" portid="80"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="Apache

@@ -16,7 +16,12 @@ from packages.schema.models.engagement import (
 )
 from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
 from packages.schema.models.graph import AttackPath, Chokepoint, PathEdge, Rule
-from packages.schema.models.observation import Observation, ObservationKind, RawArtifact
+from packages.schema.models.observation import (
+    Observation,
+    ObservationKind,
+    RawArtifact,
+    ScanResult,
+)
 from packages.schema.models.provenance import (
     Attributed,
     Confidence,
@@ -46,6 +51,7 @@ __all__ = [
     "RawArtifact",
     "Rule",
     "ScanRequest",
+    "ScanResult",
     "ScoreComponent",
     "Service",
     "Source",

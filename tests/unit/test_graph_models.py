@@ -128,6 +128,7 @@ def test_schema_package_reexports_every_model() -> None:
         "Provenance",
         "RawArtifact",
         "Rule",
+        "ScanResult",
         "ScoreComponent",
         "Service",
         "Source",

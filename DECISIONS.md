@@ -47,6 +47,106 @@ Newest first.
 
 ---
 
+### D-013 — Stdlib `xml.etree.ElementTree` for nmap XML, not `defusedxml`
+**Date:** 2026-09-18
+**Decided by:** Full team
+**Type:** Tool choice
+**Status:** Active
+
+**Decision**
+`services/scanners/nmap_xml.py` parses nmap output with the standard library's
+`xml.etree.ElementTree`, guarded by a size cap and a DOCTYPE check, rather than adding the
+`defusedxml` dependency.
+
+**Why**
+On Python 3.11, `xml.etree.ElementTree` does not resolve external general entities, so XXE is
+not reachable. The residual concern — the billion-laughs entity-expansion attack — requires a
+DOCTYPE with an internal subset, which nmap's own XML writer never emits (nmap emits a bare
+`<!DOCTYPE nmaprun>`). A DOCTYPE guard that rejects an internal subset or a `SYSTEM`/`PUBLIC`
+external identifier, while explicitly allowing nmap's own bare doctype, closes that gap in five
+lines with no dependency. `defusedxml` would defend against input nmap structurally cannot
+produce, while the real risk — attacker-controlled banner text flowing into logs, Neo4j and an
+LLM prompt — is a sanitization problem, not a parser-choice one, and is handled separately by
+stripping control characters and capping attribute length in the parser itself.
+
+**Impact on plan**
+None. No new dependency; `THIRD_PARTY.md` is unaffected.
+
+**Cost if we're wrong**
+Low. Swapping the parse call for `defusedxml.ElementTree.fromstring` is a one-line change behind
+the same guard functions if a future scanner's output turns out to make DTD-based attacks
+reachable.
+
+---
+
+### D-012 — nmap parser taxonomy: open ports only, method="table" never yields SERVICE_VERSION
+**Date:** 2026-09-18
+**Decided by:** Full team
+**Type:** Divergence
+
+**Decision**
+`services/scanners/nmap_xml.py` emits only `HOST_UP`, `PORT_OPEN` and `SERVICE_VERSION`
+observations from an `nmap -sV` run. Non-open ports (closed, filtered) are not emitted as
+observations in this slice. A `<service>` element with `method="table"` (nmap's guess from the
+port-number table, not a fingerprint match) never produces a `SERVICE_VERSION`; its name and
+method are recorded as attributes on `PORT_OPEN` instead.
+
+**Why**
+Non-open ports are real facts, but nothing in the pipeline consumes them until the graph
+engine's reachability rules exist (November), and the `RawArtifact` is retained verbatim, so
+re-parsing recovers them later without rescanning — deferring costs nothing. `method="table"` is
+zero new evidence over the port number itself (it just means "port 80 is `http` per
+`/etc/services`"); emitting it as `SERVICE_VERSION` would let enrichment match CVEs against a
+guess nmap never actually verified.
+
+**Impact on plan**
+None to timeline. Narrows `services/enrichment`'s input to only nmap's genuinely fingerprinted
+services, which should reduce false-positive CVE matches once fusion logic lands in October.
+
+**Cost if we're wrong**
+Low. Both are additive: a future `REACHABILITY`-kind emission for non-open ports, or a lower-
+confidence `SERVICE_VERSION` for `method="table"`, can be added without touching what already
+ships. Any attribute-schema change to the emitted kinds does change every downstream
+`observation_id` (see D-011), so the more consequential cost is in that decision, not this one.
+
+---
+
+### D-011 — `ScannerAdapter.scan()` returns a `ScanResult`, not a bare observation list
+**Date:** 2026-09-18
+**Decided by:** Full team
+**Type:** Divergence
+
+**Decision**
+`services/scanners/base.py`'s `ScannerAdapter.scan()` now returns a new frozen `ScanResult`
+(`packages/schema/models/observation.py`) — `{artifact: RawArtifact, observations:
+tuple[Observation, ...]}` — instead of `list[Observation]`. The base class constructs the
+`RawArtifact` itself, from a new `content_type` class attribute and an overridable
+`_captured_at()` hook, and passes the finished artifact into `_parse(artifact, request)`.
+`artifact_id` and `observation_id` are both content-derived (sha256), not random or clock-based.
+
+**Why**
+`Observation.artifact_id` is required and points at a `RawArtifact` that the architecture
+retains verbatim for provenance — but the prior `scan() -> list[Observation]` signature gave
+that artifact nowhere to go; it was constructed nowhere and returned nowhere. Provenance was a
+dangling pointer from the moment `Observation` was written. Fixing this in the base class, not
+each adapter, mirrors why the authorization gate lives there: every adapter gets identical,
+correct handling for free. Taking the wall clock exactly once in `scan()` (via `_captured_at`)
+and threading it into `_parse` as data is what lets `_parse` be a pure, replayable function —
+the property `tests/fixtures/observations/` depends on.
+
+**Impact on plan**
+Touches every future scanner adapter (nuclei and beyond): each sets a `content_type` class
+attribute, may override `_captured_at()`, and implements `_parse(artifact, request) ->
+tuple[Observation, ...]` instead of the old `_parse(raw, request) -> list[Observation]`. No
+architecture test broke — `tests/architecture/test_authorization_gate.py` only exercises the
+raise-before-`_execute` path.
+
+**Cost if we're wrong**
+Low. `ScanResult` is an additive wrapper; reverting to a bare list (with the artifact problem
+unsolved) is a small, mechanical change if a future design supersedes it.
+
+---
+
 ### D-010 — Keep str+Enum for schema enums; suppress ruff UP042 project-wide
 **Date:** 2026-09-05
 **Decided by:** Full team

@@ -10,13 +10,16 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+from datetime import datetime
 
-from .base import Observation, ScannerAdapter, ScanRequest
+from .base import Observation, RawArtifact, ScannerAdapter, ScanRequest
+from .nmap_xml import parse_nmap_xml, parse_run_timestamp
 
 
 class NmapAdapter(ScannerAdapter):
     name = "nmap"
     version_command = ["nmap", "--version"]
+    content_type = "application/xml"
 
     def is_available(self) -> bool:
         return shutil.which("nmap") is not None
@@ -34,14 +37,19 @@ class NmapAdapter(ScannerAdapter):
         result = subprocess.run(
             cmd,
             capture_output=True,
-            text=True,
             timeout=request.options.get("timeout", 1800),
             check=True,
         )
-        return result.stdout
+        # Decoded explicitly, not via text=True: that flag applies universal-newline
+        # translation, which would make the "verbatim" artifact platform-dependent and
+        # its content hash unstable across Windows and Linux.
+        return result.stdout.decode("utf-8", errors="replace")
 
-    def _parse(self, raw: str, request: ScanRequest) -> list[Observation]:
-        # TODO: parse XML into Finding + Asset objects from packages.schema.
-        # Each Finding must carry source="nmap" and the raw XML fragment.
-        # Do not assign severity here — that belongs to services.enrichment.
-        raise NotImplementedError("Parse nmap XML into schema objects")
+    def _captured_at(self, raw: str) -> datetime:
+        return parse_run_timestamp(raw)
+
+    def _parse(self, artifact: RawArtifact, request: ScanRequest) -> tuple[Observation, ...]:
+        # Scanners emit Observation only; Finding is services.normalize's output, built
+        # from observations across scanners. Never assign severity here — that belongs
+        # to services.enrichment.
+        return parse_nmap_xml(artifact, engagement_id=request.authorization.engagement_id)

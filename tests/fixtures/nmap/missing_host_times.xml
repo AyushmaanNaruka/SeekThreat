@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV -oX - 172.20.1.20" start="1700000000" startstr="Mon Nov 20 00:00:00 2023" version="7.98" xmloutputversion="1.05">
+<host><status state="up" reason="syn-ack" reason_ttl="64"/>
+<address addr="172.20.1.20" addrtype="ipv4"/>
+<hostnames>
+</hostnames>
+<ports>
+<port protocol="tcp" portid="22"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="ssh" product="OpenSSH" version="9.2" method="probed" conf="10"/></port>
+</ports>
+</host>
+<runstats><finished time="1700000010" timestr="Mon Nov 20 00:00:10 2023" summary="done" elapsed="10.00" exit="success"/><hosts up="1" down="0" total="1"/>
+</runstats>
+</nmaprun>

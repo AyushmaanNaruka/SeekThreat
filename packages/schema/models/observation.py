@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.schema.models._time import require_aware
 from packages.schema.models.provenance import Provenance
@@ -62,3 +62,26 @@ class Observation(BaseModel):
     @classmethod
     def _aware(cls, value: datetime) -> datetime:
         return require_aware(value)
+
+
+class ScanResult(BaseModel):
+    """Everything one authorized scan produced: the artifact and the facts derived from it.
+
+    Every observation must reference this result's own artifact — a scan never mixes
+    facts derived from one tool run with an artifact from another.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    artifact: RawArtifact
+    observations: tuple[Observation, ...] = ()
+
+    @model_validator(mode="after")
+    def _observations_reference_this_artifact(self) -> ScanResult:
+        stray = sorted({o.artifact_id for o in self.observations} - {self.artifact.artifact_id})
+        if stray:
+            raise ValueError(
+                f"observations reference artifact ids other than {self.artifact.artifact_id!r}: "
+                f"{stray}"
+            )
+        return self

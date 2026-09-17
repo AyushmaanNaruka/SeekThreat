@@ -3,23 +3,38 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import ValidationError
 
-from packages.schema.models.observation import Observation, ObservationKind, RawArtifact
+from packages.schema.models.observation import (
+    Observation,
+    ObservationKind,
+    RawArtifact,
+    ScanResult,
+)
 from packages.schema.models.provenance import Confidence, Provenance, Source
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
 
 
-def _observation() -> Observation:
+def _observation(artifact_id: str = "art-001") -> Observation:
     return Observation(
         observation_id="obs-001",
         engagement_id="eng-001",
         scanner="nmap",
         kind=ObservationKind.SERVICE_VERSION,
-        subject="172.20.1.10:80",
+        subject="172.20.1.10:80/tcp",
         attributes={"product": "apache", "version": "2.4.49"},
-        artifact_id="art-001",
+        artifact_id=artifact_id,
         observed_at=NOW,
         provenance=Provenance(source=Source.SCANNER, confidence=Confidence.HIGH, retrieved_at=NOW),
+    )
+
+
+def _artifact(artifact_id: str = "art-001") -> RawArtifact:
+    return RawArtifact(
+        artifact_id=artifact_id,
+        scanner="nmap",
+        content="x",
+        content_type="application/xml",
+        captured_at=NOW,
     )
 
 
@@ -99,3 +114,27 @@ def test_raw_artifact_is_immutable() -> None:
     )
     with pytest.raises(ValidationError):
         art.content = "tampered"  # type: ignore[misc]
+
+
+def test_scan_result_accepts_observations_matching_its_artifact() -> None:
+    result = ScanResult(artifact=_artifact(), observations=(_observation(),))
+    assert result.observations[0].artifact_id == result.artifact.artifact_id
+
+
+def test_scan_result_allows_zero_observations() -> None:
+    result = ScanResult(artifact=_artifact())
+    assert result.observations == ()
+
+
+def test_scan_result_rejects_an_observation_from_a_foreign_artifact() -> None:
+    with pytest.raises(ValidationError, match="art-001"):
+        ScanResult(
+            artifact=_artifact("art-001"),
+            observations=(_observation(artifact_id="art-999"),),
+        )
+
+
+def test_scan_result_is_immutable() -> None:
+    result = ScanResult(artifact=_artifact())
+    with pytest.raises(ValidationError):
+        result.artifact = _artifact("art-002")  # type: ignore[misc]

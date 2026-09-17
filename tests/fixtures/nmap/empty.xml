@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<nmaprun scanner="nmap" args="nmap -sV -oX - 172.20.1.0/24" start="1700000000" startstr="Mon Nov 20 00:00:00 2023" version="7.98" xmloutputversion="1.05">
+<runstats><finished time="1700000010" timestr="Mon Nov 20 00:00:10 2023" summary="Nmap done at Mon Nov 20 00:00:10 2023; 0 IP addresses (0 hosts up) scanned in 10.00 seconds" elapsed="10.00" exit="success"/><hosts up="0" down="0" total="0"/>
+</runstats>
+</nmaprun>

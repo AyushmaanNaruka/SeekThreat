@@ -41,3 +41,21 @@ topology.
 **Never scan anything outside this lab without a written authorization record.** Unauthorized
 scanning carries real legal exposure. A demo against someone else's domain is the one mistake
 that could sink the project.
+
+## Capturing parser fixtures
+
+`docker-compose.yml` includes a `scanner` service — an nmap image on the same `dmz` network,
+never a scan target itself. It exists only to produce real nmap XML for
+`tests/fixtures/nmap/`; it is not part of the running lab otherwise, and should not be left up.
+
+```bash
+docker compose -f lab/docker-compose.yml up -d
+docker compose -f lab/docker-compose.yml exec scanner nmap -sV -oX - 172.20.1.10 172.20.1.11 \
+  > tests/fixtures/nmap/lab_baseline.xml
+docker compose -f lab/docker-compose.yml down -v
+```
+
+Edge cases a real scan will not conveniently produce (a down host, missing timestamps, IPv6,
+`-Pn`, truncated XML, and so on) are hand-written directly against nmap's DTD, in the same
+directory. Re-capture `lab_baseline.xml` whenever the lab topology changes, so the fixture keeps
+matching what `docker-compose.yml` actually runs.
