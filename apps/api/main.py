@@ -2,6 +2,8 @@
 
 from fastapi import FastAPI
 
+from apps.api.routers import engagements, scans
+
 app = FastAPI(
     title="SeekThreat",
     description="Centralized vulnerability detection and intelligent query interface",
@@ -14,11 +16,6 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-# TODO: routers
-#   /engagements   create engagement + authorization record
-#   /scans         dispatch scans — MUST validate authorization first
-#   /findings      normalized, enriched findings
-#   /paths         attack paths with per-edge evidence
-#   /assistant     RAG queries with citations
-#
-# Authorization is enforced HERE, not in the UI.
+app.include_router(engagements.router, prefix="/engagements", tags=["engagements"])
+app.include_router(scans.router, prefix="/scans", tags=["scans"])
+

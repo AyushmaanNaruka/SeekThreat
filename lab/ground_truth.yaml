@@ -1,0 +1,218 @@
+# Ground truth for lab configuration "baseline"
+# This file is the denominator for every accuracy, precision, recall, and attack path metric.
+# Keep in sync with lab/docker-compose.yml at all times.
+
+configuration: baseline
+description: DMZ web tier -> internal app tier -> database segment (10 hosts, 3 subnets)
+created: 2026-09-19
+
+network:
+  dmz: 172.20.1.0/24
+  internal: 172.20.2.0/24
+  data: 172.20.3.0/24
+
+hosts:
+  - name: dvwa
+    ip: 172.20.1.10
+    segment: dmz
+    reachable_from_outside: true
+    services:
+      - port: 80
+        service: http
+        product: apache
+        version: "2.4.49"
+    expected_cves:
+      - id: CVE-2021-41773
+        confidence: certain      # certain | likely | possible
+        cvss: 7.5
+        note: path traversal and remote code execution, deliberately unpatched
+
+  - name: juiceshop
+    ip: 172.20.1.11
+    segment: dmz
+    reachable_from_outside: true
+    services:
+      - port: 3000
+        service: http
+        product: nodejs-express
+        version: "4.17.1"
+    expected_cves:
+      - id: CVE-2020-7699
+        confidence: likely
+        cvss: 7.3
+        note: express-fileupload prototype pollution leading to remote code execution
+
+  - name: dmz-proxy
+    ip: 172.20.1.12
+    secondary_ip: 172.20.2.12
+    segment: dmz
+    reachable_from_outside: true
+    services:
+      - port: 80
+        service: http
+        product: nginx
+        version: "1.18.0"
+    expected_cves:
+      - id: CVE-2021-23017
+        confidence: certain
+        cvss: 7.7
+        note: 1-byte memory overwrite in resolver leading to worker crash or code execution
+
+  - name: spring-gateway
+    ip: 172.20.1.13
+    secondary_ip: 172.20.2.13
+    segment: dmz
+    reachable_from_outside: true
+    services:
+      - port: 8080
+        service: http
+        product: spring-cloud-gateway
+        version: "3.1.0"
+    expected_cves:
+      - id: CVE-2022-22947
+        confidence: certain
+        cvss: 9.8
+        note: code injection via Spring Cloud Gateway Actuator endpoint leading to RCE
+
+  - name: internal-api
+    ip: 172.20.2.10
+    segment: internal
+    reachable_from_outside: false
+    reachable_from: [dvwa, dmz-proxy, spring-gateway]
+    services:
+      - port: 8080
+        service: http
+        product: werkzeug-http
+        version: "2.0.1"
+    expected_cves:
+      - id: CVE-2022-29361
+        confidence: likely
+        cvss: 7.5
+        note: HTTP request parsing ambiguity leading to request smuggling
+
+  - name: jenkins-ci
+    ip: 172.20.2.25
+    segment: internal
+    reachable_from_outside: false
+    reachable_from: [dmz-proxy, spring-gateway, internal-api]
+    services:
+      - port: 8080
+        service: http
+        product: jenkins
+        version: "2.441"
+    expected_cves:
+      - id: CVE-2024-23897
+        confidence: certain
+        cvss: 9.8
+        note: arbitrary file read via CLI args4j parser, enables secret and credential exfiltration
+
+  - name: internal-wiki
+    ip: 172.20.2.40
+    segment: internal
+    reachable_from_outside: false
+    reachable_from: [dmz-proxy, spring-gateway]
+    services:
+      - port: 8090
+        service: http
+        product: atlassian-confluence
+        version: "7.18.0"
+    expected_cves:
+      - id: CVE-2022-26134
+        confidence: certain
+        cvss: 9.8
+        note: unauthenticated OGNL expression injection leading to remote code execution
+
+  - name: bastion-ssh
+    ip: 172.20.2.50
+    secondary_ip: 172.20.3.50
+    segment: internal
+    reachable_from_outside: false
+    reachable_from: [jenkins-ci, internal-api, internal-wiki]
+    services:
+      - port: 2222
+        service: ssh
+        product: openssh
+        version: "8.2p1"
+    expected_cves:
+      - id: CVE-2020-15778
+        confidence: possible
+        cvss: 6.8
+        note: command injection via scp command line parameter parsing
+
+  - name: db-primary
+    ip: 172.20.3.10
+    segment: data
+    reachable_from_outside: false
+    reachable_from: [bastion-ssh, internal-api]
+    services:
+      - port: 5432
+        service: postgresql
+        product: postgresql
+        version: "12.4"
+    expected_cves:
+      - id: CVE-2020-14349
+        confidence: certain
+        cvss: 7.2
+        note: uncontrolled search path element during pg_dump leading to arbitrary SQL execution
+
+  - name: cache-redis
+    ip: 172.20.3.20
+    segment: data
+    reachable_from_outside: false
+    reachable_from: [bastion-ssh, internal-api]
+    services:
+      - port: 6379
+        service: redis
+        product: redis
+        version: "5.0.7"
+    expected_cves:
+      - id: CVE-2022-0543
+        confidence: certain
+        cvss: 10.0
+        note: Debian/Ubuntu Redis package Lua sandbox escape leading to arbitrary code execution
+
+# Chains the path engine should discover. This is what we grade against.
+expected_attack_paths:
+  - id: path-1
+    description: External -> DVWA SSRF pivot -> Internal API leak -> Reach DB Primary
+    steps:
+      - External scanner probes DVWA on DMZ (172.20.1.10)
+      - Exploit CVE-2021-41773 path traversal / SSRF on dvwa
+      - Network reachability dvwa -> internal-api (172.20.2.10)
+      - Exfiltrate database connection credentials from internal-api
+      - Network reachability internal-api -> db-primary (172.20.3.10)
+      - Exploit CVE-2020-14349 on db-primary to dump crown jewel customer records
+    severity: critical
+
+  - id: path-2
+    description: External -> Spring Cloud Gateway RCE -> Jenkins Arbitrary File Read -> Bastion Pivot -> Redis Data Tier RCE
+    steps:
+      - External scanner discovers spring-gateway on DMZ (172.20.1.13)
+      - Exploit CVE-2022-22947 (SpEL Code Injection) for initial RCE on gateway
+      - Pivot across internal network to jenkins-ci (172.20.2.25)
+      - Exploit CVE-2024-23897 on Jenkins CLI to read /root/.ssh/id_rsa
+      - SSH login to bastion-ssh (172.20.2.50) using exfiltrated key
+      - Pivot from bastion to cache-redis on data network (172.20.3.20)
+      - Exploit CVE-2022-0543 Lua sandbox escape to obtain root RCE on database host
+    severity: critical
+
+  - id: path-3
+    description: External -> DMZ Proxy Smuggling -> Internal Confluence Wiki OGNL RCE
+    steps:
+      - External scanner probes dmz-proxy (172.20.1.12)
+      - Exploit CVE-2021-23017 or proxy routing misconfiguration to access internal-wiki (172.20.2.40)
+      - Exploit CVE-2022-26134 unauthenticated OGNL injection on internal-wiki
+      - Full compromise and data extraction of internal company knowledge base
+    severity: high
+
+# Findings scanners commonly report here that are NOT real.
+# Used to measure false positive rate.
+known_false_positives:
+  - id: CVE-2017-7679
+    scanner: nmap
+    target: dvwa
+    reason: Banner matching falsely infers Apache mod_mime buffer overread on 2.4.49
+  - id: CVE-2018-1312
+    scanner: nuclei
+    target: juiceshop
+    reason: Generic HTTP digest auth heuristic triggered against custom mock login endpoint

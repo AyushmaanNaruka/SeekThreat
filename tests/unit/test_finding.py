@@ -4,7 +4,7 @@ import pytest
 from pydantic import ValidationError
 
 from packages.schema.models.asset import Asset, Service
-from packages.schema.models.finding import EnrichedFinding, Finding
+from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
 from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
 
 NOW = datetime(2026, 9, 5, 12, 0, tzinfo=UTC)
@@ -70,8 +70,8 @@ def test_enriched_field_carries_value_and_provenance_together() -> None:
     enriched = EnrichedFinding(
         finding=_finding(),
         fields={
-            "cvss_base": Attributed[float](value=7.5, provenance=_prov()),
-            "kev_listed": Attributed[bool](value=True, provenance=_prov(Source.KEV)),
+            "cvss_base": Attributed[EnrichmentValue](value=7.5, provenance=_prov()),
+            "kev_listed": Attributed[EnrichmentValue](value=True, provenance=_prov(Source.KEV)),
         },
     )
     assert enriched.fields["cvss_base"].value == 7.5

@@ -47,6 +47,107 @@ Newest first.
 
 ---
 
+### D-016 — Lab network topology, 10-host multi-tier architecture & ground truth baseline
+**Date:** 2026-09-19
+**Decided by:** Mayank Narang
+**Type:** Architecture / Evaluation
+**Status:** Active
+
+**Decision**
+`lab/docker-compose.yml` defines 10 target containers plus 1 scanner container partitioned across three isolated network segments (`dmz`: 172.20.1.0/24, `internal`: 172.20.2.0/24, `data`: 172.20.3.0/24). All networks enforce `internal: true` with zero egress to the internet and no exposed host ports. `lab/ground_truth.yaml` serves as the authoritative ground truth denominator for Track A (accuracy, precision, recall, F1) and Track B (attack path validity) evaluation metrics.
+
+The topology intentionally embeds realistic multi-hop attack paths:
+1. External DMZ SSRF (`dvwa` 172.20.1.10) -> Internal API credential leak (`internal-api` 172.20.2.10) -> Data Tier PostgreSQL (`db-primary` 172.20.3.10).
+2. External API Gateway SpEL Injection (`spring-gateway` 172.20.1.13, CVE-2022-22947) -> Internal Jenkins CLI Arbitrary File Read (`jenkins-ci` 172.20.2.25, CVE-2024-23897) -> Bastion SSH pivot (`bastion-ssh` 172.20.2.50) -> Data Tier Redis Lua Sandbox Escape RCE (`cache-redis` 172.20.3.20, CVE-2022-0543).
+3. External DMZ Reverse Proxy Smuggling (`dmz-proxy` 172.20.1.12) -> Internal Wiki OGNL Injection RCE (`internal-wiki` 172.20.2.40, CVE-2022-26134).
+
+**Context**
+Layer 3 (Graph / Path Engine) requires realistic attack paths that span multiple hops across segmented subnets; a flat network with isolated single vulnerabilities gives the graph reasoning engine nothing meaningful to discover. Furthermore, evaluation metrics cannot be retrofitted—Track A and Track B metrics require a verifiable ground truth denominator recording every host, service, version, expected CVE, and known scanner false positive.
+
+**Consequences**
+- Evaluation metrics have a strict, declarative baseline to calculate precision, recall, and false-positive rates.
+- `tests/unit/test_ground_truth.py` enforces consistency between `lab/ground_truth.yaml` and `lab/docker-compose.yml`.
+- Target containers remain fully isolated and legally safe to scan from the internal `scanner` container (172.20.1.250).
+
+---
+
+### D-015 — Nuclei as second core scanner; NDJSON output via `-jsonl -silent`
+**Date:** 2026-09-19
+**Decided by:** Mayank Narang
+**Type:** Tool choice
+**Status:** Active
+
+**Decision**
+`services/scanners/nuclei_adapter.py` invokes `nuclei -u <target> -jsonl -silent` and
+`services/scanners/nuclei_json.py` parses the NDJSON output into `ObservationKind.VULN_CANDIDATE`
+observations. Nuclei's native severity, CVE IDs, CVSS scores and matcher metadata are
+preserved verbatim in observation `attributes`; no risk-score computation happens here.
+
+**Why**
+- Nuclei is MIT-licensed; we invoke the binary, never vendor its source.
+- `-jsonl` produces one JSON object per line, making streaming and partial-failure recovery
+  trivially safe. A JSON array would require buffering the full output before parsing.
+- `-silent` suppresses non-finding output (progress bars, version banners) so stdout is
+  pure NDJSON that can be round-tripped through `RawArtifact.content` and re-parsed
+  deterministically from the stored artifact.
+- Nuclei findings map directly to `VULN_CANDIDATE` — the tool reports confirmed template
+  matches, not heuristics. Risk scoring (CVSS weighting, EPSS, KEV correlation) stays in
+  `services.enrichment`, preserving the collection/enrichment boundary.
+
+**Impact on plan**
+- `NucleiAdapter` is auto-discovered by `tests/architecture/test_authorization_gate.py`
+  (now 7 tests: 3 per adapter × 2 adapters + 1 discovery guard).
+- `apps/api/tasks/scans.py` gained an `elif scanner == "nuclei"` dispatch branch.
+- `requirements.txt` unchanged — nuclei binary is a system dependency, not a Python package.
+
+**Cost if we're wrong**
+Low. Switching to `-json` (array) changes only `_load_records()` in `nuclei_json.py`.
+Removing Nuclei entirely is a two-file delete.
+
+---
+
+### D-014 — Celery + Redis for async scan execution, replacing FastAPI `BackgroundTasks`
+**Date:** 2026-09-19
+**Decided by:** Mayank Narang
+**Type:** Tool choice
+**Status:** Active
+
+**Decision**
+Scan jobs are dispatched via `execute_scan.delay()` (a Celery task) rather than
+FastAPI's built-in `BackgroundTasks`. The task runs in a dedicated `worker`
+container, reading from a `scans` Redis queue.
+
+**Why**
+`BackgroundTasks` runs inside the same process as the API server. If the server
+restarts mid-scan the job is silently lost. Celery persists the task to Redis
+before acknowledging the HTTP response (`task_acks_late=True`), so a worker
+restart re-queues the job automatically.
+
+Additional factors:
+- Redis was already present in the `infra/docker-compose.yml` core profile.
+- Built-in retry semantics (`max_retries=3`, `default_retry_delay=30s`) without
+  any custom code.
+- Horizontal scaling: adding more worker replicas is one compose override.
+- Celery's JSON serializer (`task_serializer="json"`) prevents pickle-based
+  remote code execution vulnerabilities.
+
+**Impact on plan**
+- `_execute_scan_task` removed from `apps/api/routers/scans.py` and moved to
+  `apps/api/tasks/scans.py` as `@celery_app.task`.
+- `apps/api/worker.py` added as Celery app bootstrap.
+- `apps/api/Dockerfile` added; `infra/docker-compose.yml` gains `api` and
+  `worker` services under the `core` profile (resolves the TODO comment).
+- `Authorization` serialized as a JSON-safe dict (`model_dump(mode="json")`)
+  when crossing the Celery message boundary, reconstructed via
+  `Authorization.model_validate()` inside the task.
+
+**Cost if we're wrong**
+Low. The task body is structurally identical to the old `_execute_scan_task`.
+Reverting means moving the function back into the router and swapping
+`.delay()` for `background_tasks.add_task()`. One hour of work.
+
+---
+
 ### D-013 — Stdlib `xml.etree.ElementTree` for nmap XML, not `defusedxml`
 **Date:** 2026-09-18
 **Decided by:** Full team
