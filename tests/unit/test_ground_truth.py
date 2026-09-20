@@ -7,12 +7,12 @@ Ensures that the lab environment topology and ground truth baseline:
 4. Contain realistic multi-hop attack paths and valid CVE specifications.
 """
 
+import re
 from ipaddress import ip_address, ip_network
 from pathlib import Path
-import re
-import yaml
-import pytest
 
+import pytest
+import yaml
 
 LAB_DIR = Path(__file__).resolve().parent.parent.parent / "lab"
 GROUND_TRUTH_PATH = LAB_DIR / "ground_truth.yaml"
@@ -22,7 +22,7 @@ DOCKER_COMPOSE_PATH = LAB_DIR / "docker-compose.yml"
 @pytest.fixture(scope="module")
 def ground_truth() -> dict:
     assert GROUND_TRUTH_PATH.exists(), f"Missing ground truth file at {GROUND_TRUTH_PATH}"
-    with open(GROUND_TRUTH_PATH, "r", encoding="utf-8") as f:
+    with open(GROUND_TRUTH_PATH, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     assert isinstance(data, dict), "ground_truth.yaml must parse into a dict"
     return data
@@ -31,7 +31,7 @@ def ground_truth() -> dict:
 @pytest.fixture(scope="module")
 def docker_compose() -> dict:
     assert DOCKER_COMPOSE_PATH.exists(), f"Missing docker-compose file at {DOCKER_COMPOSE_PATH}"
-    with open(DOCKER_COMPOSE_PATH, "r", encoding="utf-8") as f:
+    with open(DOCKER_COMPOSE_PATH, encoding="utf-8") as f:
         data = yaml.safe_load(f)
     assert isinstance(data, dict), "docker-compose.yml must parse into a dict"
     return data
@@ -46,7 +46,7 @@ class TestGroundTruthSchema:
     def test_network_subnets(self, ground_truth: dict) -> None:
         networks = ground_truth.get("network", {})
         assert set(networks.keys()) == {"dmz", "internal", "data"}
-        for net_name, cidr in networks.items():
+        for cidr in networks.values():
             net = ip_network(cidr)
             assert net.version == 4
             assert net.prefixlen == 24
@@ -67,7 +67,8 @@ class TestGroundTruthSchema:
             assert segment in networks, f"Unknown segment {segment} for host {host['name']}"
             host_ip = ip_address(host["ip"])
             assert host_ip in networks[segment], (
-                f"Host {host['name']} IP {host_ip} does not belong to segment {segment} ({networks[segment]})"
+                f"Host {host['name']} IP {host_ip} does not belong to segment "
+                f"{segment} ({networks[segment]})"
             )
             if "secondary_ip" in host:
                 sec_ip = ip_address(host["secondary_ip"])
@@ -133,11 +134,15 @@ class TestDockerComposeCrossConsistency:
             subnet = ipam_configs[0].get("subnet")
             assert subnet in {"172.20.1.0/24", "172.20.2.0/24", "172.20.3.0/24"}
 
-    def test_all_ground_truth_hosts_in_compose(self, ground_truth: dict, docker_compose: dict) -> None:
+    def test_all_ground_truth_hosts_in_compose(
+        self, ground_truth: dict, docker_compose: dict
+    ) -> None:
         compose_services = docker_compose.get("services", {})
         for host in ground_truth["hosts"]:
             name = host["name"]
-            assert name in compose_services, f"Host {name} in ground_truth not found in docker-compose.yml"
+            assert name in compose_services, (
+                f"Host {name} in ground_truth not found in docker-compose.yml"
+            )
             service_def = compose_services[name]
             svc_networks = service_def.get("networks", {})
             primary_segment = host["segment"]

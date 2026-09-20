@@ -47,10 +47,17 @@ class NucleiAdapter(ScannerAdapter):
     content_type = "application/x-ndjson"
 
     def _execute(self, request: ScanRequest) -> str:
-        cmd = ["nuclei", "-u", request.target, "-jsonl", "-silent",
-               *request.options.get("extra_args", [])]
-        result = subprocess.run(cmd, capture_output=True,
-                                timeout=request.options.get("timeout", 1800), check=True)
+        cmd = [
+            "nuclei",
+            "-u",
+            request.target,
+            "-jsonl",
+            "-silent",
+            *request.options.get("extra_args", []),
+        ]
+        result = subprocess.run(
+            cmd, capture_output=True, timeout=request.options.get("timeout", 1800), check=True
+        )
         return result.stdout.decode("utf-8", errors="replace")
 
     def _captured_at(self, raw: str) -> datetime:

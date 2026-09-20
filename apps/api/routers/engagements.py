@@ -21,7 +21,9 @@ class CreateEngagementRequest(BaseModel):
     engagement_id: str = Field(..., description="Unique engagement identifier (e.g. eng-001)")
     name: str = Field(..., description="Human-readable assessment or project name")
     authorized_by: str = Field(..., description="Named authorizer (must not be blank)")
-    allowlist: list[str] = Field(..., min_length=1, description="IP, CIDR, or hostname allowlist entries")
+    allowlist: list[str] = Field(
+        ..., min_length=1, description="IP, CIDR, or hostname allowlist entries"
+    )
     granted_at: datetime = Field(..., description="Start of authorization window (UTC)")
     expires_at: datetime = Field(..., description="End of authorization window (UTC)")
 

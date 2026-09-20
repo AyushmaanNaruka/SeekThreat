@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, JSON, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -16,6 +16,11 @@ from packages.schema.models.provenance import Provenance
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite
 JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
+
+
+def _aware(value: datetime) -> datetime:
+    """SQLite drops tzinfo on round-trip; PostgreSQL preserves it. Normalize to UTC."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 class RawArtifactModel(Base):
@@ -49,15 +54,12 @@ class RawArtifactModel(Base):
 
     def to_schema(self) -> RawArtifact:
         """Convert ORM model to immutable Pydantic RawArtifact domain model."""
-        captured_at = self.captured_at
-        if captured_at.tzinfo is None:
-            captured_at = captured_at.replace(tzinfo=UTC)
         return RawArtifact(
             artifact_id=self.artifact_id,
             scanner=self.scanner,
             content=self.content,
             content_type=self.content_type,
-            captured_at=captured_at,
+            captured_at=_aware(self.captured_at),
         )
 
 
@@ -86,9 +88,7 @@ class ObservationModel(Base):
         back_populates="observations",
     )
 
-    __table_args__ = (
-        Index("ix_observations_engagement_kind", "engagement_id", "kind"),
-    )
+    __table_args__ = (Index("ix_observations_engagement_kind", "engagement_id", "kind"),)
 
     @classmethod
     def from_schema(cls, observation: Observation) -> ObservationModel:
@@ -107,10 +107,6 @@ class ObservationModel(Base):
 
     def to_schema(self) -> Observation:
         """Convert ORM model to immutable Pydantic Observation domain model."""
-        observed_at = self.observed_at
-        if observed_at.tzinfo is None:
-            observed_at = observed_at.replace(tzinfo=UTC)
-
         # Deserialize provenance dictionary into Pydantic model
         prov = Provenance.model_validate(self.provenance)
 
@@ -122,7 +118,7 @@ class ObservationModel(Base):
             subject=self.subject,
             attributes={k: str(v) for k, v in self.attributes.items()},
             artifact_id=self.artifact_id,
-            observed_at=observed_at,
+            observed_at=_aware(self.observed_at),
             provenance=prov,
         )
 
@@ -162,9 +158,9 @@ class EngagementModel(Base):
 
     def to_schema(self) -> Engagement:
         """Convert ORM model to immutable Pydantic Engagement domain model."""
-        granted_at = self.granted_at if self.granted_at.tzinfo is not None else self.granted_at.replace(tzinfo=UTC)
-        expires_at = self.expires_at if self.expires_at.tzinfo is not None else self.expires_at.replace(tzinfo=UTC)
-        created_at = self.created_at if self.created_at.tzinfo is not None else self.created_at.replace(tzinfo=UTC)
+        granted_at = _aware(self.granted_at)
+        expires_at = _aware(self.expires_at)
+        created_at = _aware(self.created_at)
 
         auth = Authorization(
             engagement_id=self.engagement_id,
@@ -209,4 +205,3 @@ class ScanModel(Base):
 
     engagement: Mapped[EngagementModel] = relationship("EngagementModel", back_populates="scans")
     artifact: Mapped[RawArtifactModel | None] = relationship("RawArtifactModel")
-

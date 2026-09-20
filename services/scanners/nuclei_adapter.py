@@ -23,13 +23,16 @@ class NucleiAdapter(ScannerAdapter):
         return shutil.which("nuclei") is not None
 
     def _execute(self, request: ScanRequest) -> str:
+        # Caller-supplied flags are NOT accepted here — see the identical note in
+        # nmap_adapter.py and DECISIONS.md D-017. nuclei's `-u` is a repeatable flag,
+        # so an extra_args entry of `-u <other-host>` would add a second, unauthorized
+        # target; `-l <file>` would redirect the whole scan to an arbitrary list.
         cmd = [
             "nuclei",
             "-u",
             request.target,
             "-jsonl",
             "-silent",
-            *request.options.get("extra_args", []),
         ]
         result = subprocess.run(
             cmd,

@@ -2,18 +2,19 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
+from sqlalchemy import pool
+
 from alembic import context
-from sqlalchemy import engine_from_config, pool
 
 # Ensure repository root is on sys.path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from apps.api.core.config import settings
-from apps.api.db.base import Base
 # Import all models to ensure they are registered on metadata
 import apps.api.db.models  # noqa: F401
+from apps.api.core.config import settings
+from apps.api.db.base import Base
 
 config = context.config
 

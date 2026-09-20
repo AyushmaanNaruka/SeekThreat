@@ -75,8 +75,10 @@ class RawArtifactRepository:
 
     def exists(self, artifact_id: str) -> bool:
         """Check if an artifact with this ID has already been persisted."""
-        stmt = select(func.count()).select_from(RawArtifactModel).where(
-            RawArtifactModel.artifact_id == artifact_id
+        stmt = (
+            select(func.count())
+            .select_from(RawArtifactModel)
+            .where(RawArtifactModel.artifact_id == artifact_id)
         )
         return bool(self.session.scalar(stmt))
 
@@ -154,7 +156,9 @@ class ObservationRepository:
         stmt = select(ObservationModel).where(ObservationModel.engagement_id == engagement_id)
         if kind is not None:
             stmt = stmt.where(ObservationModel.kind == kind.value)
-        stmt = stmt.order_by(ObservationModel.observed_at.asc(), ObservationModel.observation_id.asc())
+        stmt = stmt.order_by(
+            ObservationModel.observed_at.asc(), ObservationModel.observation_id.asc()
+        )
         results = self.session.scalars(stmt).all()
         return [m.to_schema() for m in results]
 
@@ -174,8 +178,10 @@ class ObservationRepository:
         kind: ObservationKind | None = None,
     ) -> int:
         """Count observations associated with an engagement, optionally filtered by kind."""
-        stmt = select(func.count()).select_from(ObservationModel).where(
-            ObservationModel.engagement_id == engagement_id
+        stmt = (
+            select(func.count())
+            .select_from(ObservationModel)
+            .where(ObservationModel.engagement_id == engagement_id)
         )
         if kind is not None:
             stmt = stmt.where(ObservationModel.kind == kind.value)
@@ -289,4 +295,3 @@ class ScanRepository:
             .order_by(ScanModel.created_at.desc())
         )
         return list(self.session.scalars(stmt).all())
-

@@ -24,13 +24,12 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
-from apps.api.db.base import Base
-from apps.api.db import models as _models  # noqa: F401 – registers all ORM tables
 from apps.api.core.audit import clear_audit_log, get_audit_log
+from apps.api.db import models as _models  # noqa: F401 – registers all ORM tables
+from apps.api.db.base import Base
 from apps.api.db.repositories import EngagementRepository, ScanRepository
 from apps.api.db.session import get_session_factory
 from packages.schema.models.engagement import Authorization, Engagement
-
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -147,6 +146,7 @@ def test_authorization_dict_round_trip() -> None:
 
     # Ensure the dict is JSON-safe (no datetime objects, no frozensets)
     import json
+
     json_str = json.dumps(serialized)  # raises if not serializable
     assert json_str  # non-empty
 

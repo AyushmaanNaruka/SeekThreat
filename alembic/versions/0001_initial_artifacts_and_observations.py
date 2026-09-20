@@ -1,21 +1,23 @@
 """create raw_artifacts and observations tables
 
 Revision ID: 0001
-Revises: 
+Revises:
 Create Date: 2026-09-19 10:30:00.000000
 
 """
-from typing import Sequence, Union
 
-from alembic import op
+from collections.abc import Sequence
+
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 # revision identifiers, used by Alembic.
 revision: str = "0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 json_type = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 

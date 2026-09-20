@@ -22,11 +22,11 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
-# Import all ORM models *before* calling create_all so they register on Base.metadata
-from apps.api.db.base import Base
+from apps.api.core.audit import clear_audit_log, get_audit_log
 from apps.api.db import models as _models  # noqa: F401 – side-effect: registers all tables
 
-from apps.api.core.audit import clear_audit_log, get_audit_log
+# Import all ORM models *before* calling create_all so they register on Base.metadata
+from apps.api.db.base import Base
 from apps.api.db.session import get_db
 from apps.api.main import app
 
@@ -352,8 +352,12 @@ def test_get_scan_not_found(api_client: TestClient) -> None:
 
 def test_list_scans_returns_accepted_scans(api_client: TestClient) -> None:
     eng_id = _create_engagement(api_client)
-    r1 = api_client.post("/scans", json={"engagement_id": eng_id, "scanner": "nmap", "target": "172.20.1.10"})
-    r2 = api_client.post("/scans", json={"engagement_id": eng_id, "scanner": "nmap", "target": "172.20.1.11"})
+    r1 = api_client.post(
+        "/scans", json={"engagement_id": eng_id, "scanner": "nmap", "target": "172.20.1.10"}
+    )
+    r2 = api_client.post(
+        "/scans", json={"engagement_id": eng_id, "scanner": "nmap", "target": "172.20.1.11"}
+    )
     assert r1.status_code == 202, r1.text
     assert r2.status_code == 202, r2.text
 
@@ -369,9 +373,10 @@ def test_list_scans_returns_accepted_scans(api_client: TestClient) -> None:
 
 def test_alembic_migration_0002_upgrade_and_downgrade(tmp_path: Path) -> None:
     """Verify migration 0002 creates and cleanly drops engagements and scans tables."""
-    from alembic import command
     from alembic.config import Config
     from sqlalchemy import create_engine, inspect
+
+    from alembic import command
 
     db_file = tmp_path / "test_0002.db"
     db_url = f"sqlite:///{db_file.as_posix()}"
@@ -388,10 +393,29 @@ def test_alembic_migration_0002_upgrade_and_downgrade(tmp_path: Path) -> None:
     assert "scans" in tables, f"scans not found in {tables}"
 
     eng_cols = {c["name"] for c in inspect(engine).get_columns("engagements")}
-    assert {"engagement_id", "name", "authorized_by", "allowlist", "granted_at", "expires_at", "created_at"}.issubset(eng_cols)
+    expected_eng_cols = {
+        "engagement_id",
+        "name",
+        "authorized_by",
+        "allowlist",
+        "granted_at",
+        "expires_at",
+        "created_at",
+    }
+    assert expected_eng_cols.issubset(eng_cols)
 
     scan_cols = {c["name"] for c in inspect(engine).get_columns("scans")}
-    assert {"scan_id", "engagement_id", "scanner", "target", "status", "options", "artifact_id", "created_at"}.issubset(scan_cols)
+    expected_scan_cols = {
+        "scan_id",
+        "engagement_id",
+        "scanner",
+        "target",
+        "status",
+        "options",
+        "artifact_id",
+        "created_at",
+    }
+    assert expected_scan_cols.issubset(scan_cols)
 
     engine.dispose()
 
@@ -400,7 +424,9 @@ def test_alembic_migration_0002_upgrade_and_downgrade(tmp_path: Path) -> None:
 
     engine = create_engine(db_url)
     tables_after = set(inspect(engine).get_table_names())
-    assert "engagements" not in tables_after, f"engagements still present after downgrade: {tables_after}"
+    assert "engagements" not in tables_after, (
+        f"engagements still present after downgrade: {tables_after}"
+    )
     assert "scans" not in tables_after, f"scans still present after downgrade: {tables_after}"
     assert "raw_artifacts" in tables_after
     assert "observations" in tables_after

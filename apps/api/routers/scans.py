@@ -47,7 +47,6 @@ class ScanStatusResponse(BaseModel):
     completed_at: datetime | None = None
 
 
-
 @router.post(
     "",
     response_model=ScanStatusResponse,

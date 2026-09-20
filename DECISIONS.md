@@ -47,6 +47,42 @@ Newest first.
 
 ---
 
+### D-017 — Remove `options["extra_args"]` from scanner adapters; fixed argv only
+**Date:** 2026-09-20
+**Decided by:** Ayushmaan (review of mayank-development, PR #1)
+**Type:** Reversal
+**Status:** Active
+
+**Decision**
+`NmapAdapter._execute` and `NucleiAdapter._execute` no longer splat
+`request.options.get("extra_args", [])` into the tool's argv. The command line is now fixed
+except for the target itself, and nmap's invocation adds a literal `--` before the target so it
+can never be parsed as a flag.
+
+**Why**
+`ScanRequest.options` is a `dict[str, Any]` that reaches the adapter straight from the
+`POST /scans` HTTP body (`apps/api/routers/scans.py`) with no validation beyond Pydantic's
+`dict[str, Any]` typing. `request.authorization.permits()` only ever checks `request.target`
+against the allowlist — it has no visibility into `options`. A caller could therefore pass
+`{"extra_args": ["-u", "https://unauthorized.example.com"]}` (nuclei accumulates repeated `-u`
+flags) or `{"extra_args": ["203.0.113.10"]}` (nmap scans every positional target given, so this
+adds a second host ahead of the authorized one) and scan a target that was never checked against
+any allowlist. This is a direct violation of CLAUDE.md hard rule 2 — "no scan without
+authorization enforced at the API layer" — found during review of PR #1 before merge to `main`.
+
+**Impact on plan**
+None to timeline; this is a revert of an unreviewed pattern that shipped in the same PR that
+introduced the HTTP scan-dispatch path. If tool-specific flags are needed later (e.g. nmap
+timing templates), they must be a fixed, named, server-side option
+(`options: {"timing": "T3"}` mapped to a small allowlist of flag values in the adapter) — never
+an arbitrary argv fragment sourced from the request body.
+
+**Cost if we're wrong**
+None — this closes a real bypass with no loss of legitimate functionality; nothing in the
+codebase or tests depended on `extra_args`.
+
+---
+
 ### D-016 — Lab network topology, 10-host multi-tier architecture & ground truth baseline
 **Date:** 2026-09-19
 **Decided by:** Mayank Narang

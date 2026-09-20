@@ -3,10 +3,14 @@
 import React from "react";
 
 export default function ThreatStats() {
+  // No metric in this project has been measured yet (CLAUDE.md). These are
+  // properties the architecture guarantees structurally, not performance claims —
+  // never replace them with an invented number. Real measurements land in
+  // evals/README.md once Track A/B eval runs exist.
   const stats = [
     {
-      value: "4.8M",
-      label: "Threats Analyzed",
+      value: "Deterministic",
+      label: "Attack Path Construction",
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" strokeWidth="2">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
@@ -16,8 +20,8 @@ export default function ThreatStats() {
       ),
     },
     {
-      value: "1.2M",
-      label: "Assets Monitored",
+      value: "Explainable",
+      label: "Every Risk Score",
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#818cf8" strokeWidth="2">
           <circle cx="12" cy="12" r="3" />
@@ -26,8 +30,8 @@ export default function ThreatStats() {
       ),
     },
     {
-      value: "99.7%",
-      label: "Detection Accuracy",
+      value: "Authorized Only",
+      label: "Every Scan, Every Time",
       icon: (
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2">
           <circle cx="12" cy="12" r="10" />

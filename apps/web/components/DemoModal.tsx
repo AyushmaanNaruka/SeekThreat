@@ -69,7 +69,7 @@ export default function DemoModal({ isOpen, onClose, mode }: DemoModalProps) {
                   className={`tab-btn ${activeTab === "findings" ? "active" : ""}`}
                   onClick={() => setActiveTab("findings")}
                 >
-                  Fused Findings (4.8M)
+                  Fused Findings
                 </button>
                 <button
                   className={`tab-btn ${activeTab === "rag" ? "active" : ""}`}
@@ -86,7 +86,7 @@ export default function DemoModal({ isOpen, onClose, mode }: DemoModalProps) {
                     <div className="graph-arrow">&rarr;</div>
                     <div className="graph-node-chip node-cyan">Asset: Web Server [10.10.20.15]</div>
                     <div className="graph-arrow">&rarr;</div>
-                    <div className="graph-node-chip node-purple">Asset: Database Cluster [2.4M records]</div>
+                    <div className="graph-node-chip node-purple">Asset: Database Cluster</div>
                   </div>
                 )}
 
@@ -104,7 +104,10 @@ export default function DemoModal({ isOpen, onClose, mode }: DemoModalProps) {
                 {activeTab === "rag" && (
                   <div className="rag-chat-preview">
                     <p className="text-slate-300">
-                      <strong>AI Assistant:</strong> Based on the deterministic attack graph for engagement #ENG-2026-904, the primary vector chains through port 8443 on 10.10.20.15. Patching this single perimeter node reduces critical risk exposure by 92%.
+                      <strong>AI Assistant:</strong> Based on the deterministic attack graph for
+                      engagement #ENG-2026-904, the primary vector chains through port 8443 on
+                      10.10.20.15. Patching this single perimeter node breaks every path that
+                      reaches the database cluster — see the two citations below.
                     </p>
                   </div>
                 )}

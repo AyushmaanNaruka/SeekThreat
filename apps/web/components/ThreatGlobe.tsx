@@ -61,7 +61,7 @@ export default function ThreatGlobe() {
       type: "breach",
       title: "DATA BREACH",
       sub: "Sensitive data exposed",
-      stat: "2.4M records",
+      stat: "Customer records",
       color: "#ef4444",
     },
     {
@@ -523,7 +523,7 @@ export default function ThreatGlobe() {
           <div className="card-content">
             <div className="card-title text-red">DATA BREACH</div>
             <div className="card-desc">Sensitive data exposed</div>
-            <div className="card-meta text-red-muted">2.4M records</div>
+            <div className="card-meta text-red-muted">Customer records</div>
           </div>
         </div>
       </div>

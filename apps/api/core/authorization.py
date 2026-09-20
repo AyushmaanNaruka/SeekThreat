@@ -7,6 +7,7 @@ non-expired authorization record before any scan job is created or dispatched.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+
 from fastapi import HTTPException, status
 
 from apps.api.core.audit import log_audit_event

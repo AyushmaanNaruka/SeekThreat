@@ -18,4 +18,3 @@ def health() -> dict[str, str]:
 
 app.include_router(engagements.router, prefix="/engagements", tags=["engagements"])
 app.include_router(scans.router, prefix="/scans", tags=["scans"])
-

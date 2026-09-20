@@ -184,7 +184,9 @@ def parse_nuclei_json(artifact: RawArtifact, engagement_id: str) -> tuple[Observ
         )
 
     # Sort deterministically for pure idempotent results
-    observations.sort(key=lambda o: (o.subject, o.attributes.get("template_id", ""), o.observation_id))
+    observations.sort(
+        key=lambda o: (o.subject, o.attributes.get("template_id", ""), o.observation_id)
+    )
     return tuple(observations)
 
 
