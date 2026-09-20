@@ -144,8 +144,10 @@ Ownership means accountable for it working and measured. Not the only person all
 
 | Question | File |
 |---|---|
+| What is done and what is left? | `PROGRESS.md` |
 | What are we building, and how far? | `docs/00-scope.md` |
 | Can I use this GitHub repo? | `docs/01-open-source-policy.md` |
 | How is it structured? | `docs/02-architecture.md` |
+| What goes in the dashboard? | `docs/03-dashboard-spec.md` |
 | Why did we change that? | `DECISIONS.md` |
 | What have we borrowed? | `THIRD_PARTY.md` |
