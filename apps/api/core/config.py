@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -25,16 +25,23 @@ class Settings(BaseSettings):
     )
 
     database_url: str = Field(
-        default_factory=lambda: _normalize_db_url(
-            os.getenv(
-                "DATABASE_URL",
-                "postgresql+psycopg://seekthreat:changeme@localhost:5432/seekthreat",
-            )
+        default_factory=lambda: os.getenv(
+            "DATABASE_URL",
+            "postgresql+psycopg://seekthreat:changeme@localhost:5432/seekthreat",
         )
     )
     redis_url: str = Field(
         default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0")
     )
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def _apply_psycopg_driver(cls, value: str) -> str:
+        # Runs on every source (env var, .env file, and the default above), not
+        # just the default -- a bare `postgresql://` DATABASE_URL set via
+        # environment or .env previously bypassed this and resolved to
+        # psycopg2 in SQLAlchemy, which this project does not install.
+        return _normalize_db_url(value)
 
 
 settings = Settings()

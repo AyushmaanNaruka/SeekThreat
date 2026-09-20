@@ -1,0 +1,24 @@
+# Build context for apps/api/Dockerfile is the repo root (context: ..), so
+# without this file COPY . . pulls in the entire repo -- including
+# apps/web/node_modules and .git -- into every image layer.
+
+.git
+.github
+
+**/node_modules
+**/__pycache__
+**/*.pyc
+.venv
+venv
+
+apps/web/.next
+apps/web/out
+
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Never bake secrets into an image layer. Compose injects env at runtime via
+# env_file/environment; the Dockerfile does not need this file to build.
+.env
+.env.local
