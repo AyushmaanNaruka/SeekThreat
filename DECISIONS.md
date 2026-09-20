@@ -47,6 +47,41 @@ Newest first.
 
 ---
 
+### D-022 — Correct `docs/00-scope.md`'s timeline to five months, November protected
+**Date:** 2026-09-20
+**Decided by:** Ayushmaan (confirmed with the team)
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`docs/00-scope.md`'s Timeline section is rewritten to match `docs/02-architecture.md`'s
+"Sequence" section: five months, September through January, with November (not October)
+protected for the graph and attack-path engine. `docs/00-scope.md` now points to
+`docs/02-architecture.md` as the authoritative schedule instead of carrying its own
+independent copy.
+
+**Why**
+`docs/00-scope.md` was left as an unfilled placeholder ("Paste the full scope and research
+document here...") from before the project started, but its Timeline table was real prose — a
+six-month plan (August–January, October protected) that predates the team's actual start date.
+`docs/02-architecture.md` was written after the team confirmed the real constraint: five months,
+starting in September, with the integration month that the old plan gave itself in addition
+folded into January. The two documents disagreed on both the length of the project and which
+month is protected, and every other planning document (`PROGRESS.md`, `HOW-THIS-REPO-WORKS.md`)
+had already been written against the five-month version. Left unresolved, a five-months read of
+`docs/02-architecture.md` and a six-months read of `docs/00-scope.md` would each look equally
+authoritative to whoever opened the repo next.
+
+**Impact on plan**
+No schedule changes — `docs/02-architecture.md`'s Sequence section was already correct and
+already what the team has been building against. This only removes the contradiction: Layer 1
+(the current month) is unaffected, and every layer after it is described once instead of twice.
+
+**Cost if we're wrong**
+Trivial to undo — a doc edit, not a code or architecture change.
+
+---
+
 ### D-021 — Fix Celery task registration: explicit import, not `autodiscover_tasks`
 **Date:** 2026-09-20
 **Decided by:** Ayushmaan

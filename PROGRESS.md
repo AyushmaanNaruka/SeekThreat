@@ -2,7 +2,9 @@
 
 The single place to check what is done, what is not, and what is blocked.
 
-**Last verified:** 2026-09-20, against `main` @ `f145d76`.
+**Last verified:** 2026-09-20, against `main` @ `cc38571` plus the Layer 1 completion PR
+(Celery fix, CORS, read path, full-lab fixtures, `tests/integration/`, mypy on `apps/`, timeline
+fix — D-021/D-022).
 **Verified how:** by reading the code, not by trusting earlier status docs. Every claim below
 either names a file or is marked unverified.
 
@@ -24,52 +26,50 @@ either names a file or is marked unverified.
 
 ## Where we are right now
 
-Layer 1's **engine** is complete and well covered: schema, the authorization gate, two scanner
-adapters, both parsers, Postgres persistence, migrations, Celery dispatch, the ten-host lab, and
-the ground-truth file. 191 tests pass. CI is green.
+Layer 1's **backend** is now complete: schema, the authorization gate, two scanner adapters, both
+parsers, Postgres persistence, migrations, Celery dispatch (registration bug fixed, D-021), the
+full read path (`GET /observations`, `GET /scans/{id}/observations`, both paginated), CORS
+middleware, the ten-host lab, the ground-truth file, and an observation fixture set covering all
+10 hosts across all 3 segments including nuclei `vuln_candidate` facts. `tests/integration/`
+exists and proves the fixture-to-persistence-to-API round trip end to end. `mypy` runs on
+`packages`, `services`, **and `apps/`** in CI, strict, clean. 219 tests pass. CI is green.
 
-Layer 1 as a **milestone** is not complete. Four things are missing, and they are not small:
+Two things remain before Layer 1 is complete as a **milestone**, and neither is backend work:
 
-1. **No read path.** Observations are written to the database and cannot be read back over
-   HTTP. There is no endpoint that returns them.
-2. **No web interface.** `apps/web` makes zero API calls. Layer 1 is defined as "scanners, one
-   web interface, no command line" — the interface part is unbuilt.
-3. **`evals/` is two README files.** The architecture doc calls the September eval harness
-   un-cuttable and says missing numbers in month six are fatal.
-4. **The observation fixture set is too thin to stand on.** 5 facts from 2 of 10 lab hosts, and
-   no vulnerability observations at all. Layers 2–4 are supposed to be testable offline against
-   this.
+1. **No web interface.** `apps/web` makes zero API calls. Layer 1 is defined as "scanners, one
+   web interface, no command line" — the interface part is unbuilt. Owned by Dev C; brief is
+   [`docs/03-dashboard-spec.md`](docs/03-dashboard-spec.md).
+2. **`evals/` is two README files.** The architecture doc calls the September eval harness
+   un-cuttable and says missing numbers in month six are fatal. Not blocked on anything — Track A
+   can be built now against Layer 1's output plus `ground_truth.yaml`. Not yet started.
+
+Also still open: **8 of the 10 lab hosts have never been scanned for real** — the Docker Hub CDN
+blocker (below) means their fixtures are synthetic (hand-authored, parser-verified, every fact
+copied from `ground_truth.yaml`) rather than captured, and Layer 1's own "done when" — a real
+end-to-end scan against the lab — has never been demonstrated for that reason.
 
 Layers 2, 3 and 4 have not started. `services/normalize` does not exist; `services/enrichment`
 and `services/graph` are empty `__init__.py` files; `services/assistant` is a docstring.
 
 ---
 
-## Timeline: the two planning documents disagree
+## Timeline: resolved — five months, November protected
 
-This needs resolving, because two files give different answers and both are treated as
-authoritative elsewhere.
+`docs/00-scope.md` and `docs/02-architecture.md` used to disagree (6 months/October vs. 5
+months/November). Resolved in `DECISIONS.md` D-022: `docs/00-scope.md`'s Timeline section was
+rewritten to match `docs/02-architecture.md`'s "Sequence" section and now points to it as the
+authoritative schedule instead of carrying its own copy. Five months, September–January,
+**November protected** for the graph and attack-path engine.
 
-| | `docs/00-scope.md` | `docs/02-architecture.md` |
-|---|---|---|
-| Span | 6 months, Aug–Jan | 5 months, Sep–Jan |
-| Protected month | **October** (graph) | **November** (graph) |
-| Current month is | Month 2 — normalization, enrichment, eval harness | September — Layer 1, lab, eval skeleton |
+**`docs/00-scope.md` is otherwise still a placeholder stub** — its intro still reads
+*"**Placeholder.** Paste the full scope and research document here"* — while `CLAUDE.md` and
+`HOW-THIS-REPO-WORKS.md` point to it as the authoritative scope for everything else (out-of-scope
+list, layer summary, etc.). Only the Timeline section has been reconciled; the rest of the real
+scope/research document still needs to replace the stub.
 
-`docs/02-architecture.md` says explicitly: *"Five months, September to January. The original
-plan assumed six; the old integration month is merged into January."* That reads as the later,
-superseding plan, and it is the one this tracker follows.
-
-**But `docs/00-scope.md` is still a placeholder stub** — its first line is *"**Placeholder.**
-Paste the full scope and research document here"* — while `CLAUDE.md`, `HOW-THIS-REPO-WORKS.md`
-and the architecture doc all point to it as the authoritative scope. So the document every other
-document defers to has never been written.
-
-- ⬜ **Resolve the timeline conflict** and record it in `DECISIONS.md`
+- ✅ **Timeline conflict resolved** — `DECISIONS.md` D-022
 - ⬜ **Replace `docs/00-scope.md`** with the real scope document, or delete the references that
   treat the stub as authoritative
-
-Working assumption until then: architecture doc wins, November is protected.
 
 ---
 
@@ -113,25 +113,26 @@ Working assumption until then: architecture doc wins, November is protected.
 - ✅ Migrations `0001`, `0002`, `0003`
 - ✅ Alembic-vs-`create_all` index parity test — `tests/unit/test_alembic.py`
 
-### API — `apps/api/` 🔨
+### API — `apps/api/` ✅
 
-Seven endpoints exist. The write path is complete; **the read path is not**.
+Nine endpoints exist. Both the write path and the read path are complete.
 
 - ✅ `POST /engagements`, `GET /engagements`, `GET /engagements/{id}`
 - ✅ `POST /scans`, `GET /scans?engagement_id=`, `GET /scans/{id}`
+- ✅ `GET /observations?engagement_id=&kind=&limit=&offset=` — paginated, provenance included per row
+- ✅ `GET /scans/{id}/observations?kind=&limit=&offset=` — paginated, scoped to one scan's artifact
 - ✅ `GET /health`
-- 🚫 **No endpoint returns observations.** `GET /scans/{id}` returns `observation_count` only. `ObservationRepository.get_by_engagement`, `.count_by_engagement` and `RawArtifactRepository.get` exist and are called by no router. **This is the single largest functional hole in Layer 1** — facts can be written but not read.
-- 🚫 **No CORS middleware.** `apps/api/main.py` adds none, so any browser dashboard is blocked before the request lands. Three-line fix; blocks all UI work.
-- ⬜ No pagination, filtering or sorting on any list endpoint
+- ✅ CORS middleware — `CORS_ORIGINS` env var, comma-separated (`Annotated[list[str], NoDecode]` — pydantic-settings 2.7.0 JSON-decodes plain `list[str]` fields before validators run otherwise)
+- ⬜ No filtering or sorting beyond `kind` on any list endpoint
 - ⬜ `GET /scans` requires `engagement_id` — there is no "list all scans"
 - ⬜ No scan cancellation
-- ⬜ `main.py` docstring still says "Scaffold only"
 
 ### Async execution ✅
 
 - ✅ Celery + Redis (D-014) — `apps/api/worker.py`, `apps/api/tasks/scans.py`
 - ✅ Permanent failures not retried; task re-raises so Celery state matches the DB row (D-019)
 - ✅ `is_available()` checked before invoking a scanner
+- ✅ Task registration fixed (D-021) — `worker.py` explicitly imports the task module instead of `autodiscover_tasks(["apps.api.tasks"])`, which silently registered nothing. Invisible to every existing test (they import the task module directly); caught by a subprocess-based regression test, `tests/unit/test_worker_registration.py`
 
 ### Lab — `lab/` ✅
 
@@ -182,34 +183,33 @@ Note the sequencing trap: Track A needs only Layer 1 output plus ground truth, s
 detection-accuracy half can be built now**. It does not need Layers 2–4. Co-owned by all three
 of us per `HOW-THIS-REPO-WORKS.md`.
 
-### Test fixtures — `tests/fixtures/observations/` ⚠️
+### Test fixtures — `tests/fixtures/observations/` ✅
 
-Exists, is real, is drift-guarded — and is far too thin for the job the architecture doc gives
-it (*"Layers 2 through 4 become testable offline"*).
+Exists, is real, is drift-guarded, and now covers what the architecture doc asks for
+(*"Layers 2 through 4 become testable offline"*).
 
-- ✅ `lab_baseline.json` — a serialized `ScanResult`, re-parse-verified against the live adapter
-- ⬜ Covers **2 of 10** lab hosts, both DMZ. The internal and data tiers have no snapshotted observations at all
-- ⬜ **Zero nuclei / `vuln_candidate` observations** — nothing in the fixture set represents a vulnerability
-- ⬜ None of the 3 declared multi-hop paths are represented
-
-**This blocks Layer 3.** The rules engine in November needs multi-segment, multi-host facts with
-vulnerabilities to run against offline. Extending the fixture set is a Layer 1 task on Layer 3's
-critical path — the highest-leverage single item on this list.
+- ✅ `lab_baseline.json` — a serialized `ScanResult` from a **real** capture, re-parse-verified against the live adapter (dvwa, juiceshop)
+- ✅ `lab_dmz_extended.json`, `lab_internal.json`, `lab_data.json` — synthetic (hand-authored nmap XML run through the real `parse_nmap_xml`), one file per remaining segment. **Covers all 10 lab hosts.** Every host/port/service/version fact copied verbatim from `lab/ground_truth.yaml`
+- ✅ `lab_extended_nuclei.json` — synthetic nuclei findings for the 5 HTTP-exposed hosts, run through the real `parse_nuclei_json`. First `vuln_candidate` observations in the fixture set
+- ✅ Built and kept reproducible by `scripts/build_observation_fixtures.py` — mirrors `ScannerAdapter._artifact`'s content-addressing exactly; re-running it is a no-op diff
+- ✅ Cross-consistency tests — `tests/unit/test_observation_fixtures.py` (full-host coverage, every synthetic CVE traceable to `ground_truth.yaml`)
+- ⚠️ **8 of 10 hosts are still synthetic, not captured.** Real captures replace them as soon as the Docker Hub blocker (below) clears; `tests/fixtures/observations/README.md` tracks which file maps to which blocked image
+- ⬜ None of the 3 declared multi-hop paths are represented as a connected fixture set yet (each file is one segment; nothing currently threads a path across all three)
 
 ### Tests
 
-- ✅ 191 passing — 11 architecture, 180 unit
+- ✅ 219 passing — 11 architecture, 203 unit, 5 integration
 - ✅ Import firewall, with a planted-violation self-test — `tests/architecture/test_import_firewall.py`
 - ✅ Authorization coverage by reflection — `tests/architecture/test_authorization_gate.py`
+- ✅ **`tests/integration/test_fixture_pipeline_roundtrip.py`** — loads every fixture, persists via `save_scan_result`, reads back through both the repository layer and `GET /observations` / `GET /scans/{id}/observations`, and asserts provenance, artifact-scoping, idempotency, and gapless pagination all survive the round trip. No scanning, no lab, runs in ~1s
 - ⏸️ Purity / determinism test — November by design, lands with the graph builder
 - ⏸️ No-narration-upstream test — November by design
-- ⬜ **`tests/integration/` does not exist.** The architecture doc specifies it: "pipeline over fixture observations, no scanning". Currently blocked in practice by the thin fixture set above.
 
 ### CI — `.github/workflows/ci.yml`
 
 - ✅ ruff, ruff format, mypy, pytest, architecture guards — runs on PRs to `main`
 - ✅ Third-party register check
-- ⬜ **`mypy packages services` excludes `apps/`** — every router, task, DB and core module ships without strict type checking, despite `CLAUDE.md` requiring type hints on all Python and `pyproject.toml` setting `strict = true`
+- ✅ **`mypy` now runs on `packages services apps`** — the 5 pre-existing `apps/` errors (two `Insert` union-type inferences, one untyped-decorator false positive on `@celery_app.task`, one untyped `JSONB()` call, one `NmapAdapter`/`NucleiAdapter` union inference) are fixed with explicit annotations and one targeted `# type: ignore[misc]` for celery's missing stubs — not scope suppressions
 - ⬜ Nothing runs `evals/`
 - ⬜ Runtime deprecation warnings: Node 20 → 24, `ubuntu-latest` → Ubuntu 26
 
@@ -230,11 +230,12 @@ critical path — the highest-leverage single item on this list.
 
 ### Documentation
 
-- ✅ `docs/02-architecture.md` — the binding spec, current as of D-020
-- ✅ `DECISIONS.md` — D-001 … D-020
+- ✅ `docs/02-architecture.md` — the binding spec, current as of D-022 (header bumped)
+- ✅ `DECISIONS.md` — D-001 … D-022
 - ✅ `THIRD_PARTY.md` — nmap, nuclei registered
 - ✅ `docs/03-dashboard-spec.md` — brief for the dashboard work
-- ⬜ `docs/00-scope.md` is a placeholder stub that four other documents treat as authoritative
+- ✅ `docs/00-scope.md`'s Timeline section reconciled with `docs/02-architecture.md` (D-022)
+- ⬜ `docs/00-scope.md` is otherwise still a placeholder stub for the rest of the real scope/research document (out-of-scope list, layer summary, etc. are still stub prose)
 - ⬜ `docs/mayank_implementation/level_1_status.md` is partly stale — several items marked pending have since shipped
 
 ---
@@ -302,14 +303,13 @@ images (`redis:7-alpine`), so it is environmental, not project configuration. Bl
 Cached and usable: `vulnerables/web-dvwa`, `bkimminich/juice-shop`, `instrumentisto/nmap`,
 `redis:7-alpine`, `postgres:16-alpine`.
 
-### 2. No CORS 🚫
+### 2. No CORS ✅ resolved
 
-Blocks all dashboard work. Three-line fix in `apps/api/main.py`.
+`CORSMiddleware` added to `apps/api/main.py`, origins from `CORS_ORIGINS`. No longer blocks Dev C.
 
-### 3. No observations endpoint 🚫
+### 3. No observations endpoint ✅ resolved
 
-Blocks any UI that shows scan results, and blocks Track A of the eval harness from reading
-results over HTTP (it can read the DB directly instead).
+`GET /observations` and `GET /scans/{id}/observations` both ship, paginated, with provenance.
 
 ---
 
@@ -335,23 +335,20 @@ and to *"decide it in September, not in November."* September is now.
 
 ## Next actions, in order
 
-1. **CORS middleware** — unblocks Dev C entirely. Smallest high-value change on the list. *(A)*
-2. **`GET /observations`** — closes the read path; repository methods already exist. Agree the shape with Dev C first, since he consumes it. *(A)*
-3. **Dashboard phase 1** — engagements + scans. **Completes Layer 1.** *(C)*
-4. **Extend `tests/fixtures/observations/`** — all 10 hosts, all 3 segments, including nuclei `vuln_candidate` facts. Unblocks `tests/integration/` and Layer 3 development. *(A/B)*
-5. **Eval harness, Track A** — buildable now against Layer 1 output + ground truth; does not need Layers 2–4. *(All)*
+1. ✅ ~~CORS middleware~~ — done
+2. ✅ ~~`GET /observations`~~ — done
+3. **Dashboard phase 1** — engagements + scans. **Completes Layer 1.** In progress, owned by Dev C. *(C)*
+4. ✅ ~~Extend `tests/fixtures/observations/`~~ — done, all 10 hosts, all 3 segments, nuclei included
+5. **Eval harness, Track A** — buildable now against Layer 1 output + ground truth; does not need Layers 2–4. **Biggest remaining gap against the project's own stated priorities.** *(All)*
 6. **Layer 2 brainstorm** — identity resolution strategy is explicitly open; decide before coding. *(B)*
-7. **Resolve the timeline conflict and the `00-scope.md` stub.** *(All)*
+7. ✅ ~~Resolve the timeline conflict~~ — done (D-022). `docs/00-scope.md` stub itself still needs replacing, lower priority
 8. **Decide the staffing question** the architecture doc raises. *(All)*
 
 ---
 
 ## Smaller items worth not losing
 
-- ⬜ `apps/api/worker.py` has an uncommitted local fix (`autodiscover_tasks` → explicit import) — needs verifying and committing
-- ⬜ `mypy` scope excludes `apps/`
 - ⬜ Audit log unbounded and non-durable
-- ⬜ `main.py` docstring says "Scaffold only"
 - ⬜ CI runner deprecations (Node 20→24, ubuntu-latest→26)
 - ⬜ Stale remote branches: `mayank-development`, `fix/layer-1-review-followups`
 - ⬜ Dead file `apps/web/app/page.module.css`

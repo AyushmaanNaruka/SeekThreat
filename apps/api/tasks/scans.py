@@ -37,7 +37,7 @@ from apps.api.db.repositories import (
 from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.engagement import Authorization, ScanRequest
-from services.scanners.base import AuthorizationError, ScannerUnavailableError
+from services.scanners.base import AuthorizationError, ScannerAdapter, ScannerUnavailableError
 from services.scanners.nmap_adapter import NmapAdapter
 from services.scanners.nuclei_adapter import NucleiAdapter
 
@@ -54,7 +54,7 @@ PERMANENT_ERRORS = (
 )
 
 
-@celery_app.task(
+@celery_app.task(  # type: ignore[misc]  # celery ships no type stubs for .task()
     bind=True,
     name="seekthreat.scans.execute",
     max_retries=3,
@@ -99,6 +99,7 @@ def execute_scan(
             options=options,
         )
 
+        adapter: ScannerAdapter
         if scanner == "nmap":
             adapter = NmapAdapter()
         elif scanner == "nuclei":

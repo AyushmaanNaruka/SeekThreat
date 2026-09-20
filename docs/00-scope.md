@@ -23,16 +23,21 @@ A well-drawn boundary reads as judgment. An unbounded one reads as naivety.
 
 ## Timeline
 
+Five months, September to January (see `DECISIONS.md` D-022 — the original plan assumed six,
+starting in August; the old integration month is merged into January).
+
 | Month | Focus | Done when |
 |---|---|---|
-| 1 · Aug | Foundations + test lab | A scan from the UI produces normalized, enriched findings |
-| 2 · Sep | Normalization, enrichment, **eval harness** | Metrics report generates automatically |
-| 3 · Oct | Graph and attack paths | Every path edge clicks through to its evidence |
-| 4 · Nov | The assistant | Faithfulness above 0.80 on the golden set |
-| 5 · Dec | Integration, reporting, hardening | Feature freeze |
-| 6 · Jan | Demo, docs, write-up | Rehearsed demo plus recorded fallback |
+| 1 · Sep | Phase 0 groundwork, Layer 1, lab, eval skeleton | A scan produces stored, provenanced observations |
+| 2 · Oct | Layer 2 — normalize, dedup, enrichment fusion | Coverage measured against an NVD-only baseline |
+| 3 · **Nov** | **Layer 3 — graph, rules, paths, ERS, chokepoints** | Every edge clicks through to its evidence |
+| 4 · Dec | Layer 4 — retrieval, narration, assistant, UI | Faithfulness measured on the golden set |
+| 5 · Jan | Integration, demo, write-up | Rehearsed demo plus a recorded fallback |
 
-**October is protected.** The graph and path engine is the differentiating work.
+**November is protected.** The graph and path engine is the differentiating work.
 
 **The eval harness is built in September, not January.** Bad numbers in month two are fine.
 Missing numbers in month six are fatal.
+
+Full detail — the cut list, staffing risk, and everything else behind this table — lives in
+`docs/02-architecture.md`'s "Sequence" section, which is authoritative for the schedule.
