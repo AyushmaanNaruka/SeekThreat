@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -95,15 +95,45 @@ def create_scan(
     )
     db.commit()
 
-    # 3. Dispatch Celery task — authorization serialized as JSON-safe dict
-    execute_scan.delay(
-        scan_id,
-        payload.engagement_id,
-        payload.scanner,
-        payload.target,
-        payload.options,
-        auth.model_dump(mode="json"),
-    )
+    # 3. Dispatch Celery task — authorization serialized as JSON-safe dict.
+    # The scan row is already committed, so an unguarded dispatch failure (a
+    # broker outage, say) would leave it at 'pending' forever with nothing
+    # scheduled to advance it, and hand the caller a 500.
+    try:
+        execute_scan.delay(
+            scan_id,
+            payload.engagement_id,
+            payload.scanner,
+            payload.target,
+            payload.options,
+            auth.model_dump(mode="json"),
+        )
+    except Exception as exc:
+        error_msg = f"{type(exc).__name__}: {exc}"
+        logger.error("Scan %s dispatch failed: %s", scan_id, error_msg, exc_info=True)
+
+        scan_repo.update_status(
+            scan_id=scan_id,
+            status="failed",
+            error_message=f"Dispatch failed: {error_msg}",
+            completed_at=datetime.now(UTC),
+        )
+        db.commit()
+
+        log_audit_event(
+            event="scan.dispatch_failed",
+            actor=auth.authorized_by,
+            target=payload.target,
+            engagement_id=payload.engagement_id,
+            scanner=payload.scanner,
+            status="error",
+            details={"scan_id": scan_id, "error": error_msg},
+        )
+
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Scan queue unavailable; the scan was not dispatched.",
+        ) from exc
 
     return ScanStatusResponse(
         scan_id=scan.scan_id,

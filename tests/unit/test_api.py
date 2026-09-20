@@ -431,3 +431,140 @@ def test_alembic_migration_0002_upgrade_and_downgrade(tmp_path: Path) -> None:
     assert "raw_artifacts" in tables_after
     assert "observations" in tables_after
     engine.dispose()
+
+
+# ---------------------------------------------------------------------------
+# POST /engagements — duplicate engagement_id must not rewrite authorization
+# ---------------------------------------------------------------------------
+
+
+def test_create_engagement_duplicate_id_is_rejected(api_client: TestClient) -> None:
+    """Re-POSTing an existing engagement_id must not silently succeed.
+
+    The repository upserts by primary key, so without an existence check the
+    second POST rewrote the authorization scope of a live engagement and
+    returned 201 as though it had created something new.
+    """
+    first = api_client.post("/engagements", json=_valid_engagement_payload())
+    assert first.status_code == 201, first.text
+
+    second = api_client.post(
+        "/engagements",
+        json=_valid_engagement_payload(
+            authorized_by="someone-else",
+            allowlist=["0.0.0.0/0"],
+        ),
+    )
+    assert second.status_code == 409, second.text
+
+
+def test_create_engagement_duplicate_does_not_widen_allowlist(api_client: TestClient) -> None:
+    """The original authorization must survive a rejected duplicate POST.
+
+    This is the security-relevant half: CLAUDE.md hard rule 2 puts the
+    allowlist and named authorizer at the centre of the scan gate, so an
+    unauthenticated caller must not be able to replace either one.
+    """
+    api_client.post("/engagements", json=_valid_engagement_payload())
+
+    api_client.post(
+        "/engagements",
+        json=_valid_engagement_payload(
+            authorized_by="attacker",
+            allowlist=["0.0.0.0/0"],
+        ),
+    )
+
+    current = api_client.get("/engagements/eng-test-001").json()
+    assert current["authorized_by"] == "test-operator"
+    assert current["allowlist"] == ["172.20.0.0/16"]
+    assert "0.0.0.0/0" not in current["allowlist"]
+
+
+# ---------------------------------------------------------------------------
+# POST /engagements — naive datetimes are a client error, not a server error
+# ---------------------------------------------------------------------------
+
+
+def test_create_engagement_rejects_naive_granted_at(api_client: TestClient) -> None:
+    """A naive datetime is malformed input: 422, not an unhandled 500.
+
+    require_aware() raised ValueError inside the route body, which FastAPI does
+    not translate -- it surfaced as a 500. Validation belongs on the request
+    model so the framework renders the error.
+    """
+    payload = _valid_engagement_payload(granted_at="2026-01-01T00:00:00")
+    resp = api_client.post("/engagements", json=payload)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_engagement_rejects_naive_expires_at(api_client: TestClient) -> None:
+    payload = _valid_engagement_payload(expires_at="2027-01-01T00:00:00")
+    resp = api_client.post("/engagements", json=payload)
+    assert resp.status_code == 422, resp.text
+
+
+def test_create_engagement_accepts_non_utc_offset(api_client: TestClient) -> None:
+    """Aware is the requirement, not UTC specifically."""
+    payload = _valid_engagement_payload(
+        granted_at="2026-01-01T00:00:00+05:30",
+        expires_at="2027-01-01T00:00:00+05:30",
+    )
+    resp = api_client.post("/engagements", json=payload)
+    assert resp.status_code == 201, resp.text
+
+
+# ---------------------------------------------------------------------------
+# POST /scans — broker failure must not leave a permanently pending scan
+# ---------------------------------------------------------------------------
+
+
+def test_create_scan_broker_failure_returns_503(api_client: TestClient, monkeypatch) -> None:
+    """A broker outage is a 503, not a 500.
+
+    .delay() was unguarded, so a Redis outage raised after the scan row had
+    already been committed: the caller got a 500 and the row sat at 'pending'
+    forever with nothing scheduled to advance it.
+    """
+    import apps.api.tasks.scans as tasks_module
+
+    def _broker_down(*args: Any, **kwargs: Any) -> None:
+        raise OSError("Redis connection refused")
+
+    monkeypatch.setattr(tasks_module.execute_scan, "delay", _broker_down)
+
+    api_client.post("/engagements", json=_valid_engagement_payload())
+    resp = api_client.post(
+        "/scans",
+        json={
+            "engagement_id": "eng-test-001",
+            "scanner": "nmap",
+            "target": "172.20.1.10",
+        },
+    )
+    assert resp.status_code == 503, resp.text
+
+
+def test_create_scan_broker_failure_marks_scan_failed(api_client: TestClient, monkeypatch) -> None:
+    """The scan row must not be left at 'pending' when dispatch never happened."""
+    import apps.api.tasks.scans as tasks_module
+
+    def _broker_down(*args: Any, **kwargs: Any) -> None:
+        raise OSError("Redis connection refused")
+
+    monkeypatch.setattr(tasks_module.execute_scan, "delay", _broker_down)
+
+    api_client.post("/engagements", json=_valid_engagement_payload())
+    api_client.post(
+        "/scans",
+        json={
+            "engagement_id": "eng-test-001",
+            "scanner": "nmap",
+            "target": "172.20.1.10",
+        },
+    )
+
+    listed = api_client.get("/scans", params={"engagement_id": "eng-test-001"}).json()
+    assert len(listed) == 1, listed
+    assert listed[0]["status"] == "failed"
+    assert listed[0]["error_message"]
