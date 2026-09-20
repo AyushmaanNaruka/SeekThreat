@@ -30,6 +30,7 @@ from apps.api.db.base import Base
 from apps.api.db.repositories import EngagementRepository, ScanRepository
 from apps.api.db.session import get_session_factory
 from packages.schema.models.engagement import Authorization, Engagement
+from services.scanners.base import ScannerUnavailableError
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -186,19 +187,22 @@ def test_execute_scan_unsupported_scanner(engine, seeded_scan, monkeypatch) -> N
     mock_self.request.id = "mock-celery-task-id"
     mock_self.request.retries = 0
     mock_self.max_retries = 3
-    mock_self.MaxRetriesExceededError = Exception
-    mock_self.retry.side_effect = Exception("max retries")
 
-    # Call task body directly — not via .delay()
-    task_module.execute_scan.run.__func__(
-        mock_self,
-        scan_id=scan_id,
-        engagement_id="eng-celery-test",
-        scanner="unsupported-scanner",
-        target="172.20.1.50",
-        options={},
-        authorization_dict=auth_dict,
-    )
+    # An unsupported scanner is permanent (see PERMANENT_ERRORS) so it is never
+    # retried, and the task re-raises after marking the scan failed so Celery
+    # itself records the task as FAILURE, not SUCCESS.
+    with pytest.raises(ValueError):
+        task_module.execute_scan.run.__func__(
+            mock_self,
+            scan_id=scan_id,
+            engagement_id="eng-celery-test",
+            scanner="unsupported-scanner",
+            target="172.20.1.50",
+            options={},
+            authorization_dict=auth_dict,
+        )
+
+    mock_self.retry.assert_not_called()
 
     # Check scan marked failed in DB
     db = factory()
@@ -280,3 +284,160 @@ def test_execute_scan_nmap_happy_path(engine, seeded_scan, monkeypatch) -> None:
     assert len(completed_events) == 1
     assert completed_events[0]["status"] == "completed"
     assert completed_events[0]["scanner"] == "nmap"
+
+
+# ---------------------------------------------------------------------------
+# Retry classification: permanent failures must not be retried
+# ---------------------------------------------------------------------------
+
+
+def test_unsupported_scanner_is_not_retried(engine, seeded_scan, monkeypatch) -> None:
+    """An unsupported scanner name can never succeed, so it must not be retried.
+
+    Every retry is a full rescan. Retrying an error whose outcome cannot change
+    burned up to four of them before giving up.
+    """
+    from apps.api.tasks import scans as task_module
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    mock_self = MagicMock()
+    mock_self.request.id = "mock-celery-task-id"
+    mock_self.request.retries = 0
+    mock_self.max_retries = 3
+
+    with pytest.raises(ValueError):
+        task_module.execute_scan.run.__func__(
+            mock_self,
+            scan_id=scan_id,
+            engagement_id="eng-celery-test",
+            scanner="unsupported-scanner",
+            target="172.20.1.50",
+            options={},
+            authorization_dict=auth_dict,
+        )
+
+    mock_self.retry.assert_not_called()
+
+
+def test_missing_scanner_binary_is_not_retried(engine, seeded_scan, monkeypatch) -> None:
+    """A binary missing at dispatch will still be missing on retry."""
+    from apps.api.tasks import scans as task_module
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    unavailable = MagicMock()
+    unavailable.is_available.return_value = False
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: unavailable)
+
+    mock_self = MagicMock()
+    mock_self.request.id = "mock-celery-task-id"
+    mock_self.request.retries = 0
+    mock_self.max_retries = 3
+
+    with pytest.raises(ScannerUnavailableError):
+        task_module.execute_scan.run.__func__(
+            mock_self,
+            scan_id=scan_id,
+            engagement_id="eng-celery-test",
+            scanner="nmap",
+            target="172.20.1.50",
+            options={},
+            authorization_dict=auth_dict,
+        )
+
+    mock_self.retry.assert_not_called()
+    unavailable.scan.assert_not_called()
+
+    db = factory()
+    scan = ScanRepository(db).get(scan_id)
+    db.close()
+    assert scan is not None
+    assert scan.status == "failed"
+    assert "ScannerUnavailableError" in (scan.error_message or "")
+
+
+def test_transient_error_is_still_retried(engine, seeded_scan, monkeypatch) -> None:
+    """Transient failures keep their retry behaviour — only permanent ones are excluded."""
+    from apps.api.tasks import scans as task_module
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    flaky = MagicMock()
+    flaky.is_available.return_value = True
+    flaky.scan.side_effect = ConnectionError("transient network blip")
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: flaky)
+
+    class _MaxRetriesExceeded(Exception):
+        """Stand-in distinct from RuntimeError, so the except clause below
+        does not accidentally swallow the simulated reschedule."""
+
+    mock_self = MagicMock()
+    mock_self.request.id = "mock-celery-task-id"
+    mock_self.request.retries = 0
+    mock_self.max_retries = 3
+    mock_self.MaxRetriesExceededError = _MaxRetriesExceeded
+    mock_self.retry.side_effect = RuntimeError("celery would reschedule here")
+
+    with pytest.raises(RuntimeError):
+        task_module.execute_scan.run.__func__(
+            mock_self,
+            scan_id=scan_id,
+            engagement_id="eng-celery-test",
+            scanner="nmap",
+            target="172.20.1.50",
+            options={},
+            authorization_dict=auth_dict,
+        )
+
+    mock_self.retry.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# A failed scan must not be reported to Celery as a success
+# ---------------------------------------------------------------------------
+
+
+def test_failed_scan_raises_so_celery_records_failure(engine, seeded_scan, monkeypatch) -> None:
+    """The task must not return normally after marking the scan failed.
+
+    Celery derives task state from the return: swallowing the exception left
+    the DB row at 'failed' while the task itself was recorded SUCCESS, so
+    nothing monitoring Celery could see that anything had gone wrong.
+    """
+    from apps.api.tasks import scans as task_module
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    mock_self = MagicMock()
+    mock_self.request.id = "mock-celery-task-id"
+    mock_self.request.retries = 0
+    mock_self.max_retries = 3
+
+    with pytest.raises(ValueError):
+        task_module.execute_scan.run.__func__(
+            mock_self,
+            scan_id=scan_id,
+            engagement_id="eng-celery-test",
+            scanner="nope",
+            target="172.20.1.50",
+            options={},
+            authorization_dict=auth_dict,
+        )
+
+    db = factory()
+    scan = ScanRepository(db).get(scan_id)
+    db.close()
+    assert scan is not None
+    assert scan.status == "failed"
+
+    events = get_audit_log()
+    assert any(e["event"] == "scan.failed" for e in events)

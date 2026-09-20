@@ -13,6 +13,14 @@ Design decisions:
   is already closed when Celery picks up the job.
 - Transient errors (network, DB blip) are retried up to 3 times with a
   30-second back-off before the scan is marked failed.
+- Permanent errors are *not* retried. Every retry is a full rescan, so
+  re-attempting an error whose outcome cannot change (an unsupported
+  scanner name, a missing binary) only multiplies the work. See
+  ``PERMANENT_ERRORS``.
+- However the scan fails, the task re-raises once the row is marked
+  failed. Celery derives task state from the return value, so swallowing
+  the exception would record the task as SUCCESS while the scan sat at
+  'failed' in the database.
 """
 
 from __future__ import annotations
@@ -29,10 +37,21 @@ from apps.api.db.repositories import (
 from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.engagement import Authorization, ScanRequest
+from services.scanners.base import AuthorizationError, ScannerUnavailableError
 from services.scanners.nmap_adapter import NmapAdapter
 from services.scanners.nuclei_adapter import NucleiAdapter
 
 logger = logging.getLogger(__name__)
+
+# Failures that a retry cannot fix. An unsupported scanner name stays
+# unsupported, a missing binary stays missing, and an unauthorized target must
+# never be re-attempted at all. Retrying any of these costs a full rescan per
+# attempt for an outcome that cannot change.
+PERMANENT_ERRORS = (
+    ValueError,
+    ScannerUnavailableError,
+    AuthorizationError,
+)
 
 
 @celery_app.task(
@@ -80,16 +99,22 @@ def execute_scan(
             options=options,
         )
 
-        scan_result = None
-
         if scanner == "nmap":
             adapter = NmapAdapter()
-            scan_result = adapter.scan(request)
         elif scanner == "nuclei":
             adapter = NucleiAdapter()
-            scan_result = adapter.scan(request)
         else:
             raise ValueError(f"Unsupported scanner: {scanner!r}")
+
+        # Check before invoking rather than letting the subprocess call fail:
+        # this turns "binary not installed in the image" into a clear, named,
+        # non-retried error instead of an opaque OSError retried four times.
+        if not adapter.is_available():
+            raise ScannerUnavailableError(
+                f"Scanner {scanner!r} is not installed or not runnable in this environment."
+            )
+
+        scan_result = adapter.scan(request)
 
         # Persist results idempotently (upsert — safe to re-run)
         save_scan_result(db, scan_result)
@@ -122,43 +147,42 @@ def execute_scan(
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("Scan %s failed: %s", scan_id, error_msg, exc_info=True)
 
-        is_failed = False
-        try:
-            raise self.retry(exc=exc)
-        except self.MaxRetriesExceededError:
-            # All retries exhausted — mark the scan as permanently failed
-            is_failed = True
-        except Exception:
-            # If retries are not exceeded, Celery re-schedules via Retry exception
-            if getattr(self.request, "retries", 0) >= getattr(self, "max_retries", 3):
-                is_failed = True
-            else:
-                raise
-
-        if is_failed:
+        if not isinstance(exc, PERMANENT_ERRORS):
+            # Transient: hand back to Celery, which re-raises Retry to
+            # reschedule. Once retries are exhausted it raises
+            # MaxRetriesExceededError, and we fall through to mark the row.
             try:
-                scan_repo.update_status(
-                    scan_id=scan_id,
-                    status="failed",
-                    error_message=error_msg,
-                    completed_at=datetime.now(UTC),
-                )
-                db.commit()
-            except Exception:
-                db.rollback()
+                raise self.retry(exc=exc) from exc
+            except self.MaxRetriesExceededError:
+                pass
 
-            log_audit_event(
-                event="scan.failed",
-                actor=authorization.authorized_by,
-                target=target,
-                engagement_id=engagement_id,
-                scanner=scanner,
-                status="error",
-                details={
-                    "scan_id": scan_id,
-                    "error": error_msg,
-                    "celery_task_id": getattr(self.request, "id", None),
-                },
+        try:
+            scan_repo.update_status(
+                scan_id=scan_id,
+                status="failed",
+                error_message=error_msg,
+                completed_at=datetime.now(UTC),
             )
+            db.commit()
+        except Exception:
+            db.rollback()
+
+        log_audit_event(
+            event="scan.failed",
+            actor=authorization.authorized_by,
+            target=target,
+            engagement_id=engagement_id,
+            scanner=scanner,
+            status="error",
+            details={
+                "scan_id": scan_id,
+                "error": error_msg,
+                "celery_task_id": getattr(self.request, "id", None),
+            },
+        )
+
+        # Re-raise so Celery records FAILURE. Returning normally here would
+        # leave the task marked SUCCESS while the scan row says 'failed'.
+        raise
     finally:
         db.close()
