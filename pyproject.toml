@@ -13,7 +13,16 @@ select = ["E", "F", "I", "UP", "B", "SIM"]
 # for its schema enums (Source, Confidence, ObservationKind in packages/schema/models/),
 # to keep JSON/Pydantic-v2 serialization behavior explicit and stable at the schema
 # boundary. See DECISIONS.md D-010.
-ignore = ["UP042"]
+# B008: FastAPI's dependency-injection idiom is `db: Session = Depends(get_db)` — the
+# call in the default is how FastAPI resolves the dependency per-request. This is the
+# pattern FastAPI's own docs recommend; it is not the mutable-default-argument bug
+# bugbear is designed to catch.
+ignore = ["UP042", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+# alembic/env.py must add the repo root to sys.path before importing app modules,
+# so those imports can never be at the top of the file.
+"alembic/env.py" = ["E402"]
 
 [tool.mypy]
 python_version = "3.11"

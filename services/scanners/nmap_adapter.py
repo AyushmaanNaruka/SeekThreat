@@ -25,13 +25,17 @@ class NmapAdapter(ScannerAdapter):
         return shutil.which("nmap") is not None
 
     def _execute(self, request: ScanRequest) -> str:
-        # -oX - writes XML to stdout
+        # The argv is fixed except for the target. Caller-supplied flags are NOT
+        # accepted: the authorization gate proves `request.target` is permitted, and
+        # an extra flag can add a second target (`nmap -sV 1.2.3.4 <target>` scans
+        # both) or redirect the scan entirely. Anything that can change what gets
+        # scanned has to be something the gate saw. See DECISIONS.md D-017.
         cmd = [
             "nmap",
             "-sV",  # service/version detection
             "-oX",
             "-",
-            *request.options.get("extra_args", []),
+            "--",  # end of options: a target starting with '-' is not read as a flag
             request.target,
         ]
         result = subprocess.run(

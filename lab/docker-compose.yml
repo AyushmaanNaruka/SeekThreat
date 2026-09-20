@@ -7,23 +7,82 @@
 # Keep lab/ground_truth.yaml in sync — every metric depends on it.
 
 services:
+  # ============================================================================
+  # DMZ Segment (172.20.1.0/24) — Perimeter Services Facing External Ingress
+  # ============================================================================
   dvwa:
     image: vulnerables/web-dvwa
     networks:
       dmz: { ipv4_address: 172.20.1.10 }
-    # no ports: — reachable from the scanner network only
 
   juiceshop:
     image: bkimminich/juice-shop
     networks:
       dmz: { ipv4_address: 172.20.1.11 }
 
-  # TODO: add internal app tier and database segment hosts.
-  # The multi-hop chains are what the path engine exists to find —
-  # without them there is nothing to demo.
+  dmz-proxy:
+    image: nginx:1.18.0-alpine
+    networks:
+      dmz: { ipv4_address: 172.20.1.12 }
+      internal: { ipv4_address: 172.20.2.12 }
 
-  # Not a target — the only host on this network permitted to scan the others.
-  # Used to capture real nmap XML fixtures for tests/fixtures/nmap/. Never runs
+  spring-gateway:
+    image: vulhub/spring-cloud-gateway:3.1.0
+    networks:
+      dmz: { ipv4_address: 172.20.1.13 }
+      internal: { ipv4_address: 172.20.2.13 }
+
+  # ============================================================================
+  # Internal Application Segment (172.20.2.0/24) — App Tier, CI/CD, Docs
+  # ============================================================================
+  internal-api:
+    image: python:3.9-slim
+    command: python -m http.server 8080
+    networks:
+      internal: { ipv4_address: 172.20.2.10 }
+
+  jenkins-ci:
+    image: jenkins/jenkins:2.441-jdk17
+    networks:
+      internal: { ipv4_address: 172.20.2.25 }
+
+  internal-wiki:
+    image: vulhub/confluence:7.18.0
+    networks:
+      internal: { ipv4_address: 172.20.2.40 }
+
+  bastion-ssh:
+    image: linuxserver/openssh-server:8.2p1
+    environment:
+      PASSWORD_ACCESS: "true"
+      USER_PASSWORD: "password"
+    networks:
+      internal: { ipv4_address: 172.20.2.50 }
+      data: { ipv4_address: 172.20.3.50 }
+
+  # ============================================================================
+  # Data Segment (172.20.3.0/24) — Crown Jewels (Databases & Caches)
+  # ============================================================================
+  db-primary:
+    image: postgres:12.4-alpine
+    environment:
+      POSTGRES_DB: customers
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: password123
+    networks:
+      data: { ipv4_address: 172.20.3.10 }
+
+  cache-redis:
+    image: redis:5.0.7-alpine
+    command: ["redis-server", "--protected-mode", "no"]
+    networks:
+      data: { ipv4_address: 172.20.3.20 }
+
+  # ============================================================================
+  # Scanner Helper (Not a scan target)
+  # ============================================================================
+  # The only host on this network permitted to scan the others.
+  # Used to capture real scanner fixtures for tests/fixtures/. Never runs
   # unattended: bring it up, run one scan, capture the output, take it back down.
   scanner:
     image: instrumentisto/nmap:latest

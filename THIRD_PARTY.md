@@ -39,7 +39,7 @@ dependency manifests.
 | Nmap | NPSL | Service | Invoked as subprocess, XML output parsed. Source never vendored | | |
 | NetworkX | BSD-3-Clause | Service | In-memory attack graph substrate (D-003) | Ayushmaan | 2026-09-05 |
 | PyYAML | MIT | Service | Rules-as-data loading for the path engine (D-004) | Ayushmaan | 2026-09-05 |
-| Nuclei | *TO VERIFY — believed MIT* | Service | Invoked as subprocess, JSONL output parsed | | |
+| Nuclei | MIT (ProjectDiscovery) | Service | Invoked as subprocess, JSONL output parsed. Source never vendored | Ayushmaan | 2026-09-20 |
 | Greenbone / OpenVAS | GPL | Service | Run as container, GMP API via python-gvm | | |
 | Foundation-Sec-8B-Reasoning | Open weights | Service | Local model serving | | |
 
