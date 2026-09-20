@@ -1,6 +1,6 @@
 # Architecture
 
-How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-019.
+How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-020.
 
 Read `docs/00-scope.md` for what we are building. This document is how.
 
@@ -313,8 +313,23 @@ overrides on both services take precedence over `env_file:`, so the same `.env` 
 never race to apply the same DDL.
 
 The lab stays in `lab/docker-compose.yml`, on internal networks with no egress, as it is now.
-The worker cannot yet reach it — that requires an external-network attachment between the two
-compose files, not yet built.
+`infra/docker-compose.lab.yml` is an optional override that attaches the worker to all three
+lab networks (`lab_dmz`, `lab_internal`, `lab_data`, referenced as `external: true` — Docker
+network names are `<project>_<name>`) at fixed IPs, one per segment, outside the target ranges
+in `lab/ground_truth.yaml`. It is not merged into the base compose file: the lab's networks
+must already exist or compose refuses to start, and plain `--profile core up` must keep working
+with no lab running. Bring the lab up first, then:
+
+```
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.lab.yml --profile core up -d
+```
+
+This grants reachability only. The authorization gate still decides whether a scan is
+permitted — an engagement's allowlist must cover the target regardless of what the worker can
+physically reach (CLAUDE.md hard rule 2). Attaching an additional container to an `internal:
+true` network does not weaken it: that flag means no route to the outside internet, not that no
+other compose project may join, and every lab target keeps that flag on its own network
+regardless of what else is attached.
 
 ---
 

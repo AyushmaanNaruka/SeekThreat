@@ -47,6 +47,75 @@ Newest first.
 
 ---
 
+### D-020 — Worker-to-lab network attachment via a separate compose override
+**Date:** 2026-09-20
+**Decided by:** Ayushmaan
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+Added `infra/docker-compose.lab.yml`, an optional override (not merged into
+`infra/docker-compose.yml`) that attaches the `worker` service to all three
+lab networks -- `lab_dmz`, `lab_internal`, `lab_data`, declared
+`external: true` -- at fixed IPs (`172.20.{1,2,3}.251`, one per segment,
+outside every range in `lab/ground_truth.yaml` and clear of the lab's own
+`scanner` helper at `.250`). Brought up with:
+
+```
+docker compose -f lab/docker-compose.yml up -d
+docker compose -f infra/docker-compose.yml -f infra/docker-compose.lab.yml \
+    --profile core up -d
+```
+
+Attached to all three segments, not `dmz` only: Layer 1's own "done when"
+criterion is stored observations from a real scan, and `ground_truth.yaml`
+requires coverage of the internal and data tiers, not just the perimeter.
+The graph engine (Layer 3) models multi-hop pivoting on top of these
+observations later; the scanner does not need to literally pivot to gather
+them now.
+
+**Why**
+A separate override rather than editing the base file: external networks
+must exist before `docker compose up` runs, or compose refuses to start. The
+base file must keep working with no lab running -- day-to-day API/DB
+development doesn't need the lab, and the memory budget in
+`docs/02-architecture.md` already treats the two as mutually exclusive on a
+16 GB machine.
+
+Attaching an additional container to an `internal: true` network does not
+weaken that network's isolation. The flag means "no default route to the
+outside internet" -- it says nothing about which other containers may join
+the same L2/L3 segment, and it is a property of the network, not of who is
+attached to it. Verified directly rather than assumed: brought the worker up
+attached to all three lab networks, confirmed reachability to the real
+`dvwa`/`juiceshop` dmz targets and to substitute containers standing in for
+the internal/data tiers (their own images fail to pull on this machine, see
+D-018), and confirmed `docker network inspect` still reports
+`Internal=true` on all three lab networks afterward -- the authoritative
+check, since an in-container egress test using missing tooling would not
+have been conclusive.
+
+This grants reachability only. `apps/api/core/authorization.py` still
+decides whether a scan is *permitted* -- an engagement's allowlist must
+cover the target regardless of what the worker can physically reach
+(CLAUDE.md hard rule 2). No code changed; this is compose configuration
+only.
+
+**Impact on plan**
+Closes backlog item #1 from the compose-fix task (D-018): "the worker still
+cannot reach the lab targets." Layer 1's "a scan produces stored,
+provenanced observations" criterion is not yet fully demonstrated end to
+end -- that also needs `pgvector/pgvector:pg16` to build, which is still
+blocked by the same Docker Hub CDN failures documented in D-018 and D-019.
+This change removes the networking half of that blocker; the image-pull half
+is environmental and outside this change's scope.
+
+**Cost if we're wrong**
+Low. One new file, no changes to the base compose file or to application
+code. Deleting `infra/docker-compose.lab.yml` fully reverts this.
+
+---
+
 ### D-019 — Non-retried permanent scan failures; pinned nuclei binary; migration/ORM index parity
 **Date:** 2026-09-20
 **Decided by:** Ayushmaan
