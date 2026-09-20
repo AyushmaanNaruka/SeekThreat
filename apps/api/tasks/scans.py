@@ -54,7 +54,7 @@ PERMANENT_ERRORS = (
 )
 
 
-@celery_app.task(  # type: ignore[misc]  # celery ships no type stubs for .task()
+@celery_app.task(  # type: ignore[untyped-decorator]  # celery ships no type stubs for .task()
     bind=True,
     name="seekthreat.scans.execute",
     max_retries=3,

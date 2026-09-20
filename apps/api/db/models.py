@@ -15,8 +15,7 @@ from packages.schema.models.observation import Observation, ObservationKind, Raw
 from packages.schema.models.provenance import Provenance
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite.
-# JSONB's __init__ has no type stubs in this sqlalchemy version.
-JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[no-untyped-call]
+JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
 
 
 def _aware(value: datetime) -> datetime:
