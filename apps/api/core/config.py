@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import os
+from typing import Annotated, Any
 
 from pydantic import Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 def _normalize_db_url(url: str) -> str:
@@ -33,6 +34,17 @@ class Settings(BaseSettings):
     redis_url: str = Field(
         default_factory=lambda: os.getenv("REDIS_URL", "redis://localhost:6379/0")
     )
+    # NoDecode: pydantic-settings otherwise treats any list-typed field as
+    # "complex" and tries to JSON-decode its raw env value before this class
+    # ever sees it, which raises on a plain comma-separated string. NoDecode
+    # hands the raw string to the "before" validator below instead.
+    cors_origins: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: [
+            origin.strip()
+            for origin in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",")
+            if origin.strip()
+        ]
+    )
 
     @field_validator("database_url", mode="after")
     @classmethod
@@ -42,6 +54,15 @@ class Settings(BaseSettings):
         # environment or .env previously bypassed this and resolved to
         # psycopg2 in SQLAlchemy, which this project does not install.
         return _normalize_db_url(value)
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_cors_origins(cls, value: Any) -> Any:
+        # Only a raw env/`.env` string needs splitting; the default_factory
+        # above already returns a parsed list when CORS_ORIGINS is unset.
+        if isinstance(value, str):
+            return [origin.strip() for origin in value.split(",") if origin.strip()]
+        return value
 
 
 settings = Settings()

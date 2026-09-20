@@ -57,3 +57,27 @@ def test_default_database_url_is_normalized(monkeypatch) -> None:
     importlib.reload(config_module)
     settings = config_module.Settings()
     assert settings.database_url.startswith("postgresql+psycopg://")
+
+
+# ---------------------------------------------------------------------------
+# cors_origins: comma-separated env var, split and stripped into a list.
+#
+# The browser-based dashboard (apps/web, a separate Next.js dev server on
+# localhost:3000) needs CORS_ORIGINS to parse cleanly, including the messy
+# whitespace a developer will actually type in a .env file.
+# ---------------------------------------------------------------------------
+
+
+def test_cors_origins_parses_comma_separated_env_with_whitespace(monkeypatch) -> None:
+    settings = _settings_with_env(
+        monkeypatch,
+        CORS_ORIGINS="http://a.com, http://b.com ",
+    )
+    assert settings.cors_origins == ["http://a.com", "http://b.com"]
+
+
+def test_cors_origins_defaults_to_localhost_3000_when_unset(monkeypatch) -> None:
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    importlib.reload(config_module)
+    settings = config_module.Settings()
+    assert settings.cors_origins == ["http://localhost:3000"]
