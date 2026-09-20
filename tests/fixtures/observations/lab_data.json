@@ -1,0 +1,151 @@
+{
+  "artifact": {
+    "artifact_id": "sha256:69976e49d238a8772b50a4944e091bb3ed74d5927f6130e3de314ad68478e3e2",
+    "scanner": "nmap",
+    "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nmaprun>\n<!--\n  SYNTHETIC FIXTURE. Hand-authored nmap -sV output, not a real capture.\n\n  Docker Hub image pulls for postgres:12.4-alpine and redis:5.0.7-alpine are\n  currently failing on the development machine (see DECISIONS.md D-018/D-019),\n  so the data-tier hosts cannot yet be scanned for real. This file stands in\n  until a real capture replaces it, run through the same parser\n  (services/scanners/nmap_xml.py) as any real artifact.\n\n  Host facts (segment, ip, port, service, product, version) are taken verbatim\n  from lab/ground_truth.yaml. See tests/fixtures/observations/README.md.\n-->\n<?xml-stylesheet href=\"file:///usr/bin/../share/nmap/nmap.xsl\" type=\"text/xsl\"?>\n<!-- Nmap 7.98 scan initiated Sun Sep 20 09:30:00 2026 as: nmap -sV -oX - 172.20.3.10 172.20.3.20 -->\n<nmaprun scanner=\"nmap\" args=\"nmap -sV -oX - 172.20.3.10 172.20.3.20\" start=\"1789896600\" startstr=\"Sun Sep 20 09:30:00 2026\" version=\"7.98\" xmloutputversion=\"1.05\">\n<scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"1000\" services=\"1-1000\"/>\n<verbose level=\"0\"/>\n<debugging level=\"0\"/>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.3.10\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:33:44:01\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.3.20\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:33:44:02\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<host starttime=\"1789896600\" endtime=\"1789896608\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.3.10\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:33:44:01\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-db-primary-1.lab_data\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"5432\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"postgresql\" product=\"postgresql\" version=\"12.4\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"9\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<host starttime=\"1789896600\" endtime=\"1789896611\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.3.20\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:33:44:02\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-cache-redis-1.lab_data\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"6379\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"redis\" product=\"redis\" version=\"5.0.7\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"7\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<runstats><finished time=\"1789896611\" timestr=\"Sun Sep 20 09:30:11 2026\" summary=\"Nmap done at Sun Sep 20 09:30:11 2026; 2 IP addresses (2 hosts up) scanned in 11.00 seconds\" elapsed=\"11.00\" exit=\"success\"/><hosts up=\"2\" down=\"0\" total=\"2\"/>\n</runstats>\n</nmaprun>\n",
+    "content_type": "application/xml",
+    "captured_at": "2026-09-20T09:30:11Z"
+  },
+  "observations": [
+    {
+      "observation_id": "obs:sha256:f77e2c615325ab27bd78399dd1cb6ee6f1d51076b274437960ff98dbad638197",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.3.10",
+      "attributes": {
+        "ipv4": "172.20.3.10",
+        "mac": "aa:bb:cc:33:44:01",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-db-primary-1.lab_data",
+        "hostnames": "lab-db-primary-1.lab_data|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:69976e49d238a8772b50a4944e091bb3ed74d5927f6130e3de314ad68478e3e2",
+      "observed_at": "2026-09-20T09:30:08Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:30:11Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:0153b06254fa5a9841b73f9ac1f0051f0315f4094a04e03b7464925069af02db",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.3.10:5432/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "5432",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "postgresql",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:69976e49d238a8772b50a4944e091bb3ed74d5927f6130e3de314ad68478e3e2",
+      "observed_at": "2026-09-20T09:30:08Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:30:11Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:b209a3b0eb6c84e6cae83031830a5ada8b12be03842de222295b9c62865e5057",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.3.10:5432/tcp",
+      "attributes": {
+        "service_name": "postgresql",
+        "product": "postgresql",
+        "version": "12.4",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:69976e49d238a8772b50a4944e091bb3ed74d5927f6130e3de314ad68478e3e2",
+      "observed_at": "2026-09-20T09:30:08Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:30:11Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:cc59c6694de4cfed0e9feea842dd6d2940a04fdf8dc493c61b21e154e7560102",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.3.20",
+      "attributes": {
+        "ipv4": "172.20.3.20",
+        "mac": "aa:bb:cc:33:44:02",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-cache-redis-1.lab_data",
+        "hostnames": "lab-cache-redis-1.lab_data|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:69976e49d238a8772b50a4944e091bb3ed74d5927f6130e3de314ad68478e3e2",
+      "observed_at": "2026-09-20T09:30:11Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:30:11Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:551dce423defd163a3047e0bd52ab3fb43bc3e40a7fc23e61c095e3a3210e9aa",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.3.20:6379/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "6379",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "redis",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:69976e49d238a8772b50a4944e091bb3ed74d5927f6130e3de314ad68478e3e2",
+      "observed_at": "2026-09-20T09:30:11Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:30:11Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:22be7392d71f3965da0f12bdd5d6658134cc244a877bacd478987b94ccb33641",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.3.20:6379/tcp",
+      "attributes": {
+        "service_name": "redis",
+        "product": "redis",
+        "version": "5.0.7",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:69976e49d238a8772b50a4944e091bb3ed74d5927f6130e3de314ad68478e3e2",
+      "observed_at": "2026-09-20T09:30:11Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:30:11Z",
+        "note": null
+      }
+    }
+  ]
+}

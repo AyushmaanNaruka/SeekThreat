@@ -1,0 +1,158 @@
+{
+  "artifact": {
+    "artifact_id": "sha256:2007914a280ee8ecc9b6fbf75fde8c706baaf061a851bb07120bb532ae8b6c6a",
+    "scanner": "nuclei",
+    "content": "{\"template-id\":\"cve-2021-23017\",\"info\":{\"name\":\"nginx DNS Resolver Off-by-One Heap Write\",\"author\":[\"pdteam\"],\"tags\":[\"cve\",\"cve2021\",\"nginx\",\"dos\"],\"description\":\"nginx resolver is vulnerable to a 1-byte memory overwrite that can lead to worker process crash or potential remote code execution when resolving an attacker-controlled DNS response.\",\"severity\":\"high\",\"reference\":[\"https://nvd.nist.gov/vuln/detail/CVE-2021-23017\"],\"classification\":{\"cve-id\":[\"CVE-2021-23017\"],\"cwe-id\":[\"CWE-787\"],\"cvss-score\":7.7}},\"type\":\"http\",\"host\":\"http://172.20.1.12:80\",\"matched-at\":\"http://172.20.1.12:80/\",\"ip\":\"172.20.1.12\",\"timestamp\":\"2026-09-20T10:05:12.000000Z\",\"matcher-name\":\"nginx-1.18.0-version-match\"}\n{\"template-id\":\"cve-2022-22947\",\"info\":{\"name\":\"Spring Cloud Gateway Actuator API - SpEL Code Injection\",\"author\":[\"pdteam\"],\"tags\":[\"cve\",\"cve2022\",\"spring\",\"rce\",\"kev\"],\"description\":\"Spring Cloud Gateway Actuator Gateway API endpoint accepts a malicious Spring Expression Language (SpEL) payload in a crafted route definition, leading to remote code execution.\",\"severity\":\"critical\",\"reference\":[\"https://nvd.nist.gov/vuln/detail/CVE-2022-22947\"],\"classification\":{\"cve-id\":[\"CVE-2022-22947\"],\"cwe-id\":[\"CWE-94\"],\"cvss-score\":9.8}},\"type\":\"http\",\"host\":\"http://172.20.1.13:8080\",\"matched-at\":\"http://172.20.1.13:8080/actuator/gateway/routes\",\"extracted-results\":[\"uid=0(root) gid=0(root) groups=0(root)\"],\"ip\":\"172.20.1.13\",\"timestamp\":\"2026-09-20T10:05:20.000000Z\",\"matcher-name\":\"spel-actuator-rce\"}\n{\"template-id\":\"cve-2022-29361\",\"info\":{\"name\":\"Werkzeug HTTP Request Smuggling\",\"author\":[\"pdteam\"],\"tags\":[\"cve\",\"cve2022\",\"werkzeug\",\"smuggling\"],\"description\":\"An HTTP request parsing ambiguity in werkzeug allows request smuggling when chunked and content-length framing are both present.\",\"severity\":\"high\",\"reference\":[\"https://nvd.nist.gov/vuln/detail/CVE-2022-29361\"],\"classification\":{\"cve-id\":[\"CVE-2022-29361\"],\"cwe-id\":[\"CWE-444\"],\"cvss-score\":7.5}},\"type\":\"http\",\"host\":\"http://172.20.2.10:8080\",\"matched-at\":\"http://172.20.2.10:8080/\",\"ip\":\"172.20.2.10\",\"timestamp\":\"2026-09-20T10:20:05.000000Z\",\"matcher-name\":\"http-smuggling-te-cl\"}\n{\"template-id\":\"cve-2024-23897\",\"info\":{\"name\":\"Jenkins CLI Arbitrary File Read\",\"author\":[\"pdteam\"],\"tags\":[\"cve\",\"cve2024\",\"jenkins\",\"lfi\",\"kev\"],\"description\":\"Jenkins CLI command parser (args4j) allows an attacker to read arbitrary files on the controller filesystem via the @ character file-expansion feature.\",\"severity\":\"critical\",\"reference\":[\"https://nvd.nist.gov/vuln/detail/CVE-2024-23897\"],\"classification\":{\"cve-id\":[\"CVE-2024-23897\"],\"cwe-id\":[\"CWE-22\"],\"cvss-score\":9.8}},\"type\":\"http\",\"host\":\"http://172.20.2.25:8080\",\"matched-at\":\"http://172.20.2.25:8080/cli\",\"ip\":\"172.20.2.25\",\"timestamp\":\"2026-09-20T10:20:30.000000Z\",\"matcher-name\":\"jenkins-cli-args4j-file-read\"}\n{\"template-id\":\"cve-2022-26134\",\"info\":{\"name\":\"Atlassian Confluence Server - Unauthenticated OGNL Injection RCE\",\"author\":[\"pdteam\"],\"tags\":[\"cve\",\"cve2022\",\"confluence\",\"rce\",\"kev\"],\"description\":\"Confluence Server and Data Center are vulnerable to unauthenticated remote code execution via OGNL expression injection.\",\"severity\":\"critical\",\"reference\":[\"https://nvd.nist.gov/vuln/detail/CVE-2022-26134\"],\"classification\":{\"cve-id\":[\"CVE-2022-26134\"],\"cwe-id\":[\"CWE-917\"],\"cvss-score\":9.8}},\"type\":\"http\",\"host\":\"http://172.20.2.40:8090\",\"matched-at\":\"http://172.20.2.40:8090/%24%7B%40java.lang.Runtime%40getRuntime%28%29.exec%28%22id%22%29%7D/\",\"extracted-results\":[\"uid=0(root) gid=0(root) groups=0(root)\"],\"ip\":\"172.20.2.40\",\"timestamp\":\"2026-09-20T10:20:45.000000Z\",\"matcher-name\":\"ognl-injection-rce\"}\n",
+    "content_type": "application/x-ndjson",
+    "captured_at": "2026-09-20T10:20:45Z"
+  },
+  "observations": [
+    {
+      "observation_id": "obs:sha256:8cfce6fb128b15b8cb96719081f4642ef9fb822a04c7781729633439eb4e65f3",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nuclei",
+      "kind": "vuln_candidate",
+      "subject": "http://172.20.1.12:80/",
+      "attributes": {
+        "template_id": "cve-2021-23017",
+        "template_name": "nginx DNS Resolver Off-by-One Heap Write",
+        "scanner_severity": "high",
+        "type": "http",
+        "host": "http://172.20.1.12:80",
+        "matched_at": "http://172.20.1.12:80/",
+        "ip": "172.20.1.12",
+        "description": "nginx resolver is vulnerable to a 1-byte memory overwrite that can lead to worker process crash or potential remote code execution when resolving an attacker-controlled DNS response.",
+        "matcher_name": "nginx-1.18.0-version-match",
+        "cve_ids": "CVE-2021-23017",
+        "cwe_ids": "CWE-787",
+        "cvss_score": "7.7"
+      },
+      "artifact_id": "sha256:2007914a280ee8ecc9b6fbf75fde8c706baaf061a851bb07120bb532ae8b6c6a",
+      "observed_at": "2026-09-20T10:05:12Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T10:20:45Z",
+        "note": "Nuclei template cve-2021-23017"
+      }
+    },
+    {
+      "observation_id": "obs:sha256:5e8ed0d9ca96edabdfe1e9de9ec8300dbc91ec7565f0728560578fd863497b05",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nuclei",
+      "kind": "vuln_candidate",
+      "subject": "http://172.20.1.13:8080/actuator/gateway/routes",
+      "attributes": {
+        "template_id": "cve-2022-22947",
+        "template_name": "Spring Cloud Gateway Actuator API - SpEL Code Injection",
+        "scanner_severity": "critical",
+        "type": "http",
+        "host": "http://172.20.1.13:8080",
+        "matched_at": "http://172.20.1.13:8080/actuator/gateway/routes",
+        "ip": "172.20.1.13",
+        "description": "Spring Cloud Gateway Actuator Gateway API endpoint accepts a malicious Spring Expression Language (SpEL) payload in a crafted route definition, leading to remote code execution.",
+        "matcher_name": "spel-actuator-rce",
+        "extracted_results": "uid=0(root) gid=0(root) groups=0(root)",
+        "cve_ids": "CVE-2022-22947",
+        "cwe_ids": "CWE-94",
+        "cvss_score": "9.8"
+      },
+      "artifact_id": "sha256:2007914a280ee8ecc9b6fbf75fde8c706baaf061a851bb07120bb532ae8b6c6a",
+      "observed_at": "2026-09-20T10:05:20Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T10:20:45Z",
+        "note": "Nuclei template cve-2022-22947"
+      }
+    },
+    {
+      "observation_id": "obs:sha256:00f072a7b82a9684056c75f04a3f46290075839bf2293017580cb93d8d147b9b",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nuclei",
+      "kind": "vuln_candidate",
+      "subject": "http://172.20.2.10:8080/",
+      "attributes": {
+        "template_id": "cve-2022-29361",
+        "template_name": "Werkzeug HTTP Request Smuggling",
+        "scanner_severity": "high",
+        "type": "http",
+        "host": "http://172.20.2.10:8080",
+        "matched_at": "http://172.20.2.10:8080/",
+        "ip": "172.20.2.10",
+        "description": "An HTTP request parsing ambiguity in werkzeug allows request smuggling when chunked and content-length framing are both present.",
+        "matcher_name": "http-smuggling-te-cl",
+        "cve_ids": "CVE-2022-29361",
+        "cwe_ids": "CWE-444",
+        "cvss_score": "7.5"
+      },
+      "artifact_id": "sha256:2007914a280ee8ecc9b6fbf75fde8c706baaf061a851bb07120bb532ae8b6c6a",
+      "observed_at": "2026-09-20T10:20:05Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T10:20:45Z",
+        "note": "Nuclei template cve-2022-29361"
+      }
+    },
+    {
+      "observation_id": "obs:sha256:6b5575bc8eb0a563b81ca2b94232b419db085a02743f27511fd88d12e5305f56",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nuclei",
+      "kind": "vuln_candidate",
+      "subject": "http://172.20.2.25:8080/cli",
+      "attributes": {
+        "template_id": "cve-2024-23897",
+        "template_name": "Jenkins CLI Arbitrary File Read",
+        "scanner_severity": "critical",
+        "type": "http",
+        "host": "http://172.20.2.25:8080",
+        "matched_at": "http://172.20.2.25:8080/cli",
+        "ip": "172.20.2.25",
+        "description": "Jenkins CLI command parser (args4j) allows an attacker to read arbitrary files on the controller filesystem via the @ character file-expansion feature.",
+        "matcher_name": "jenkins-cli-args4j-file-read",
+        "cve_ids": "CVE-2024-23897",
+        "cwe_ids": "CWE-22",
+        "cvss_score": "9.8"
+      },
+      "artifact_id": "sha256:2007914a280ee8ecc9b6fbf75fde8c706baaf061a851bb07120bb532ae8b6c6a",
+      "observed_at": "2026-09-20T10:20:30Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T10:20:45Z",
+        "note": "Nuclei template cve-2024-23897"
+      }
+    },
+    {
+      "observation_id": "obs:sha256:84fe15f1ae95829c7784a5bf4d2295e7406f583567e50a31343fce0dce9382c7",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nuclei",
+      "kind": "vuln_candidate",
+      "subject": "http://172.20.2.40:8090/%24%7B%40java.lang.Runtime%40getRuntime%28%29.exec%28%22id%22%29%7D/",
+      "attributes": {
+        "template_id": "cve-2022-26134",
+        "template_name": "Atlassian Confluence Server - Unauthenticated OGNL Injection RCE",
+        "scanner_severity": "critical",
+        "type": "http",
+        "host": "http://172.20.2.40:8090",
+        "matched_at": "http://172.20.2.40:8090/%24%7B%40java.lang.Runtime%40getRuntime%28%29.exec%28%22id%22%29%7D/",
+        "ip": "172.20.2.40",
+        "description": "Confluence Server and Data Center are vulnerable to unauthenticated remote code execution via OGNL expression injection.",
+        "matcher_name": "ognl-injection-rce",
+        "extracted_results": "uid=0(root) gid=0(root) groups=0(root)",
+        "cve_ids": "CVE-2022-26134",
+        "cwe_ids": "CWE-917",
+        "cvss_score": "9.8"
+      },
+      "artifact_id": "sha256:2007914a280ee8ecc9b6fbf75fde8c706baaf061a851bb07120bb532ae8b6c6a",
+      "observed_at": "2026-09-20T10:20:45Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T10:20:45Z",
+        "note": "Nuclei template cve-2022-26134"
+      }
+    }
+  ]
+}

@@ -1,0 +1,291 @@
+{
+  "artifact": {
+    "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+    "scanner": "nmap",
+    "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nmaprun>\n<!--\n  SYNTHETIC FIXTURE. Hand-authored nmap -sV output, not a real capture.\n\n  Docker Hub image pulls for jenkins/jenkins:2.441-jdk17, vulhub/confluence:7.18.0\n  and linuxserver/openssh-server:8.2p1 are currently failing on the development\n  machine (see DECISIONS.md D-018/D-019); internal-api runs python:3.9-slim which\n  pulls fine but has not yet been scanned in a real run either, so all four\n  internal-tier hosts are covered synthetically together as one scan run. This\n  file stands in until a real capture replaces it, run through the same parser\n  (services/scanners/nmap_xml.py) as any real artifact.\n\n  Host facts (segment, ip, port, service, product, version) are taken verbatim\n  from lab/ground_truth.yaml. See tests/fixtures/observations/README.md.\n-->\n<?xml-stylesheet href=\"file:///usr/bin/../share/nmap/nmap.xsl\" type=\"text/xsl\"?>\n<!-- Nmap 7.98 scan initiated Sun Sep 20 09:15:00 2026 as: nmap -sV -oX - 172.20.2.10 172.20.2.25 172.20.2.40 172.20.2.50 -->\n<nmaprun scanner=\"nmap\" args=\"nmap -sV -oX - 172.20.2.10 172.20.2.25 172.20.2.40 172.20.2.50\" start=\"1789895700\" startstr=\"Sun Sep 20 09:15:00 2026\" version=\"7.98\" xmloutputversion=\"1.05\">\n<scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"1000\" services=\"1-1000\"/>\n<verbose level=\"0\"/>\n<debugging level=\"0\"/>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.10\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:01\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.25\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:02\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.40\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:03\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.50\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:04\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<host starttime=\"1789895700\" endtime=\"1789895709\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.10\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:01\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-internal-api-1.lab_internal\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"8080\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"http\" product=\"werkzeug-http\" version=\"2.0.1\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"6\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<host starttime=\"1789895700\" endtime=\"1789895715\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.25\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:02\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-jenkins-ci-1.lab_internal\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"8080\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"http\" product=\"jenkins\" version=\"2.441\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"10\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<host starttime=\"1789895700\" endtime=\"1789895719\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.40\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:03\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-internal-wiki-1.lab_internal\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"8090\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"http\" product=\"atlassian-confluence\" version=\"7.18.0\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"11\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<host starttime=\"1789895700\" endtime=\"1789895722\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.2.50\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:22:33:04\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-bastion-ssh-1.lab_internal\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"2222\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"ssh\" product=\"openssh\" version=\"8.2p1\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"8\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<runstats><finished time=\"1789895722\" timestr=\"Sun Sep 20 09:15:22 2026\" summary=\"Nmap done at Sun Sep 20 09:15:22 2026; 4 IP addresses (4 hosts up) scanned in 22.00 seconds\" elapsed=\"22.00\" exit=\"success\"/><hosts up=\"4\" down=\"0\" total=\"4\"/>\n</runstats>\n</nmaprun>\n",
+    "content_type": "application/xml",
+    "captured_at": "2026-09-20T09:15:22Z"
+  },
+  "observations": [
+    {
+      "observation_id": "obs:sha256:5e96230dcdedc50d8e88f2c5956482ecac6b4816e61613d119ae5d9b7bfe2856",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.2.10",
+      "attributes": {
+        "ipv4": "172.20.2.10",
+        "mac": "aa:bb:cc:22:33:01",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-internal-api-1.lab_internal",
+        "hostnames": "lab-internal-api-1.lab_internal|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:09Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:35d4712ae5ccc16444740cb87da2c3722bdc677eb8856bad291793d76bc25288",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.2.10:8080/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "8080",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "http",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:09Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:742939608a53b6071277d0103e6815de53ecc4d56171de51a13ae0aab8b63b12",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.2.10:8080/tcp",
+      "attributes": {
+        "service_name": "http",
+        "product": "werkzeug-http",
+        "version": "2.0.1",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:09Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:e8bc78cbfa2c7690c51115a6d9bf49c670b08a7399ab22de2260abbbf9c0a296",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.2.25",
+      "attributes": {
+        "ipv4": "172.20.2.25",
+        "mac": "aa:bb:cc:22:33:02",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-jenkins-ci-1.lab_internal",
+        "hostnames": "lab-jenkins-ci-1.lab_internal|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:15Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:c699da235569590bc7b2edf4a44eaa2ca05a5e81e8a2a01c47e23ba44aacd785",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.2.25:8080/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "8080",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "http",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:15Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:0718511e4c46ba163f6800b67ba05ed5a3c26f44cbb7f9774fe326cabd4a3cad",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.2.25:8080/tcp",
+      "attributes": {
+        "service_name": "http",
+        "product": "jenkins",
+        "version": "2.441",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:15Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:b52f5fc38354cad515822c019afbbf0749e17be7a6b38219576a303d914184ce",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.2.40",
+      "attributes": {
+        "ipv4": "172.20.2.40",
+        "mac": "aa:bb:cc:22:33:03",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-internal-wiki-1.lab_internal",
+        "hostnames": "lab-internal-wiki-1.lab_internal|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:19Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:ac50749156442621d50927ec91b6efd3d5d3752dc8f6d0f524c571ddfe9b27bb",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.2.40:8090/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "8090",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "http",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:19Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:f5af33591affdad7105b056dfbfed987e1502226992d4dac54ffac5f7d2cb2ce",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.2.40:8090/tcp",
+      "attributes": {
+        "service_name": "http",
+        "product": "atlassian-confluence",
+        "version": "7.18.0",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:19Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:198dcc60d8e3ec790624d77417e528668fd0f97b29f7420961eab3f637eed504",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.2.50",
+      "attributes": {
+        "ipv4": "172.20.2.50",
+        "mac": "aa:bb:cc:22:33:04",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-bastion-ssh-1.lab_internal",
+        "hostnames": "lab-bastion-ssh-1.lab_internal|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:22Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:7cc37379bea0ad668f5d39b43bcbf12ef5bc09ccc57af46da81e31f38abc9d83",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.2.50:2222/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "2222",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "ssh",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:22Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:e54f28fc5781c1b4b115f3308dbd7e377e201863f8eb6333cf6f9ebf37e6447f",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.2.50:2222/tcp",
+      "attributes": {
+        "service_name": "ssh",
+        "product": "openssh",
+        "version": "8.2p1",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:55fd5b09616ee11dd242b8d3c273c56d0af3830f3bfaf668f93a8732734f4e12",
+      "observed_at": "2026-09-20T09:15:22Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:15:22Z",
+        "note": null
+      }
+    }
+  ]
+}
