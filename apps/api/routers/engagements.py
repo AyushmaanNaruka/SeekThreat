@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from apps.api.core.audit import log_audit_event
@@ -26,6 +26,15 @@ class CreateEngagementRequest(BaseModel):
     )
     granted_at: datetime = Field(..., description="Start of authorization window (UTC)")
     expires_at: datetime = Field(..., description="End of authorization window (UTC)")
+
+    @field_validator("granted_at", "expires_at", mode="after")
+    @classmethod
+    def _reject_naive(cls, value: datetime) -> datetime:
+        # Validate on the request model rather than in the route body: a
+        # ValueError raised inside the handler surfaces as an unhandled 500,
+        # where a naive timestamp is malformed client input and belongs in
+        # FastAPI's 422 response.
+        return require_aware(value)
 
 
 class EngagementResponse(BaseModel):
@@ -62,13 +71,37 @@ def create_engagement(
     db: Session = Depends(get_db),
 ) -> EngagementResponse:
     """Register a new authorized engagement scoping scan boundaries."""
-    granted_at = require_aware(payload.granted_at)
-    expires_at = require_aware(payload.expires_at)
+    granted_at = payload.granted_at
+    expires_at = payload.expires_at
 
     if expires_at <= granted_at:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="expires_at must be strictly after granted_at",
+        )
+
+    repo = EngagementRepository(db)
+
+    # The repository upserts by primary key, so without this check a second
+    # POST would rewrite a live engagement's allowlist and named authorizer --
+    # the two fields the scan gate rests on (CLAUDE.md hard rule 2) -- and
+    # return 201 as though it had created something new.
+    if repo.get(payload.engagement_id) is not None:
+        log_audit_event(
+            event="engagement.rejected",
+            actor=payload.authorized_by,
+            target=",".join(payload.allowlist),
+            engagement_id=payload.engagement_id,
+            scanner="none",
+            status="conflict",
+            details={"reason": "engagement_id already exists"},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Engagement {payload.engagement_id!r} already exists. "
+                "Authorization scope cannot be replaced by re-creating it."
+            ),
         )
 
     # Validate against core schema domain models
@@ -87,7 +120,6 @@ def create_engagement(
         created_at=datetime.now(UTC),
     )
 
-    repo = EngagementRepository(db)
     saved = repo.save(engagement)
     db.commit()
 
