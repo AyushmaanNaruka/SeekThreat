@@ -1,0 +1,45 @@
+# Optional override: attaches the worker to the lab's target networks so a
+# dispatched scan can actually reach 172.20.x.x hosts.
+#
+# Not merged into docker-compose.yml on purpose. Plain `--profile core up`
+# must keep working with no lab running -- day-to-day API/DB development
+# doesn't need the ~3 GB lab, and the lab's networks (created by
+# lab/docker-compose.yml, referenced here as `external: true`) must already
+# exist or compose refuses to start. Bring the lab up first:
+#
+#   docker compose -f lab/docker-compose.yml up -d
+#   docker compose -f infra/docker-compose.yml -f infra/docker-compose.lab.yml \
+#       --profile core up -d
+#
+# This only grants network reachability. The authorization gate
+# (apps/api/core/authorization.py) still decides whether a scan is permitted;
+# an engagement's allowlist must cover the target regardless of what the
+# worker can physically reach. See CLAUDE.md hard rule 2.
+#
+# Segment names/subnets must match lab/docker-compose.yml. Docker network
+# names are `<project>_<name>` -- lab/docker-compose.yml has no explicit
+# `name:`, so its default project name ("lab", the directory name) is baked
+# into the three names below. Running the lab under a different project name
+# (`-p` or COMPOSE_PROJECT_NAME) breaks this override.
+
+networks:
+  lab_dmz:
+    external: true
+    name: lab_dmz
+  lab_internal:
+    external: true
+    name: lab_internal
+  lab_data:
+    external: true
+    name: lab_data
+
+services:
+  worker:
+    networks:
+      default: {}
+      lab_dmz:
+        ipv4_address: 172.20.1.251
+      lab_internal:
+        ipv4_address: 172.20.2.251
+      lab_data:
+        ipv4_address: 172.20.3.251
