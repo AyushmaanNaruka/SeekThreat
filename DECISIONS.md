@@ -47,6 +47,52 @@ Newest first.
 
 ---
 
+### D-018 — Fix the `core` compose profile: in-network hostnames, a migration step, and a normalized DB driver everywhere
+**Date:** 2026-09-20
+**Decided by:** Ayushmaan
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`docker compose -f infra/docker-compose.yml --profile core up` did not work. Fixed with four
+changes:
+1. `api`, `worker`, and a new one-shot `migrate` service get `environment:` overrides pointing
+   `DATABASE_URL`/`REDIS_URL` at the `postgres`/`redis` compose service names, not `localhost`.
+   `environment:` outranks `env_file:`, so one `.env` still serves native dev via the published
+   ports.
+2. `migrate` runs `alembic upgrade head` once (`restart: "no"`); `api` and `worker` gate on
+   `service_completed_successfully` so tables exist before either starts, and so the two never
+   race to apply the same DDL.
+3. `.dockerignore` added — `context: ..` was copying the whole repo, including
+   `apps/web/node_modules` and `.env`, into the build context.
+4. `env_file` on postgres/api/worker/neo4j changed to the long form with `required: false`.
+   `.env` is gitignored and absent on a fresh clone; compose treats a missing plain-string
+   `env_file` as fatal, which was the actual first failure, ahead of the networking one.
+
+**Why**
+While implementing this, found that `apps/api/core/config.py` normalized `DATABASE_URL` to the
+psycopg3 driver (`postgresql+psycopg://`) only inside a Pydantic `default_factory` — which
+pydantic-settings skips whenever the env var is *set*. Every value actually in use
+(`.env.example`, the new compose `environment:` overrides) is a bare `postgresql://`, which
+SQLAlchemy resolves to psycopg2 — not installed; this project ships `psycopg[binary]`
+(psycopg3). This was already a live bug on the native-dev path (`cp .env.example .env` and run)
+and would have reproduced inside every container the compose fix touches. Moved the
+normalization into a `field_validator(mode="after")` so it applies to every source — env var,
+`.env` file, and default alike — with a regression test in `tests/unit/test_config.py`. Folded
+into this decision rather than a separate one since it was found while implementing this task
+and the compose fix does not work correctly without it.
+
+**Impact on plan**
+None to scope or timeline — infra-only. Worker-to-lab network attachment (`172.20.x.x`) remains
+a separate, still-open follow-up: a scan dispatched at a lab IP records a failure until that
+exists.
+
+**Cost if we're wrong**
+Low. Compose config only; reverting is a `git revert`. The driver-normalization fix has a unit
+test pinning the behavior it corrects.
+
+---
+
 ### D-017 — Remove `options["extra_args"]` from scanner adapters; fixed argv only
 **Date:** 2026-09-20
 **Decided by:** Ayushmaan (review of mayank-development, PR #1)

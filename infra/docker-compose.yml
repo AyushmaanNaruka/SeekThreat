@@ -7,12 +7,20 @@
 #   docker compose -f infra/docker-compose.yml --profile core up -d
 #   docker compose -f infra/docker-compose.yml --profile core --profile model up -d
 #   docker compose -f infra/docker-compose.yml --profile viz up -d
+#
+# .env is optional: every value below has a compose-level default, and api/worker
+# get their DATABASE_URL/REDIS_URL from the `environment:` overrides below
+# regardless of what (if anything) .env sets, so the stack runs out of the box on
+# a fresh clone. Copy .env.example to .env only to override credentials or add
+# API keys.
 
 services:
   postgres:
     profiles: ["core"]
     image: pgvector/pgvector:pg16
-    env_file: ../.env
+    env_file:
+      - path: ../.env
+        required: false
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-seekthreat}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
@@ -40,7 +48,9 @@ services:
     # Lands with the graph builder in November.
     profiles: ["viz"]
     image: neo4j:5-community
-    env_file: ../.env
+    env_file:
+      - path: ../.env
+        required: false
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-changeme}
       NEO4J_server_memory_heap_initial__size: 512m
@@ -49,18 +59,48 @@ services:
     ports: ["127.0.0.1:7474:7474", "127.0.0.1:7687:7687"]
     volumes: [neo4jdata:/data]
 
+  # One-shot migration runner. A dedicated service rather than prepending
+  # `alembic upgrade head` to the api/worker start commands, so two containers
+  # never race to apply the same DDL. api and worker wait on this exiting 0.
+  migrate:
+    profiles: ["core"]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: alembic upgrade head
+    restart: "no"
+
   api:
     profiles: ["core"]
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
-    env_file: ../.env
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      # Overrides whatever .env sets: inside this network, localhost is the
+      # container itself, not the postgres/redis containers. `environment:`
+      # takes precedence over `env_file:`, so one .env serves native dev
+      # (localhost, via the published ports below) and compose alike.
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
+      REDIS_URL: redis://redis:6379/0
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     command: uvicorn apps.api.main:app --host 0.0.0.0 --port 8000 --reload
 
   worker:
@@ -68,12 +108,19 @@ services:
     build:
       context: ..
       dockerfile: apps/api/Dockerfile
-    env_file: ../.env
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_started
+      migrate:
+        condition: service_completed_successfully
     command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans
 
 volumes:
