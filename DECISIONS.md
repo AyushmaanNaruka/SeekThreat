@@ -47,6 +47,47 @@ Newest first.
 
 ---
 
+### D-021 — Fix Celery task registration: explicit import, not `autodiscover_tasks`
+**Date:** 2026-09-20
+**Decided by:** Ayushmaan
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`apps/api/worker.py` replaces `celery_app.autodiscover_tasks(["apps.api.tasks"])` with an
+explicit `from apps.api.tasks import scans as _scans_tasks`. Verified in a subprocess (the only
+way to observe this correctly — see below): importing `apps.api.worker` alone now registers
+`seekthreat.scans.execute`; on `main` it registered nothing.
+
+**Why**
+`autodiscover_tasks` treats each entry in its list as a *package* and imports `"<entry>.tasks"`.
+Passing `["apps.api.tasks"]` — the tasks package itself — made Celery look for the nonexistent
+`apps.api.tasks.tasks` and silently register nothing. The correct call would have been
+`autodiscover_tasks(["apps.api"])`. This was never caught because every existing test imports
+`apps.api.tasks.scans` directly (to call `execute_scan.run.__func__` for the bypass-the-broker
+pattern documented for this test suite), which registers the task as a side effect regardless of
+what `worker.py` does — so the bug was invisible to every test that exists. A real
+`celery -A apps.api.worker.celery_app worker` process imports only `worker.py`, hits the actual
+bug, and rejects every dispatched job as unregistered: `execute_scan.delay()` enqueues work, and
+nothing ever runs it. Every scan would sit at `pending` forever. This is why D-020's compose
+verification could bring the worker container up but never actually completed a real scan.
+
+Found and fixed locally (native `uvicorn`/`celery`, not Docker) before this decision was logged;
+`tests/unit/test_worker_registration.py` pins it going forward. The test runs the check in a
+**subprocess** on purpose — an in-process assertion would pass regardless of whether `worker.py`
+registers anything, for the same reason the bug went unnoticed.
+
+**Impact on plan**
+None to scope. This was a live defect blocking the actual "done when" criterion for Layer 1 —
+worse than the Docker Hub pull failures, because those are environmental and this was not: even
+with a fully working Docker pull, scans dispatched through a real worker process would never
+have executed.
+
+**Cost if we're wrong**
+None — the fix is strictly more correct than what it replaces, and it is regression-tested.
+
+---
+
 ### D-020 — Worker-to-lab network attachment via a separate compose override
 **Date:** 2026-09-20
 **Decided by:** Ayushmaan
