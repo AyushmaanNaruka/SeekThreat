@@ -41,4 +41,9 @@ celery_app.conf.update(
     task_reject_on_worker_lost=True,
 )
 
-celery_app.autodiscover_tasks(["apps.api.tasks"])
+# Explicit import, not autodiscover_tasks(): Celery's autodiscovery treats each
+# entry as a package and imports "<entry>.tasks", so autodiscover_tasks(["apps.api"])
+# would be needed to find apps.api.tasks — passing the tasks package itself here
+# silently looked for the nonexistent apps.api.tasks.tasks and registered nothing,
+# so execute_scan.delay() queued jobs no worker ever picked up.
+from apps.api.tasks import scans as _scans_tasks  # noqa: E402, F401
