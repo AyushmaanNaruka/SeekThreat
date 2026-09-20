@@ -353,3 +353,10 @@ and to *"decide it in September, not in November."* September is now.
 - ⬜ Stale remote branches: `mayank-development`, `fix/layer-1-review-followups`
 - ⬜ Dead file `apps/web/app/page.module.css`
 - ⬜ Undefined CSS classes across `apps/web/components/`
+- ⬜ **`requirements.txt`/`requirements-dev.txt` are all unpinned (`>=`)**, so CI can silently
+  resolve newer major versions than whatever a developer has installed locally. Bit us once
+  already: local mypy 1.16 accepted `# type: ignore[misc]` on the celery task decorator and
+  needed an ignore on `JSONB()`; CI's freshly-resolved mypy 2.3.1 + SQLAlchemy 2.0.54 split that
+  into its own `untyped-decorator` error code and made the `JSONB()` ignore unused, failing CI
+  on a PR that was locally green. Worth pinning, or at minimum periodically syncing local envs
+  against CI's resolved versions before trusting a local mypy/pytest pass.
