@@ -19,7 +19,14 @@ from apps.api.db.repositories import (
     ScanRepository,
 )
 from apps.api.db.session import get_db
+from apps.api.routers.observations import (
+    DEFAULT_LIMIT,
+    MAX_LIMIT,
+    ObservationListResponse,
+    ObservationResponse,
+)
 from apps.api.tasks.scans import execute_scan
+from packages.schema.models.observation import ObservationKind
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +193,47 @@ def get_scan(
         error_message=scan.error_message,
         created_at=scan.created_at,
         completed_at=scan.completed_at,
+    )
+
+
+@router.get(
+    "/{scan_id}/observations",
+    response_model=ObservationListResponse,
+    summary="List observations produced by a scan, optionally filtered by kind",
+)
+def get_scan_observations(
+    scan_id: str,
+    kind: ObservationKind | None = Query(None, description="Filter by observation kind"),
+    limit: int = Query(DEFAULT_LIMIT, ge=1, le=MAX_LIMIT),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+) -> ObservationListResponse:
+    """Return a page of observations produced by this scan's artifact.
+
+    A scan with no artifact yet (still pending or running) returns an empty
+    page rather than an error -- that is the normal state before completion,
+    not a failure.
+    """
+    scan_repo = ScanRepository(db)
+    scan = scan_repo.get(scan_id)
+
+    if scan is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Scan {scan_id!r} not found",
+        )
+
+    if not scan.artifact_id:
+        return ObservationListResponse(items=[], total=0, limit=limit, offset=offset)
+
+    obs_repo = ObservationRepository(db)
+    total = obs_repo.count_by_artifact(scan.artifact_id, kind=kind)
+    items = obs_repo.get_by_artifact(scan.artifact_id, kind=kind, limit=limit, offset=offset)
+    return ObservationListResponse(
+        items=[ObservationResponse.from_schema(o) for o in items],
+        total=total,
+        limit=limit,
+        offset=offset,
     )
 
 

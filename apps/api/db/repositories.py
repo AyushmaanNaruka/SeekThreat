@@ -151,24 +151,46 @@ class ObservationRepository:
         self,
         engagement_id: str,
         kind: ObservationKind | None = None,
+        limit: int | None = None,
+        offset: int = 0,
     ) -> list[Observation]:
-        """Retrieve all observations associated with an engagement, optionally filtered by kind."""
+        """Retrieve observations associated with an engagement, optionally filtered by kind.
+
+        ``limit=None`` (the default) returns everything, matching prior behavior for
+        existing callers. Ordering is stable (observed_at, then observation_id) so
+        paging through with a fixed limit never skips or repeats a row.
+        """
         stmt = select(ObservationModel).where(ObservationModel.engagement_id == engagement_id)
         if kind is not None:
             stmt = stmt.where(ObservationModel.kind == kind.value)
         stmt = stmt.order_by(
             ObservationModel.observed_at.asc(), ObservationModel.observation_id.asc()
         )
+        if offset:
+            stmt = stmt.offset(offset)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         results = self.session.scalars(stmt).all()
         return [m.to_schema() for m in results]
 
-    def get_by_artifact(self, artifact_id: str) -> list[Observation]:
-        """Retrieve all observations derived from a given raw artifact."""
-        stmt = (
-            select(ObservationModel)
-            .where(ObservationModel.artifact_id == artifact_id)
-            .order_by(ObservationModel.observed_at.asc(), ObservationModel.observation_id.asc())
+    def get_by_artifact(
+        self,
+        artifact_id: str,
+        kind: ObservationKind | None = None,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[Observation]:
+        """Retrieve observations derived from a given raw artifact, optionally filtered by kind."""
+        stmt = select(ObservationModel).where(ObservationModel.artifact_id == artifact_id)
+        if kind is not None:
+            stmt = stmt.where(ObservationModel.kind == kind.value)
+        stmt = stmt.order_by(
+            ObservationModel.observed_at.asc(), ObservationModel.observation_id.asc()
         )
+        if offset:
+            stmt = stmt.offset(offset)
+        if limit is not None:
+            stmt = stmt.limit(limit)
         results = self.session.scalars(stmt).all()
         return [m.to_schema() for m in results]
 
@@ -182,6 +204,22 @@ class ObservationRepository:
             select(func.count())
             .select_from(ObservationModel)
             .where(ObservationModel.engagement_id == engagement_id)
+        )
+        if kind is not None:
+            stmt = stmt.where(ObservationModel.kind == kind.value)
+        count = self.session.scalar(stmt)
+        return int(count) if count is not None else 0
+
+    def count_by_artifact(
+        self,
+        artifact_id: str,
+        kind: ObservationKind | None = None,
+    ) -> int:
+        """Count observations derived from a given raw artifact, optionally filtered by kind."""
+        stmt = (
+            select(func.count())
+            .select_from(ObservationModel)
+            .where(ObservationModel.artifact_id == artifact_id)
         )
         if kind is not None:
             stmt = stmt.where(ObservationModel.kind == kind.value)
