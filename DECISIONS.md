@@ -47,6 +47,67 @@ Newest first.
 
 ---
 
+### D-019 — Non-retried permanent scan failures; pinned nuclei binary; migration/ORM index parity
+**Date:** 2026-09-20
+**Decided by:** Ayushmaan
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+Three contained fixes from the PR #2 follow-up list, closed together:
+1. `apps/api/tasks/scans.py` no longer retries permanent failures. A new
+   `PERMANENT_ERRORS` tuple (`ValueError` for an unsupported scanner name,
+   the new `ScannerUnavailableError` for a missing binary, `AuthorizationError`)
+   is checked before handing the exception to `self.retry()`. The task also
+   now re-raises after marking a scan `failed`, so Celery's own task state
+   (FAILURE) agrees with the database row, instead of the task returning
+   normally and being recorded SUCCESS.
+2. `apps/api/Dockerfile` installs a pinned nuclei release binary
+   (`v3.11.1`, linux_amd64, verified against the release's published sha256)
+   alongside the existing apt-installed nmap. `adapter.is_available()` is
+   checked before `adapter.scan()` inside the task, turning a missing binary
+   into `ScannerUnavailableError` instead of an opaque subprocess `OSError`
+   retried three times.
+3. New migration `0003_add_scans_artifact_id_index` adds `ix_scans_artifact_id`,
+   which `apps/api/db/models.py` declared (`index=True`) but migration 0002
+   never created. `tests/unit/test_alembic.py` gained a test that upgrades a
+   fresh DB via Alembic, builds a second one via `create_all`, and asserts
+   their indexes match on every table -- so this class of drift fails CI
+   going forward instead of silently diverging between what tests exercise
+   and what a real deployment gets.
+
+**Why**
+Every retry of a permanent failure is a full rescan; an unsupported scanner
+or a missing binary was retried 3 times before being marked failed for an
+outcome that could never change. Separately, the task swallowing the
+exception after marking a scan `failed` meant Celery itself reported the task
+SUCCESS -- anything monitoring Celery task state (Flower, a future ops
+dashboard) would see no failure at all. Both close on the same code path, so
+fixed together rather than in separate changes touching the same function.
+
+The Dockerfile fix was already called out on the backlog as a known gap
+(nuclei has no apt package; needs the pinned GitHub release approach nmap
+does not need). Bundled with the retry fix because `is_available()` needing
+to run somewhere is what the retry fix's `ScannerUnavailableError` is for.
+
+**Impact on plan**
+None to scope or timeline. Chosen as the second of two contained PRs closing
+the PR #2 follow-up list (the first, apps/api/routers, is a separate PR from
+the same base so either can merge first). The Dockerfile change is
+**not yet verified by an actual image build** -- Docker Hub image pulls are
+failing on this machine for reasons unrelated to this change (see the compose
+fix's PR); `pip install`/pytest/mypy/ruff all pass, but nobody has confirmed
+`docker build` actually produces a working `nuclei` binary at this container's
+`glibc`/architecture. Flagging this explicitly rather than claiming it works.
+
+**Cost if we're wrong**
+Low for the retry/re-raise logic -- covered by unit tests calling the task
+body directly, no live Celery or Redis needed. Medium for the Dockerfile: if
+the binary turns out incompatible with `python:3.11-slim`'s base image, the
+fix is confined to that one `RUN` block and does not touch application code.
+
+---
+
 ### D-017 — Remove `options["extra_args"]` from scanner adapters; fixed argv only
 **Date:** 2026-09-20
 **Decided by:** Ayushmaan (review of mayank-development, PR #1)

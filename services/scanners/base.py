@@ -34,11 +34,20 @@ __all__ = [
     "ScanRequest",
     "ScanResult",
     "ScannerAdapter",
+    "ScannerUnavailableError",
 ]
 
 
 class AuthorizationError(Exception):
     """Raised when a scan is attempted without valid authorization."""
+
+
+class ScannerUnavailableError(Exception):
+    """Raised when the scanner's underlying tool is not installed or runnable.
+
+    Permanent by nature: a binary that is missing when the job starts will
+    still be missing on a retry, so callers must not re-attempt the scan.
+    """
 
 
 class ScannerAdapter(ABC):
