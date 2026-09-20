@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from apps.api.routers import engagements, scans
+from apps.api.routers import engagements, observations, scans
 
 app = FastAPI(
     title="SeekThreat",
@@ -18,3 +18,4 @@ def health() -> dict[str, str]:
 
 app.include_router(engagements.router, prefix="/engagements", tags=["engagements"])
 app.include_router(scans.router, prefix="/scans", tags=["scans"])
+app.include_router(observations.router, prefix="/observations", tags=["observations"])

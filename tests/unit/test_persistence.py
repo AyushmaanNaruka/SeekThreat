@@ -248,3 +248,66 @@ def test_save_scan_result_with_real_fixture(db_session: Session) -> None:
 
     re_count = obs_repo.count_by_engagement("eng-lab-baseline")
     assert re_count == initial_count
+
+
+def test_observation_repository_pagination_and_kind_filter_by_engagement(
+    db_session: Session,
+) -> None:
+    """get_by_engagement/count_by_engagement support limit/offset alongside the kind filter."""
+    art_repo = RawArtifactRepository(db_session)
+    obs_repo = ObservationRepository(db_session)
+
+    artifact = _sample_artifact()
+    art_repo.save(artifact)
+
+    observations = [
+        _sample_observation(f"obs-{i:02d}", artifact.artifact_id, kind=ObservationKind.PORT_OPEN)
+        for i in range(5)
+    ]
+    obs_repo.save_all(observations)
+    db_session.commit()
+
+    assert obs_repo.count_by_engagement("eng-001") == 5
+
+    page_one = obs_repo.get_by_engagement("eng-001", limit=2, offset=0)
+    page_two = obs_repo.get_by_engagement("eng-001", limit=2, offset=2)
+    page_three = obs_repo.get_by_engagement("eng-001", limit=2, offset=4)
+
+    assert [o.observation_id for o in page_one] == ["obs-00", "obs-01"]
+    assert [o.observation_id for o in page_two] == ["obs-02", "obs-03"]
+    assert [o.observation_id for o in page_three] == ["obs-04"]
+
+    # No overlap or gaps across pages -- every observation appears exactly once
+    all_ids = [o.observation_id for page in (page_one, page_two, page_three) for o in page]
+    assert sorted(all_ids) == [f"obs-{i:02d}" for i in range(5)]
+
+    # limit=None (the default) returns everything, matching existing callers
+    assert len(obs_repo.get_by_engagement("eng-001")) == 5
+
+
+def test_observation_repository_pagination_and_kind_filter_by_artifact(
+    db_session: Session,
+) -> None:
+    """get_by_artifact/count_by_artifact mirror the engagement-scoped pagination."""
+    art_repo = RawArtifactRepository(db_session)
+    obs_repo = ObservationRepository(db_session)
+
+    artifact = _sample_artifact()
+    art_repo.save(artifact)
+
+    port_obs = [
+        _sample_observation(f"obs-port-{i}", artifact.artifact_id, kind=ObservationKind.PORT_OPEN)
+        for i in range(3)
+    ]
+    host_obs = _sample_observation("obs-host-0", artifact.artifact_id, kind=ObservationKind.HOST_UP)
+    obs_repo.save_all([*port_obs, host_obs])
+    db_session.commit()
+
+    assert obs_repo.count_by_artifact(artifact.artifact_id) == 4
+    assert obs_repo.count_by_artifact(artifact.artifact_id, kind=ObservationKind.PORT_OPEN) == 3
+    assert obs_repo.count_by_artifact(artifact.artifact_id, kind=ObservationKind.HOST_UP) == 1
+
+    filtered = obs_repo.get_by_artifact(
+        artifact.artifact_id, kind=ObservationKind.PORT_OPEN, limit=2, offset=1
+    )
+    assert [o.observation_id for o in filtered] == ["obs-port-1", "obs-port-2"]
