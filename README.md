@@ -72,9 +72,11 @@ Never point a scan at anything outside `lab/` without an authorization record.
 | | |
 |---|---|
 | [HOW-THIS-REPO-WORKS.md](./HOW-THIS-REPO-WORKS.md) | Start here |
+| [PROGRESS.md](./PROGRESS.md) | What is done, what is left, what is blocked |
 | [docs/00-scope.md](./docs/00-scope.md) | What we are building, and how far |
 | [docs/01-open-source-policy.md](./docs/01-open-source-policy.md) | Rules for using external code |
 | [docs/02-architecture.md](./docs/02-architecture.md) | System design |
+| [docs/03-dashboard-spec.md](./docs/03-dashboard-spec.md) | What the dashboard contains, and in what order |
 | [DECISIONS.md](./DECISIONS.md) | Why things changed |
 | [THIRD_PARTY.md](./THIRD_PARTY.md) | What we have borrowed |
 | [CLAUDE.md](./CLAUDE.md) | Rules for AI assistants |
