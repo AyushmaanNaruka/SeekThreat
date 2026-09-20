@@ -1,0 +1,151 @@
+{
+  "artifact": {
+    "artifact_id": "sha256:3f4e359e779d593dbfb8b93d2344a76800a31d8beca89117b1e8ec92042d30b3",
+    "scanner": "nmap",
+    "content": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<!DOCTYPE nmaprun>\n<!--\n  SYNTHETIC FIXTURE. Hand-authored nmap -sV output, not a real capture.\n\n  Docker Hub image pulls for dmz-proxy (nginx:1.18.0-alpine) and spring-gateway\n  (vulhub/spring-cloud-gateway:3.1.0) are currently failing on the development\n  machine (see DECISIONS.md D-018/D-019), so these two DMZ hosts cannot yet be\n  scanned for real. This file stands in until a real capture replaces it, run\n  through the same parser (services/scanners/nmap_xml.py) as any real artifact.\n\n  Host facts (segment, ip, port, service, product, version) are taken verbatim\n  from lab/ground_truth.yaml. See tests/fixtures/observations/README.md.\n-->\n<?xml-stylesheet href=\"file:///usr/bin/../share/nmap/nmap.xsl\" type=\"text/xsl\"?>\n<!-- Nmap 7.98 scan initiated Sun Sep 20 09:00:00 2026 as: nmap -sV -oX - 172.20.1.12 172.20.1.13 -->\n<nmaprun scanner=\"nmap\" args=\"nmap -sV -oX - 172.20.1.12 172.20.1.13\" start=\"1789894800\" startstr=\"Sun Sep 20 09:00:00 2026\" version=\"7.98\" xmloutputversion=\"1.05\">\n<scaninfo type=\"syn\" protocol=\"tcp\" numservices=\"1000\" services=\"1-1000\"/>\n<verbose level=\"0\"/>\n<debugging level=\"0\"/>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.1.12\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:11:22:01\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<hosthint><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.1.13\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:11:22:02\" addrtype=\"mac\"/>\n<hostnames>\n</hostnames>\n</hosthint>\n<host starttime=\"1789894800\" endtime=\"1789894810\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.1.12\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:11:22:01\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-dmz-proxy-1.lab_dmz\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"80\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"http\" product=\"nginx\" version=\"1.18.0\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"7\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<host starttime=\"1789894800\" endtime=\"1789894813\"><status state=\"up\" reason=\"arp-response\" reason_ttl=\"0\"/>\n<address addr=\"172.20.1.13\" addrtype=\"ipv4\"/>\n<address addr=\"AA:BB:CC:11:22:02\" addrtype=\"mac\"/>\n<hostnames>\n<hostname name=\"lab-spring-gateway-1.lab_dmz\" type=\"PTR\"/>\n</hostnames>\n<ports><extraports state=\"closed\" count=\"999\"/>\n<port protocol=\"tcp\" portid=\"8080\"><state state=\"open\" reason=\"syn-ack\" reason_ttl=\"64\"/><service name=\"http\" product=\"spring-cloud-gateway\" version=\"3.1.0\" method=\"probed\" conf=\"10\"/></port>\n</ports>\n<times srtt=\"9\" rttvar=\"0\" to=\"100000\"/>\n</host>\n<runstats><finished time=\"1789894813\" timestr=\"Sun Sep 20 09:00:13 2026\" summary=\"Nmap done at Sun Sep 20 09:00:13 2026; 2 IP addresses (2 hosts up) scanned in 13.00 seconds\" elapsed=\"13.00\" exit=\"success\"/><hosts up=\"2\" down=\"0\" total=\"2\"/>\n</runstats>\n</nmaprun>\n",
+    "content_type": "application/xml",
+    "captured_at": "2026-09-20T09:00:13Z"
+  },
+  "observations": [
+    {
+      "observation_id": "obs:sha256:1e583e5f72f897651c6a63c064ba76e05473d05a82c91203d1d560afa2d31b39",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.1.12",
+      "attributes": {
+        "ipv4": "172.20.1.12",
+        "mac": "aa:bb:cc:11:22:01",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-dmz-proxy-1.lab_dmz",
+        "hostnames": "lab-dmz-proxy-1.lab_dmz|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:3f4e359e779d593dbfb8b93d2344a76800a31d8beca89117b1e8ec92042d30b3",
+      "observed_at": "2026-09-20T09:00:10Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:00:13Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:07ede1342c9ad4894f627e2f93533617aa6d102734cd5113b5978ba2a37b56b2",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.1.12:80/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "80",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "http",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:3f4e359e779d593dbfb8b93d2344a76800a31d8beca89117b1e8ec92042d30b3",
+      "observed_at": "2026-09-20T09:00:10Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:00:13Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:8dca6f00214da3384093603f01f22c00184de73db529a33a3929bae7f5c56850",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.1.12:80/tcp",
+      "attributes": {
+        "service_name": "http",
+        "product": "nginx",
+        "version": "1.18.0",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:3f4e359e779d593dbfb8b93d2344a76800a31d8beca89117b1e8ec92042d30b3",
+      "observed_at": "2026-09-20T09:00:10Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:00:13Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:5db4d230fe07e9b1e75905a9e92524863ce925c334337f1bfd04412349565794",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "host_up",
+      "subject": "172.20.1.13",
+      "attributes": {
+        "ipv4": "172.20.1.13",
+        "mac": "aa:bb:cc:11:22:02",
+        "address_type": "ipv4",
+        "status_reason": "arp-response",
+        "status_reason_ttl": "0",
+        "hostname": "lab-spring-gateway-1.lab_dmz",
+        "hostnames": "lab-spring-gateway-1.lab_dmz|PTR",
+        "extraports_closed": "999"
+      },
+      "artifact_id": "sha256:3f4e359e779d593dbfb8b93d2344a76800a31d8beca89117b1e8ec92042d30b3",
+      "observed_at": "2026-09-20T09:00:13Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:00:13Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:5fb6d5dba8bf29154a294e43c885cb4a3b581d849a653faf7795556252b00d58",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "port_open",
+      "subject": "172.20.1.13:8080/tcp",
+      "attributes": {
+        "protocol": "tcp",
+        "port": "8080",
+        "state_reason": "syn-ack",
+        "state_reason_ttl": "64",
+        "service_name_guess": "http",
+        "service_method": "probed"
+      },
+      "artifact_id": "sha256:3f4e359e779d593dbfb8b93d2344a76800a31d8beca89117b1e8ec92042d30b3",
+      "observed_at": "2026-09-20T09:00:13Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:00:13Z",
+        "note": null
+      }
+    },
+    {
+      "observation_id": "obs:sha256:703f21796245c5140cd63ea87b5c79f9cedb07ffe7715e16ee9a3f936ec5136e",
+      "engagement_id": "eng-lab-baseline",
+      "scanner": "nmap",
+      "kind": "service_version",
+      "subject": "172.20.1.13:8080/tcp",
+      "attributes": {
+        "service_name": "http",
+        "product": "spring-cloud-gateway",
+        "version": "3.1.0",
+        "method": "probed",
+        "conf": "10"
+      },
+      "artifact_id": "sha256:3f4e359e779d593dbfb8b93d2344a76800a31d8beca89117b1e8ec92042d30b3",
+      "observed_at": "2026-09-20T09:00:13Z",
+      "provenance": {
+        "source": "scanner",
+        "confidence": "high",
+        "retrieved_at": "2026-09-20T09:00:13Z",
+        "note": null
+      }
+    }
+  ]
+}

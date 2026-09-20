@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE nmaprun>
+<!--
+  SYNTHETIC FIXTURE. Hand-authored nmap -sV output, not a real capture.
+
+  Docker Hub image pulls for jenkins/jenkins:2.441-jdk17, vulhub/confluence:7.18.0
+  and linuxserver/openssh-server:8.2p1 are currently failing on the development
+  machine (see DECISIONS.md D-018/D-019); internal-api runs python:3.9-slim which
+  pulls fine but has not yet been scanned in a real run either, so all four
+  internal-tier hosts are covered synthetically together as one scan run. This
+  file stands in until a real capture replaces it, run through the same parser
+  (services/scanners/nmap_xml.py) as any real artifact.
+
+  Host facts (segment, ip, port, service, product, version) are taken verbatim
+  from lab/ground_truth.yaml. See tests/fixtures/observations/README.md.
+-->
+<?xml-stylesheet href="file:///usr/bin/../share/nmap/nmap.xsl" type="text/xsl"?>
+<!-- Nmap 7.98 scan initiated Sun Sep 20 09:15:00 2026 as: nmap -sV -oX - 172.20.2.10 172.20.2.25 172.20.2.40 172.20.2.50 -->
+<nmaprun scanner="nmap" args="nmap -sV -oX - 172.20.2.10 172.20.2.25 172.20.2.40 172.20.2.50" start="1789895700" startstr="Sun Sep 20 09:15:00 2026" version="7.98" xmloutputversion="1.05">
+<scaninfo type="syn" protocol="tcp" numservices="1000" services="1-1000"/>
+<verbose level="0"/>
+<debugging level="0"/>
+<hosthint><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.10" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:01" addrtype="mac"/>
+<hostnames>
+</hostnames>
+</hosthint>
+<hosthint><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.25" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:02" addrtype="mac"/>
+<hostnames>
+</hostnames>
+</hosthint>
+<hosthint><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.40" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:03" addrtype="mac"/>
+<hostnames>
+</hostnames>
+</hosthint>
+<hosthint><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.50" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:04" addrtype="mac"/>
+<hostnames>
+</hostnames>
+</hosthint>
+<host starttime="1789895700" endtime="1789895709"><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.10" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:01" addrtype="mac"/>
+<hostnames>
+<hostname name="lab-internal-api-1.lab_internal" type="PTR"/>
+</hostnames>
+<ports><extraports state="closed" count="999"/>
+<port protocol="tcp" portid="8080"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="werkzeug-http" version="2.0.1" method="probed" conf="10"/></port>
+</ports>
+<times srtt="6" rttvar="0" to="100000"/>
+</host>
+<host starttime="1789895700" endtime="1789895715"><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.25" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:02" addrtype="mac"/>
+<hostnames>
+<hostname name="lab-jenkins-ci-1.lab_internal" type="PTR"/>
+</hostnames>
+<ports><extraports state="closed" count="999"/>
+<port protocol="tcp" portid="8080"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="jenkins" version="2.441" method="probed" conf="10"/></port>
+</ports>
+<times srtt="10" rttvar="0" to="100000"/>
+</host>
+<host starttime="1789895700" endtime="1789895719"><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.40" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:03" addrtype="mac"/>
+<hostnames>
+<hostname name="lab-internal-wiki-1.lab_internal" type="PTR"/>
+</hostnames>
+<ports><extraports state="closed" count="999"/>
+<port protocol="tcp" portid="8090"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="atlassian-confluence" version="7.18.0" method="probed" conf="10"/></port>
+</ports>
+<times srtt="11" rttvar="0" to="100000"/>
+</host>
+<host starttime="1789895700" endtime="1789895722"><status state="up" reason="arp-response" reason_ttl="0"/>
+<address addr="172.20.2.50" addrtype="ipv4"/>
+<address addr="AA:BB:CC:22:33:04" addrtype="mac"/>
+<hostnames>
+<hostname name="lab-bastion-ssh-1.lab_internal" type="PTR"/>
+</hostnames>
+<ports><extraports state="closed" count="999"/>
+<port protocol="tcp" portid="2222"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="ssh" product="openssh" version="8.2p1" method="probed" conf="10"/></port>
+</ports>
+<times srtt="8" rttvar="0" to="100000"/>
+</host>
+<runstats><finished time="1789895722" timestr="Sun Sep 20 09:15:22 2026" summary="Nmap done at Sun Sep 20 09:15:22 2026; 4 IP addresses (4 hosts up) scanned in 22.00 seconds" elapsed="22.00" exit="success"/><hosts up="4" down="0" total="4"/>
+</runstats>
+</nmaprun>
