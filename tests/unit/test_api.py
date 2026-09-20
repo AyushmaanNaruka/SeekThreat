@@ -568,3 +568,30 @@ def test_create_scan_broker_failure_marks_scan_failed(api_client: TestClient, mo
     assert len(listed) == 1, listed
     assert listed[0]["status"] == "failed"
     assert listed[0]["error_message"]
+
+
+# ---------------------------------------------------------------------------
+# CORS -- the browser-based dashboard (apps/web, Next.js dev server on
+# http://localhost:3000) is a different origin from this API
+# (http://localhost:8000). Without CORS middleware, every cross-origin
+# browser request is blocked by the browser itself before it even reaches
+# these routes. See docs/03-dashboard-spec.md, Blocker 1.
+# ---------------------------------------------------------------------------
+
+
+def test_health_reflects_allowed_origin_in_cors_header(api_client: TestClient) -> None:
+    resp = api_client.get("/health", headers={"Origin": "http://localhost:3000"})
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["access-control-allow-origin"] == "http://localhost:3000"
+
+
+def test_preflight_options_request_succeeds_with_cors_headers(api_client: TestClient) -> None:
+    resp = api_client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:3000",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.headers["access-control-allow-origin"] == "http://localhost:3000"
