@@ -1,6 +1,6 @@
 # Architecture
 
-How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-013.
+How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-019.
 
 Read `docs/00-scope.md` for what we are building. This document is how.
 
@@ -299,16 +299,22 @@ components additively with stated weights, each rendering its own explanation th
 
 | Profile | Contains | Used for |
 |---|---|---|
-| `core` | Postgres, Redis (API and worker land with Layer 1, see note) | Day-to-day development |
+| `core` | Postgres, Redis, a one-shot `migrate` service, API, worker | Day-to-day development |
 | `lab` | The vulnerable target network | Collection work and ground-truth runs |
 | `model` | Ollama | Enrichment derivation, narration, assistant |
 | `viz` | Neo4j | Demo and graph inspection, from November |
 
-**Note:** `infra/docker-compose.yml` today only brings up Postgres and Redis under `core`,
-with a `TODO` marking where the API and worker containers join once `apps/api` is
-buildable. This is Phase 0 groundwork; the API and worker containers land with Layer 1.
+The API and worker containers landed with Layer 1. Inside the compose network they reach
+Postgres and Redis by service name (`postgres`, `redis`), not `localhost` — `environment:`
+overrides on both services take precedence over `env_file:`, so the same `.env` still gives
+`localhost` for native dev via the published ports. The `migrate` service runs
+`alembic upgrade head` once (`restart: "no"`); API and worker wait on it via
+`service_completed_successfully` so the schema exists before either starts, and so the two
+never race to apply the same DDL.
 
 The lab stays in `lab/docker-compose.yml`, on internal networks with no egress, as it is now.
+The worker cannot yet reach it — that requires an external-network attachment between the two
+compose files, not yet built.
 
 ---
 
