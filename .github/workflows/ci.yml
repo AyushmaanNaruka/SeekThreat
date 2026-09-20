@@ -27,7 +27,7 @@ jobs:
         run: ruff format --check .
 
       - name: Types
-        run: mypy packages services
+        run: mypy packages services apps
 
       - name: Tests
         run: pytest tests -v

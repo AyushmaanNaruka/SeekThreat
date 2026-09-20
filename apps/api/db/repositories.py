@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import Insert as PGInsert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import Insert as SQLiteInsert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
@@ -47,6 +49,7 @@ class RawArtifactRepository:
             "captured_at": artifact.captured_at,
         }
 
+        stmt: PGInsert | SQLiteInsert
         if dialect == "postgresql":
             stmt = (
                 pg_insert(RawArtifactModel)
@@ -120,6 +123,7 @@ class ObservationRepository:
 
         dialect = self.session.bind.dialect.name if self.session.bind else ""
 
+        stmt: PGInsert | SQLiteInsert
         if dialect == "postgresql":
             stmt = (
                 pg_insert(ObservationModel)

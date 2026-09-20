@@ -1,6 +1,6 @@
 # Architecture
 
-How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-020.
+How SeekThreat is built, and why. Decisions logged in `DECISIONS.md` D-003 through D-022.
 
 Read `docs/00-scope.md` for what we are building. This document is how.
 

@@ -14,7 +14,7 @@ from packages.schema.models.engagement import Authorization, Engagement
 from packages.schema.models.observation import Observation, ObservationKind, RawArtifact
 from packages.schema.models.provenance import Provenance
 
-# JSONB on PostgreSQL, standard JSON fallback on SQLite
+# JSONB on PostgreSQL, standard JSON fallback on SQLite.
 JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
 
 
