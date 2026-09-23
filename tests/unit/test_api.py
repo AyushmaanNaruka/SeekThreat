@@ -515,17 +515,12 @@ def test_create_engagement_accepts_non_utc_offset(api_client: TestClient) -> Non
 
 
 # ---------------------------------------------------------------------------
-# POST /scans — broker failure must not leave a permanently pending scan
+# POST /scans — broker failure falls back to local thread execution
 # ---------------------------------------------------------------------------
 
 
-def test_create_scan_broker_failure_returns_503(api_client: TestClient, monkeypatch) -> None:
-    """A broker outage is a 503, not a 500.
-
-    .delay() was unguarded, so a Redis outage raised after the scan row had
-    already been committed: the caller got a 500 and the row sat at 'pending'
-    forever with nothing scheduled to advance it.
-    """
+def test_create_scan_broker_failure_falls_back_to_local_thread(api_client: TestClient, monkeypatch) -> None:
+    """A broker outage triggers local background-thread fallback and returns 202 Accepted."""
     import apps.api.tasks.scans as tasks_module
 
     def _broker_down(*args: Any, **kwargs: Any) -> None:
@@ -542,20 +537,34 @@ def test_create_scan_broker_failure_returns_503(api_client: TestClient, monkeypa
             "target": "172.20.1.10",
         },
     )
-    assert resp.status_code == 503, resp.text
+    assert resp.status_code == 202, resp.text
+    data = resp.json()
+    assert data["engagement_id"] == "eng-test-001"
+    assert data["status"] == "pending"
+    assert "scan_id" in data
 
 
-def test_create_scan_broker_failure_marks_scan_failed(api_client: TestClient, monkeypatch) -> None:
-    """The scan row must not be left at 'pending' when dispatch never happened."""
-    import apps.api.tasks.scans as tasks_module
+def test_create_scan_broker_failure_fallback_dispatches_run_scan(api_client: TestClient, monkeypatch) -> None:
+    """When broker dispatch fails, background thread executes run_scan."""
+    import threading
+    import apps.api.routers.scans as scans_router
 
     def _broker_down(*args: Any, **kwargs: Any) -> None:
         raise OSError("Redis connection refused")
 
-    monkeypatch.setattr(tasks_module.execute_scan, "delay", _broker_down)
+    monkeypatch.setattr(scans_router.execute_scan, "delay", _broker_down)
+
+    executed_event = threading.Event()
+    recorded_kwargs: dict[str, Any] = {}
+
+    def _mock_run_scan(**kwargs: Any) -> None:
+        recorded_kwargs.update(kwargs)
+        executed_event.set()
+
+    monkeypatch.setattr(scans_router, "run_scan", _mock_run_scan)
 
     api_client.post("/engagements", json=_valid_engagement_payload())
-    api_client.post(
+    resp = api_client.post(
         "/scans",
         json={
             "engagement_id": "eng-test-001",
@@ -563,11 +572,14 @@ def test_create_scan_broker_failure_marks_scan_failed(api_client: TestClient, mo
             "target": "172.20.1.10",
         },
     )
+    assert resp.status_code == 202, resp.text
+    scan_id = resp.json()["scan_id"]
 
-    listed = api_client.get("/scans", params={"engagement_id": "eng-test-001"}).json()
-    assert len(listed) == 1, listed
-    assert listed[0]["status"] == "failed"
-    assert listed[0]["error_message"]
+    assert executed_event.wait(timeout=5.0), "Background fallback thread did not execute run_scan"
+    assert recorded_kwargs["scan_id"] == scan_id
+    assert recorded_kwargs["engagement_id"] == "eng-test-001"
+    assert recorded_kwargs["scanner"] == "nmap"
+    assert recorded_kwargs["target"] == "172.20.1.10"
 
 
 # ---------------------------------------------------------------------------

@@ -40,6 +40,7 @@ from packages.schema.models.engagement import Authorization, ScanRequest
 from services.scanners.base import AuthorizationError, ScannerAdapter, ScannerUnavailableError
 from services.scanners.nmap_adapter import NmapAdapter
 from services.scanners.nuclei_adapter import NucleiAdapter
+from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -54,22 +55,20 @@ PERMANENT_ERRORS = (
 )
 
 
-@celery_app.task(  # type: ignore[untyped-decorator]  # celery ships no type stubs for .task()
-    bind=True,
-    name="seekthreat.scans.execute",
-    max_retries=3,
-    default_retry_delay=30,
-)
-def execute_scan(
-    self: Any,
+def run_scan(
     scan_id: str,
     engagement_id: str,
     scanner: str,
     target: str,
     options: dict[str, Any],
     authorization_dict: dict[str, Any],
+    task: Any = None,
+    db: Session | None = None,
 ) -> None:
-    """Execute a scan asynchronously and persist the results.
+    """Execute a scan and persist the results.
+
+    Can be invoked directly in local fallback mode (task=None) or by the
+    Celery task worker (task=self).
 
     Args:
         scan_id: Unique identifier of the pending scan record.
@@ -78,17 +77,33 @@ def execute_scan(
         target: IP address, CIDR range, or hostname to scan.
         options: Scanner-specific execution options.
         authorization_dict: JSON-safe representation of the
-            ``Authorization`` record, produced via
-            ``auth.model_dump(mode="json")``.  Reconstructed with
-            ``Authorization.model_validate()``.
+            ``Authorization`` record.
+        task: Optional Celery task instance. If provided and supporting
+            Celery retry semantics, retry behavior is used for transient errors
+            and the exception is re-raised on failure so Celery marks task failure.
+            If None (or local thread fallback mode), errors mark the scan as
+            failed with the actual error message and the thread exits cleanly.
+        db: Optional database session. If not provided, a worker-owned session
+            is created via ``SessionLocal()`` and closed on exit.
     """
-    # Reconstruct Authorization from the JSON-serialized dict.
-    # model_validate handles datetime strings and list→frozenset coercion.
-    authorization = Authorization.model_validate(authorization_dict)
+    owns_db = False
+    if db is None:
+        db = SessionLocal()
+        owns_db = True
 
-    db = SessionLocal()
     scan_repo = ScanRepository(db)
+    actor = (
+        authorization_dict.get("authorized_by", "unknown")
+        if isinstance(authorization_dict, dict)
+        else "unknown"
+    )
+
     try:
+        # Reconstruct Authorization from the JSON-serialized dict.
+        # model_validate handles datetime strings and list→frozenset coercion.
+        authorization = Authorization.model_validate(authorization_dict)
+        actor = authorization.authorized_by
+
         scan_repo.update_status(scan_id=scan_id, status="running")
         db.commit()
 
@@ -128,9 +143,15 @@ def execute_scan(
         )
         db.commit()
 
+        celery_task_id = (
+            getattr(task.request, "id", None)
+            if task is not None and hasattr(task, "request")
+            else None
+        )
+
         log_audit_event(
             event="scan.completed",
-            actor=authorization.authorized_by,
+            actor=actor,
             target=target,
             engagement_id=engagement_id,
             scanner=scanner,
@@ -139,7 +160,7 @@ def execute_scan(
                 "scan_id": scan_id,
                 "artifact_id": scan_result.artifact.artifact_id,
                 "observation_count": len(scan_result.observations),
-                "celery_task_id": getattr(self.request, "id", None),
+                "celery_task_id": celery_task_id,
             },
         )
 
@@ -148,13 +169,16 @@ def execute_scan(
         error_msg = f"{type(exc).__name__}: {exc}"
         logger.error("Scan %s failed: %s", scan_id, error_msg, exc_info=True)
 
-        if not isinstance(exc, PERMANENT_ERRORS):
+        is_celery = task is not None and hasattr(task, "retry") and callable(task.retry)
+
+        if is_celery and not isinstance(exc, PERMANENT_ERRORS):
             # Transient: hand back to Celery, which re-raises Retry to
             # reschedule. Once retries are exhausted it raises
             # MaxRetriesExceededError, and we fall through to mark the row.
             try:
-                raise self.retry(exc=exc) from exc
-            except self.MaxRetriesExceededError:
+                max_retries_exc = getattr(task, "MaxRetriesExceededError", Exception)
+                raise task.retry(exc=exc) from exc
+            except max_retries_exc:
                 pass
 
         try:
@@ -168,9 +192,15 @@ def execute_scan(
         except Exception:
             db.rollback()
 
+        celery_task_id = (
+            getattr(task.request, "id", None)
+            if task is not None and hasattr(task, "request")
+            else None
+        )
+
         log_audit_event(
             event="scan.failed",
-            actor=authorization.authorized_by,
+            actor=actor,
             target=target,
             engagement_id=engagement_id,
             scanner=scanner,
@@ -178,12 +208,53 @@ def execute_scan(
             details={
                 "scan_id": scan_id,
                 "error": error_msg,
-                "celery_task_id": getattr(self.request, "id", None),
+                "celery_task_id": celery_task_id,
             },
         )
 
         # Re-raise so Celery records FAILURE. Returning normally here would
         # leave the task marked SUCCESS while the scan row says 'failed'.
-        raise
+        if is_celery:
+            raise
     finally:
-        db.close()
+        if owns_db:
+            db.close()
+
+
+@celery_app.task(  # type: ignore[untyped-decorator]  # celery ships no type stubs for .task()
+    bind=True,
+    name="seekthreat.scans.execute",
+    max_retries=3,
+    default_retry_delay=30,
+)
+def execute_scan(
+    self: Any,
+    scan_id: str,
+    engagement_id: str,
+    scanner: str,
+    target: str,
+    options: dict[str, Any],
+    authorization_dict: dict[str, Any],
+) -> None:
+    """Execute a scan asynchronously and persist the results.
+
+    Args:
+        scan_id: Unique identifier of the pending scan record.
+        engagement_id: Parent engagement identifier (for audit events).
+        scanner: Scanner name (e.g. ``"nmap"``).
+        target: IP address, CIDR range, or hostname to scan.
+        options: Scanner-specific execution options.
+        authorization_dict: JSON-safe representation of the
+            ``Authorization`` record, produced via
+            ``auth.model_dump(mode="json")``.  Reconstructed with
+            ``Authorization.model_validate()``.
+    """
+    return run_scan(
+        scan_id=scan_id,
+        engagement_id=engagement_id,
+        scanner=scanner,
+        target=target,
+        options=options,
+        authorization_dict=authorization_dict,
+        task=self,
+    )

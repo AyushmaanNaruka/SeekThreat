@@ -25,6 +25,7 @@ RUN apt-get update \
     && echo "${NUCLEI_SHA256}  /tmp/nuclei.zip" | sha256sum -c - \
     && unzip -o /tmp/nuclei.zip -d /usr/local/bin nuclei \
     && chmod +x /usr/local/bin/nuclei \
+    && nuclei -ut \
     && rm /tmp/nuclei.zip \
     && apt-get purge -y --auto-remove curl unzip \
     && rm -rf /var/lib/apt/lists/*

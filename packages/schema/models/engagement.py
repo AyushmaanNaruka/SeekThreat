@@ -29,30 +29,56 @@ def target_matches(target: str, pattern: str) -> bool:
     if not target or not pattern:
         return False
 
+    if target.lower() == pattern.lower():
+        return True
+
+    # Extract hostname/IP from URL or host:port if provided as target
+    host_target = target
+    if "://" in host_target:
+        from urllib.parse import urlsplit
+        host_target = urlsplit(host_target).hostname or host_target
+    elif ":" in host_target and not host_target.startswith("["):
+        parts = host_target.split(":")
+        if len(parts) == 2 and parts[1].isdigit():
+            host_target = parts[0]
+
+    # Extract hostname/IP from URL or host:port if provided as pattern
+    host_pattern = pattern
+    if "://" in host_pattern:
+        from urllib.parse import urlsplit
+        host_pattern = urlsplit(host_pattern).hostname or host_pattern
+    elif ":" in host_pattern and not host_pattern.startswith("["):
+        parts = host_pattern.split(":")
+        if len(parts) == 2 and parts[1].isdigit():
+            host_pattern = parts[0]
+
+    if host_target.lower() == host_pattern.lower():
+        return True
+
     try:
-        network = ipaddress.ip_network(pattern, strict=False)
+        network = ipaddress.ip_network(host_pattern, strict=False)
     except ValueError:
         network = None
 
     if network is not None:
         try:
-            return ipaddress.ip_address(target) in network
+            return ipaddress.ip_address(host_target) in network
         except ValueError:
             # A hostname is never resolved to compare against a network.
             return False
 
     # Pattern is a hostname. An IP target never matches one.
     try:
-        ipaddress.ip_address(target)
+        ipaddress.ip_address(host_target)
     except ValueError:
         pass
     else:
         return False
 
-    if pattern.startswith("*."):
-        return fnmatchcase(target.lower(), pattern.lower())
+    if host_pattern.startswith("*."):
+        return fnmatchcase(host_target.lower(), host_pattern.lower())
 
-    return target.lower() == pattern.lower()
+    return host_target.lower() == host_pattern.lower()
 
 
 class Authorization(BaseModel):

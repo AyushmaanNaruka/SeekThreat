@@ -18,14 +18,14 @@ from apps.api.db.repositories import (
     ObservationRepository,
     ScanRepository,
 )
-from apps.api.db.session import get_db
+from apps.api.db.session import get_db, get_session_factory
 from apps.api.routers.observations import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
     ObservationListResponse,
     ObservationResponse,
 )
-from apps.api.tasks.scans import execute_scan
+from apps.api.tasks.scans import execute_scan, run_scan
 from packages.schema.models.observation import ObservationKind
 
 logger = logging.getLogger(__name__)
@@ -116,31 +116,34 @@ def create_scan(
             auth.model_dump(mode="json"),
         )
     except Exception as exc:
-        error_msg = f"{type(exc).__name__}: {exc}"
-        logger.error("Scan %s dispatch failed: %s", scan_id, error_msg, exc_info=True)
-
-        scan_repo.update_status(
-            scan_id=scan_id,
-            status="failed",
-            error_message=f"Dispatch failed: {error_msg}",
-            completed_at=datetime.now(UTC),
+        logger.warning(
+            "Celery queue unavailable (%s); executing scan %s in background worker thread.",
+            exc,
+            scan_id,
         )
-        db.commit()
+        import threading
 
-        log_audit_event(
-            event="scan.dispatch_failed",
-            actor=auth.authorized_by,
-            target=payload.target,
-            engagement_id=payload.engagement_id,
-            scanner=payload.scanner,
-            status="error",
-            details={"scan_id": scan_id, "error": error_msg},
-        )
+        session_factory = get_session_factory(db.get_bind())
 
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Scan queue unavailable; the scan was not dispatched.",
-        ) from exc
+        def _run_bg() -> None:
+            thread_db = session_factory()
+            try:
+                run_scan(
+                    scan_id=scan_id,
+                    engagement_id=payload.engagement_id,
+                    scanner=payload.scanner,
+                    target=payload.target,
+                    options=payload.options,
+                    authorization_dict=auth.model_dump(mode="json"),
+                    db=thread_db,
+                )
+            except Exception as thread_exc:
+                logger.error("Background scan execution error for %s: %s", scan_id, thread_exc)
+            finally:
+                thread_db.close()
+
+        t = threading.Thread(target=_run_bg, daemon=True)
+        t.start()
 
     return ScanStatusResponse(
         scan_id=scan.scan_id,
@@ -240,16 +243,20 @@ def get_scan_observations(
 @router.get(
     "",
     response_model=list[ScanStatusResponse],
-    summary="List scans for an engagement",
+    summary="List scans for an engagement or all scans",
 )
 def list_scans(
-    engagement_id: str = Query(..., description="Filter scans by engagement ID"),
+    engagement_id: str | None = Query(None, description="Optional filter scans by engagement ID"),
+    limit: int | None = Query(None, ge=1, le=500, description="Max number of scans to return"),
     db: Session = Depends(get_db),
 ) -> list[ScanStatusResponse]:
-    """Return all scans recorded for an engagement."""
+    """Return all scans recorded for an engagement or across all engagements."""
     scan_repo = ScanRepository(db)
     obs_repo = ObservationRepository(db)
-    scans = scan_repo.list_by_engagement(engagement_id)
+    if engagement_id:
+        scans = scan_repo.list_by_engagement(engagement_id)
+    else:
+        scans = scan_repo.list_all(limit=limit)
 
     results = []
     for s in scans:
