@@ -180,4 +180,3 @@ def test_invalid_ports_option_rejected() -> None:
         )
         with pytest.raises(ValueError, match="Invalid ports option"):
             adapter.scan(req)
-

@@ -33,9 +33,6 @@ def target_matches(target: str, pattern: str) -> bool:
     if not target or not pattern:
         return False
 
-    if target.lower() == pattern.lower():
-        return True
-
     try:
         network = ipaddress.ip_network(pattern, strict=False)
     except ValueError:

@@ -158,7 +158,6 @@ def test_create_engagement_rejects_blank_authorized_by(api_client: TestClient) -
         )
 
 
-
 def test_create_engagement_rejects_inverted_time_window(api_client: TestClient) -> None:
     payload = _valid_engagement_payload(
         granted_at=_future(2).isoformat(),
@@ -394,7 +393,6 @@ def test_list_scans_unfiltered_defaults_limit(api_client: TestClient) -> None:
     assert len(resp_limit.json()) == 2
 
 
-
 # ---------------------------------------------------------------------------
 # Alembic migration 0002 tests
 # ---------------------------------------------------------------------------
@@ -548,9 +546,7 @@ def test_create_engagement_accepts_non_utc_offset(api_client: TestClient) -> Non
 # ---------------------------------------------------------------------------
 
 
-def test_create_scan_broker_failure_returns_503(
-    api_client: TestClient, monkeypatch
-) -> None:
+def test_create_scan_broker_failure_returns_503(api_client: TestClient, monkeypatch) -> None:
     """When the Celery broker is down, POST /scans returns 503.
 
     Before PR #14 the API fell back to an in-process thread, which violated
@@ -616,7 +612,6 @@ def test_create_scan_broker_failure_marks_scan_failed(
     assert "Dispatch failed" in scans[0].error_message
 
 
-
 def test_broker_failure_emits_dispatch_failed_audit_event(
     api_client: TestClient, monkeypatch
 ) -> None:
@@ -643,7 +638,6 @@ def test_broker_failure_emits_dispatch_failed_audit_event(
     failed_events = [e for e in events if e["event"] == "scan.dispatch_failed"]
     assert len(failed_events) == 1
     assert failed_events[0]["target"] == "172.20.1.10"
-
 
 
 # ---------------------------------------------------------------------------

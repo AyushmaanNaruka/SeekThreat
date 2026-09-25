@@ -14,10 +14,7 @@ from services.scanners.nuclei_adapter import NucleiAdapter
 
 NOW = datetime.now(UTC)
 FIXTURE_TEMPLATE = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "nuclei"
-    / "test_http_detect.yaml"
+    Path(__file__).resolve().parents[1] / "fixtures" / "nuclei" / "test_http_detect.yaml"
 )
 
 MINIMAL_JSONL = (
@@ -73,6 +70,7 @@ def test_local_template_command_construction() -> None:
 def test_nuclei_command_passes_no_stdin_and_closes_subprocess_stdin() -> None:
     """Regression test: -no-stdin flag and stdin=DEVNULL must both be set to prevent hangs."""
     import subprocess
+
     adapter = NucleiAdapter()
     req = ScanRequest(
         target="http://127.0.0.1:8799",
@@ -140,7 +138,7 @@ def test_tags_option_passes_tags_flag() -> None:
     req = ScanRequest(
         target="http://127.0.0.1:8799",
         authorization=_authorization(),
-        options={"tags": "cve,rce"},
+        options={"tags": "cve,tech"},
     )
 
     mock_res = MagicMock()
@@ -152,7 +150,7 @@ def test_tags_option_passes_tags_flag() -> None:
         mock_run.assert_called_once()
         cmd = mock_run.call_args[0][0]
         assert "-tags" in cmd
-        assert cmd[cmd.index("-tags") + 1] == "cve,rce"
+        assert cmd[cmd.index("-tags") + 1] == "cve,tech"
 
 
 def test_missing_local_template_fails_cleanly() -> None:
@@ -205,13 +203,15 @@ def test_etags_exclude_destructive_checks_always_passed() -> None:
         adapter.scan(req)
         cmd = mock_run.call_args[0][0]
         assert "-etags" in cmd
-        assert cmd[cmd.index("-etags") + 1] == "dos,intrusive,fuzz,bruteforce"
+        excluded = cmd[cmd.index("-etags") + 1].split(",")
+        for tag in ["dos", "intrusive", "fuzz", "bruteforce", "rce", "default-login"]:
+            assert tag in excluded
 
 
 def test_unapproved_tags_rejected() -> None:
     """Tags outside the approved allowlist (e.g. dos, intrusive) raise ValueError."""
     adapter = NucleiAdapter()
-    for bad_tag in ["dos", "intrusive", "bruteforce", "custom_exploit"]:
+    for bad_tag in ["dos", "intrusive", "bruteforce", "custom_exploit", "rce", "default-login"]:
         req = ScanRequest(
             target="http://127.0.0.1:8799",
             authorization=_authorization(),
@@ -232,4 +232,3 @@ def test_template_outside_allowed_directories_rejected() -> None:
         )
         with pytest.raises(ValueError, match="outside allowed template directories"):
             adapter.scan(req)
-

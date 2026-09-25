@@ -76,7 +76,7 @@ Low. Updating templates requires bumping the version and checksum in `apps/api/D
 **Decision**
 Scanner execution options passed to `POST /scans` are strictly constrained at the adapter boundary:
 1. `NmapAdapter`: accepts only sanitized options (`ports` validated against `^[0-9,\-]+$`, `fast: bool`, `no_ping: bool`, `service_detection: bool`). Arbitrary CLI arguments remain rejected (per D-017).
-2. `NucleiAdapter`: accepts only approved non-destructive tags (`APPROVED_TAGS` allowlist), enforces exclusion backstop `-etags dos,intrusive,fuzz,bruteforce`, and restricts template paths strictly to in-repo template directories (`services/scanners/nuclei_templates` and test fixtures) with path-traversal prevention.
+2. `NucleiAdapter`: accepts only approved non-destructive tags (`APPROVED_TAGS` allowlist), enforces exclusion backstop `-etags dos,intrusive,fuzz,bruteforce,rce,default-login` on every run (including runs with no `-tags`). `rce` and `default-login` are excluded because they send code-execution payloads or attempt authentication, and restricts template paths strictly to in-repo template directories (`services/scanners/nuclei_templates` and test fixtures) with path-traversal prevention.
 
 **Why**
 Preventing caller input from expanding scan boundaries or invoking destructive checks (e.g. DoS, brute force, exploit modules) is required by CLAUDE.md hard rule 4 (no autonomous exploitation, non-destructive checks only) and authorization gate determinism (D-017).

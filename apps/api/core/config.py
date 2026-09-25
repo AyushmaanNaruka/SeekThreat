@@ -57,8 +57,7 @@ class Settings(BaseSettings):
     nuclei_path: str | None = Field(
         default_factory=lambda: os.getenv("NUCLEI_PATH"),
         description=(
-            "Absolute path to the nuclei binary. "
-            "If unset, shutil.which('nuclei') is used."
+            "Absolute path to the nuclei binary. If unset, shutil.which('nuclei') is used."
         ),
     )
 
@@ -82,4 +81,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

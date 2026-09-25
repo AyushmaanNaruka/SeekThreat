@@ -71,4 +71,3 @@ def test_authorization_strips_whitespace_from_authorizer() -> None:
         expires_at=NOW + timedelta(hours=1),
     )
     assert auth.authorized_by == "Alice Smith"
-

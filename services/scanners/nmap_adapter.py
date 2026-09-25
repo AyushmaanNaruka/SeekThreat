@@ -22,8 +22,10 @@ PORTS_REGEX = re.compile(r"^(?:-p-|[0-9,\-]+)$")
 
 def _resolve_nmap_bin() -> str | None:
     from apps.api.core.config import settings
+
     if settings.nmap_path:
         from pathlib import Path
+
         p = Path(settings.nmap_path)
         if p.is_file():
             return str(p)
@@ -60,21 +62,21 @@ class NmapAdapter(ScannerAdapter):
         if isinstance(ports_opt, str) and ports_opt.strip():
             clean_ports = ports_opt.strip()
             if not PORTS_REGEX.match(clean_ports):
-                raise ValueError(
-                    f"Invalid ports option {clean_ports!r}: must match ^[0-9,\\-]+$"
-                )
+                raise ValueError(f"Invalid ports option {clean_ports!r}: must match ^[0-9,\\-]+$")
             cmd.extend(["-p", clean_ports])
         elif request.options.get("fast", False):
             cmd.append("-F")
         else:
             cmd.extend(["-p", DEFAULT_PORTS])
 
-        cmd.extend([
-            "-oX",
-            "-",
-            "--",  # end of options: a target starting with '-' is not read as a flag
-            request.target,
-        ])
+        cmd.extend(
+            [
+                "-oX",
+                "-",
+                "--",  # end of options: a target starting with '-' is not read as a flag
+                request.target,
+            ]
+        )
         result = subprocess.run(
             cmd,
             capture_output=True,

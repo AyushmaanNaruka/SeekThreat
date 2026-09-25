@@ -20,27 +20,28 @@ ALLOWED_TEMPLATE_DIRS = (
     (REPO_ROOT / "tests" / "fixtures" / "nuclei").resolve(),
 )
 
-APPROVED_TAGS = frozenset({
-    "cve",
-    "rce",
-    "tech",
-    "panel",
-    "ssl",
-    "dns",
-    "exposure",
-    "misconfig",
-    "config",
-    "default-login",
-    "token",
-    "network",
-    "http",
-    "info",
-    "low",
-    "medium",
-    "high",
-    "critical",
-})
-EXCLUDE_TAGS = "dos,intrusive,fuzz,bruteforce"
+# Detection-only tags. `rce` and `default-login` are deliberately absent: rce
+# templates send code-execution payloads and default-login templates attempt
+# authentication, both of which break hard rule 4 (non-destructive only).
+# Severity levels (info/low/...) are not tags and belong under -severity.
+APPROVED_TAGS = frozenset(
+    {
+        "cve",
+        "tech",
+        "panel",
+        "ssl",
+        "dns",
+        "exposure",
+        "misconfig",
+        "config",
+        "token",
+        "network",
+        "http",
+    }
+)
+# Applied to every run, including runs with no -tags, so the full template set
+# never executes these categories either.
+EXCLUDE_TAGS = "dos,intrusive,fuzz,bruteforce,rce,default-login"
 
 
 def _resolve_nuclei_bin() -> str | None:
@@ -103,8 +104,7 @@ class NucleiAdapter(ScannerAdapter):
                 candidate = candidate.resolve()
 
             is_allowed = any(
-                candidate.is_relative_to(allowed_dir)
-                for allowed_dir in ALLOWED_TEMPLATE_DIRS
+                candidate.is_relative_to(allowed_dir) for allowed_dir in ALLOWED_TEMPLATE_DIRS
             )
             if not is_allowed:
                 raise ValueError(
