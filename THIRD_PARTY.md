@@ -40,6 +40,7 @@ dependency manifests.
 | NetworkX | BSD-3-Clause | Service | In-memory attack graph substrate (D-003) | Ayushmaan | 2026-09-05 |
 | PyYAML | MIT | Service | Rules-as-data loading for the path engine (D-004) | Ayushmaan | 2026-09-05 |
 | Nuclei | MIT (ProjectDiscovery) | Service | Invoked as subprocess, JSONL output parsed. Source never vendored | Ayushmaan | 2026-09-20 |
+| Nuclei Templates | MIT (ProjectDiscovery) | Vendored | Official vulnerability template archive pinned in container image | Mayank | 2026-09-25 |
 | Greenbone / OpenVAS | GPL | Service | Run as container, GMP API via python-gvm | | |
 | Foundation-Sec-8B-Reasoning | Open weights | Service | Local model serving | | |
 

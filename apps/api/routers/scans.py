@@ -103,9 +103,10 @@ def create_scan(
     db.commit()
 
     # 3. Dispatch Celery task — authorization serialized as JSON-safe dict.
-    # The scan row is already committed, so an unguarded dispatch failure (a
-    # broker outage, say) would leave it at 'pending' forever with nothing
-    # scheduled to advance it, and hand the caller a 500.
+    # If the broker is unavailable, mark the scan failed and return 503.
+    # The scan.dispatch_failed audit event is logged so every failure is
+    # traceable. The worker container is the one attached to the lab network;
+    # the API container must never scan anything.
     try:
         execute_scan.delay(
             scan_id,
@@ -116,17 +117,22 @@ def create_scan(
             auth.model_dump(mode="json"),
         )
     except Exception as exc:
-        error_msg = f"{type(exc).__name__}: {exc}"
-        logger.error("Scan %s dispatch failed: %s", scan_id, error_msg, exc_info=True)
-
-        scan_repo.update_status(
-            scan_id=scan_id,
-            status="failed",
-            error_message=f"Dispatch failed: {error_msg}",
-            completed_at=datetime.now(UTC),
+        error_msg = f"Dispatch failed: {exc}"
+        logger.error(
+            "Celery broker unavailable; scan %s not dispatched: %s",
+            scan_id,
+            exc,
         )
-        db.commit()
-
+        try:
+            scan_repo.update_status(
+                scan_id=scan_id,
+                status="failed",
+                error_message=error_msg,
+                completed_at=datetime.now(UTC),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
         log_audit_event(
             event="scan.dispatch_failed",
             actor=auth.authorized_by,
@@ -136,7 +142,6 @@ def create_scan(
             status="error",
             details={"scan_id": scan_id, "error": error_msg},
         )
-
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Scan queue unavailable; the scan was not dispatched.",
@@ -240,16 +245,21 @@ def get_scan_observations(
 @router.get(
     "",
     response_model=list[ScanStatusResponse],
-    summary="List scans for an engagement",
+    summary="List scans for an engagement or all scans",
 )
 def list_scans(
-    engagement_id: str = Query(..., description="Filter scans by engagement ID"),
+    engagement_id: str | None = Query(None, description="Optional filter scans by engagement ID"),
+    limit: int = Query(50, ge=1, le=500, description="Max number of scans to return"),
+    offset: int = Query(0, ge=0, description="Number of scans to skip"),
     db: Session = Depends(get_db),
 ) -> list[ScanStatusResponse]:
-    """Return all scans recorded for an engagement."""
+    """Return all scans recorded for an engagement or across all engagements."""
     scan_repo = ScanRepository(db)
     obs_repo = ObservationRepository(db)
-    scans = scan_repo.list_by_engagement(engagement_id)
+    if engagement_id:
+        scans = scan_repo.list_by_engagement(engagement_id)
+    else:
+        scans = scan_repo.list_all(limit=limit, offset=offset)
 
     results = []
     for s in scans:

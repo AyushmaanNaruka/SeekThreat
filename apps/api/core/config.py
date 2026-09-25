@@ -46,6 +46,21 @@ class Settings(BaseSettings):
         ]
     )
 
+    nmap_path: str | None = Field(
+        default_factory=lambda: os.getenv("NMAP_PATH"),
+        description=(
+            "Absolute path to the nmap binary. "
+            "If unset, shutil.which('nmap') is used. "
+            "Set in .env on Windows: NMAP_PATH=C:\\Program Files (x86)\\Nmap\\nmap.exe"
+        ),
+    )
+    nuclei_path: str | None = Field(
+        default_factory=lambda: os.getenv("NUCLEI_PATH"),
+        description=(
+            "Absolute path to the nuclei binary. If unset, shutil.which('nuclei') is used."
+        ),
+    )
+
     @field_validator("database_url", mode="after")
     @classmethod
     def _apply_psycopg_driver(cls, value: str) -> str:

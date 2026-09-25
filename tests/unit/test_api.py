@@ -149,6 +149,15 @@ def test_create_engagement_rejects_empty_allowlist(api_client: TestClient) -> No
     assert resp.status_code == 422, resp.text
 
 
+def test_create_engagement_rejects_blank_authorized_by(api_client: TestClient) -> None:
+    for bad_auth in ["", "   ", "\t"]:
+        payload = _valid_engagement_payload(authorized_by=bad_auth)
+        resp = api_client.post("/engagements", json=payload)
+        assert resp.status_code == 422, (
+            f"Expected 422 for authorized_by={bad_auth!r}, got: {resp.status_code}"
+        )
+
+
 def test_create_engagement_rejects_inverted_time_window(api_client: TestClient) -> None:
     payload = _valid_engagement_payload(
         granted_at=_future(2).isoformat(),
@@ -366,6 +375,24 @@ def test_list_scans_returns_accepted_scans(api_client: TestClient) -> None:
     assert len(resp.json()) == 2
 
 
+def test_list_scans_unfiltered_defaults_limit(api_client: TestClient) -> None:
+    eng_id = _create_engagement(api_client)
+    for i in range(3):
+        r = api_client.post(
+            "/scans",
+            json={"engagement_id": eng_id, "scanner": "nmap", "target": f"172.20.1.{10 + i}"},
+        )
+        assert r.status_code == 202
+    resp = api_client.get("/scans")
+    assert resp.status_code == 200, resp.text
+    items = resp.json()
+    assert len(items) >= 3
+    # Also verify custom limit works
+    resp_limit = api_client.get("/scans?limit=2")
+    assert resp_limit.status_code == 200
+    assert len(resp_limit.json()) == 2
+
+
 # ---------------------------------------------------------------------------
 # Alembic migration 0002 tests
 # ---------------------------------------------------------------------------
@@ -515,16 +542,17 @@ def test_create_engagement_accepts_non_utc_offset(api_client: TestClient) -> Non
 
 
 # ---------------------------------------------------------------------------
-# POST /scans — broker failure must not leave a permanently pending scan
+# POST /scans — broker failure returns 503 and marks scan failed
 # ---------------------------------------------------------------------------
 
 
 def test_create_scan_broker_failure_returns_503(api_client: TestClient, monkeypatch) -> None:
-    """A broker outage is a 503, not a 500.
+    """When the Celery broker is down, POST /scans returns 503.
 
-    .delay() was unguarded, so a Redis outage raised after the scan row had
-    already been committed: the caller got a 500 and the row sat at 'pending'
-    forever with nothing scheduled to advance it.
+    Before PR #14 the API fell back to an in-process thread, which violated
+    hard rules 2 and 4 (wrong network context, broken audit trail, daemon
+    thread could leave scans stuck). The 503 was the intentional behaviour:
+    the caller knows the scan was not dispatched and can retry.
     """
     import apps.api.tasks.scans as tasks_module
 
@@ -543,10 +571,51 @@ def test_create_scan_broker_failure_returns_503(api_client: TestClient, monkeypa
         },
     )
     assert resp.status_code == 503, resp.text
+    assert "queue unavailable" in resp.json()["detail"].lower()
 
 
-def test_create_scan_broker_failure_marks_scan_failed(api_client: TestClient, monkeypatch) -> None:
-    """The scan row must not be left at 'pending' when dispatch never happened."""
+def test_create_scan_broker_failure_marks_scan_failed(
+    api_client: TestClient, db_session: Session, monkeypatch
+) -> None:
+    """When the broker is down the scan row is left in 'failed' state.
+
+    A 503 with no scan row would make recovery impossible. The row must
+    exist and be in 'failed' state so the caller can diagnose the outage.
+    """
+    import apps.api.tasks.scans as tasks_module
+    from apps.api.db.repositories import ScanRepository
+
+    def _broker_down(*args: Any, **kwargs: Any) -> None:
+        raise OSError("Redis connection refused")
+
+    monkeypatch.setattr(tasks_module.execute_scan, "delay", _broker_down)
+
+    api_client.post("/engagements", json=_valid_engagement_payload())
+
+    resp = api_client.post(
+        "/scans",
+        json={
+            "engagement_id": "eng-test-001",
+            "scanner": "nmap",
+            "target": "172.20.1.10",
+        },
+    )
+    assert resp.status_code == 503, resp.text
+
+    # Retrieve the failed scan row directly from the shared test DB session
+    db_session.expire_all()
+    scan_repo = ScanRepository(db_session)
+    scans = scan_repo.list_by_engagement("eng-test-001")
+    assert len(scans) == 1
+    assert scans[0].status == "failed"
+    assert scans[0].error_message is not None
+    assert "Dispatch failed" in scans[0].error_message
+
+
+def test_broker_failure_emits_dispatch_failed_audit_event(
+    api_client: TestClient, monkeypatch
+) -> None:
+    """Broker outage must emit scan.dispatch_failed in the audit log."""
     import apps.api.tasks.scans as tasks_module
 
     def _broker_down(*args: Any, **kwargs: Any) -> None:
@@ -555,6 +624,7 @@ def test_create_scan_broker_failure_marks_scan_failed(api_client: TestClient, mo
     monkeypatch.setattr(tasks_module.execute_scan, "delay", _broker_down)
 
     api_client.post("/engagements", json=_valid_engagement_payload())
+    clear_audit_log()
     api_client.post(
         "/scans",
         json={
@@ -564,10 +634,10 @@ def test_create_scan_broker_failure_marks_scan_failed(api_client: TestClient, mo
         },
     )
 
-    listed = api_client.get("/scans", params={"engagement_id": "eng-test-001"}).json()
-    assert len(listed) == 1, listed
-    assert listed[0]["status"] == "failed"
-    assert listed[0]["error_message"]
+    events = get_audit_log()
+    failed_events = [e for e in events if e["event"] == "scan.dispatch_failed"]
+    assert len(failed_events) == 1
+    assert failed_events[0]["target"] == "172.20.1.10"
 
 
 # ---------------------------------------------------------------------------

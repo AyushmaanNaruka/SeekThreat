@@ -48,3 +48,26 @@ def test_scanner_base_reuses_the_schema_authorization() -> None:
     from services.scanners.base import Authorization as BaseAuthorization
 
     assert BaseAuthorization is SchemaAuthorization
+
+
+def test_authorization_rejects_blank_or_whitespace_authorizer() -> None:
+    for bad_auth in ["", "   ", "\t", "\n"]:
+        with pytest.raises(ValidationError, match="authorized_by"):
+            Authorization(
+                engagement_id="eng-001",
+                authorized_by=bad_auth,
+                allowlist=["172.20.0.0/16"],
+                granted_at=NOW,
+                expires_at=NOW + timedelta(hours=1),
+            )
+
+
+def test_authorization_strips_whitespace_from_authorizer() -> None:
+    auth = Authorization(
+        engagement_id="eng-001",
+        authorized_by="  Alice Smith  ",
+        allowlist=["172.20.0.0/16"],
+        granted_at=NOW,
+        expires_at=NOW + timedelta(hours=1),
+    )
+    assert auth.authorized_by == "Alice Smith"

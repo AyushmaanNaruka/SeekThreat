@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { useRouter } from "next/navigation";
 import Navbar from "../components/Navbar";
 import HeroHeader from "../components/HeroHeader";
 import LiveThreatFeed from "../components/LiveThreatFeed";
@@ -11,10 +12,11 @@ import ServerRacksBackground from "../components/ServerRacksBackground";
 import DemoModal from "../components/DemoModal";
 
 export default function HomePage() {
+  const router = useRouter();
   const [modalMode, setModalMode] = useState<"demo" | "explore" | "auth" | null>(null);
 
   const handleOpenDemo = () => setModalMode("demo");
-  const handleOpenExplore = () => setModalMode("explore");
+  const handleOpenExplore = () => router.push("/dashboard");
   const handleOpenAuth = () => setModalMode("auth");
   const handleCloseModal = () => setModalMode(null);
 

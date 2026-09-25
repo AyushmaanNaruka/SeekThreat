@@ -27,6 +27,14 @@ class CreateEngagementRequest(BaseModel):
     granted_at: datetime = Field(..., description="Start of authorization window (UTC)")
     expires_at: datetime = Field(..., description="End of authorization window (UTC)")
 
+    @field_validator("authorized_by")
+    @classmethod
+    def _reject_blank_authorizer(cls, value: str) -> str:
+        stripped = value.strip()
+        if not stripped:
+            raise ValueError("authorized_by must name a human, not be blank")
+        return stripped
+
     @field_validator("granted_at", "expires_at", mode="after")
     @classmethod
     def _reject_naive(cls, value: datetime) -> datetime:

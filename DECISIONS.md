@@ -47,6 +47,48 @@ Newest first.
 
 ---
 
+### D-024 — Pin Nuclei templates release archive in Docker image
+**Date:** 2026-09-25
+**Decided by:** Mayank (PR #15 review resolution)
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+Instead of executing `nuclei -ut` during Docker build (which fetches unversioned mutable templates from GitHub at build time), we pin an official immutable `nuclei-templates` release archive (v10.4.9) and verify its SHA-256 checksum during image build. A corresponding entry is maintained in `THIRD_PARTY.md`.
+
+**Why**
+Non-deterministic builds break reproducibility: two image builds created days apart would carry different vulnerability detection templates, causing evaluative testing and test suites to produce drift. Pinning the template archive ensures byte-identical scanner behavior across environments.
+
+**Impact on plan**
+Template updates become deliberate, reviewable PRs bumping `NUCLEI_TEMPLATES_VERSION` and `NUCLEI_TEMPLATES_SHA256` in `apps/api/Dockerfile`.
+
+**Cost if we're wrong**
+Low. Updating templates requires bumping the version and checksum in `apps/api/Dockerfile`.
+
+---
+
+### D-023 — Constrained scanner execution options and tag allowlists
+**Date:** 2026-09-25
+**Decided by:** Mayank (PR #15 review resolution)
+**Type:** Scope change
+**Status:** Active
+
+**Decision**
+Scanner execution options passed to `POST /scans` are strictly constrained at the adapter boundary:
+1. `NmapAdapter`: accepts only sanitized options (`ports` validated against `^[0-9,\-]+$`, `fast: bool`, `no_ping: bool`, `service_detection: bool`). Arbitrary CLI arguments remain rejected (per D-017).
+2. `NucleiAdapter`: accepts only approved non-destructive tags (`APPROVED_TAGS` allowlist), enforces exclusion backstop `-etags dos,intrusive,fuzz,bruteforce,rce,default-login` on every run (including runs with no `-tags`). `rce` and `default-login` are excluded because they send code-execution payloads or attempt authentication, and restricts template paths strictly to in-repo template directories (`services/scanners/nuclei_templates` and test fixtures) with path-traversal prevention.
+
+**Why**
+Preventing caller input from expanding scan boundaries or invoking destructive checks (e.g. DoS, brute force, exploit modules) is required by CLAUDE.md hard rule 4 (no autonomous exploitation, non-destructive checks only) and authorization gate determinism (D-017).
+
+**Impact on plan**
+Operators cannot run arbitrary custom templates or intrusive tags through the API/dashboard without explicit allowlisting in code.
+
+**Cost if we're wrong**
+Zero security risk. New safe tags or template directories can be added to the allowlist as needed.
+
+---
+
 ### D-022 — Correct `docs/00-scope.md`'s timeline to five months, November protected
 **Date:** 2026-09-20
 **Decided by:** Ayushmaan (confirmed with the team)

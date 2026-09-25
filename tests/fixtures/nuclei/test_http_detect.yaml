@@ -1,0 +1,16 @@
+id: test-http-detect
+
+info:
+  name: Local HTTP Detection Test
+  author: seekthreat
+  severity: info
+  description: Minimal local test fixture for SeekThreat Nuclei scanner tests
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers:
+      - type: status
+        status:
+          - 200

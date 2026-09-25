@@ -23,6 +23,10 @@ def target_matches(target: str, pattern: str) -> bool:
 
     Patterns are either an IP address, a CIDR block, a hostname, or a
     `*.domain` wildcard matching subdomains but not the apex.
+
+    The target is compared exactly as provided — no URL parsing, no DNS
+    resolution. Until proper URL target support is added (see DECISIONS.md),
+    callers must supply the exact string that will be scanned.
     """
     target = target.strip()
     pattern = pattern.strip()
@@ -81,9 +85,10 @@ class Authorization(BaseModel):
     @field_validator("authorized_by")
     @classmethod
     def _authorizer_is_named(cls, value: str) -> str:
-        if not value.strip():
+        stripped = value.strip()
+        if not stripped:
             raise ValueError("authorized_by must name a human, not be blank")
-        return value
+        return stripped
 
     @model_validator(mode="after")
     def _window_is_not_inverted(self) -> Authorization:

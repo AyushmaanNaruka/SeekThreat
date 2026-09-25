@@ -441,3 +441,151 @@ def test_failed_scan_raises_so_celery_records_failure(engine, seeded_scan, monke
 
     events = get_audit_log()
     assert any(e["event"] == "scan.failed" for e in events)
+
+
+# ---------------------------------------------------------------------------
+# Local fallback mode: self is None / background-thread execution
+# ---------------------------------------------------------------------------
+
+
+def test_local_fallback_scanner_exception_marks_failed_without_attribute_error(
+    engine, seeded_scan, monkeypatch
+) -> None:
+    """Local fallback catches scanner exceptions and does NOT crash on NoneType.retry.
+
+    Scenario:
+        local fallback (task=None)
+            ↓
+        execute scan
+            ↓
+        scanner raises exception
+            ↓
+        scan becomes FAILED
+            ↓
+        actual error is stored
+            ↓
+        NO AttributeError involving self.retry
+    """
+    from apps.api.tasks import scans as task_module
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    failing_adapter = MagicMock()
+    failing_adapter.is_available.return_value = True
+    failing_adapter.scan.side_effect = RuntimeError("nmap crash: segmentation fault in scanner")
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: failing_adapter)
+
+    # In local fallback mode, run_scan (or execute_scan with self=None) runs in a background thread
+    # and should NOT raise AttributeError: 'NoneType' object has no attribute 'retry'.
+    # It catches the exception, updates the record, and exits cleanly.
+    task_module.run_scan(
+        scan_id=scan_id,
+        engagement_id="eng-celery-test",
+        scanner="nmap",
+        target="172.20.1.50",
+        options={},
+        authorization_dict=auth_dict,
+        task=None,
+    )
+
+    db = factory()
+    scan = ScanRepository(db).get(scan_id)
+    db.close()
+
+    assert scan is not None
+    assert scan.status == "failed"
+    assert "RuntimeError: nmap crash: segmentation fault in scanner" in (scan.error_message or "")
+
+    events = get_audit_log()
+    failed_events = [e for e in events if e["event"] == "scan.failed"]
+    assert len(failed_events) == 1
+    assert failed_events[0]["status"] == "error"
+    assert failed_events[0]["details"]["celery_task_id"] is None
+
+
+def test_local_fallback_transient_error_marks_failed_without_retry(
+    engine, seeded_scan, monkeypatch
+) -> None:
+    """In local fallback mode (task=None), transient errors skip Celery retry and mark
+    scan failed.
+    """
+    from apps.api.tasks import scans as task_module
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    flaky_adapter = MagicMock()
+    flaky_adapter.is_available.return_value = True
+    flaky_adapter.scan.side_effect = ConnectionError("Connection refused by target socket")
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: flaky_adapter)
+
+    # Call execute_scan with self=None
+    task_module.execute_scan.run.__func__(
+        None,
+        scan_id=scan_id,
+        engagement_id="eng-celery-test",
+        scanner="nmap",
+        target="172.20.1.50",
+        options={},
+        authorization_dict=auth_dict,
+    )
+
+    db = factory()
+    scan = ScanRepository(db).get(scan_id)
+    db.close()
+
+    assert scan is not None
+    assert scan.status == "failed"
+    assert "ConnectionError: Connection refused by target socket" in (scan.error_message or "")
+
+
+def test_local_fallback_happy_path_completes(engine, seeded_scan, monkeypatch) -> None:
+    """Local fallback mode completes successfully when scanner succeeds."""
+    from apps.api.tasks import scans as task_module
+    from packages.schema.models.observation import RawArtifact, ScanResult
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    fake_artifact = RawArtifact(
+        artifact_id="sha256-" + "b" * 58,
+        scanner="nmap",
+        content=b"<nmaprun/>",
+        content_type="application/xml",
+        captured_at=datetime.now(UTC),
+    )
+    fake_result = ScanResult(artifact=fake_artifact, observations=())
+
+    mock_adapter = MagicMock()
+    mock_adapter.is_available.return_value = True
+    mock_adapter.scan.return_value = fake_result
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: mock_adapter)
+
+    task_module.run_scan(
+        scan_id=scan_id,
+        engagement_id="eng-celery-test",
+        scanner="nmap",
+        target="172.20.1.50",
+        options={},
+        authorization_dict=auth_dict,
+        task=None,
+    )
+
+    db = factory()
+    scan = ScanRepository(db).get(scan_id)
+    db.close()
+
+    assert scan is not None
+    assert scan.status == "completed"
+    assert scan.artifact_id == fake_artifact.artifact_id
+    assert scan.completed_at is not None
+
+    events = get_audit_log()
+    completed_events = [e for e in events if e["event"] == "scan.completed"]
+    assert len(completed_events) == 1
+    assert completed_events[0]["status"] == "completed"
+    assert completed_events[0]["details"]["celery_task_id"] is None

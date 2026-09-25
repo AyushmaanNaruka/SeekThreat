@@ -45,6 +45,13 @@ def _auth(
         ("lab.local", "172.20.0.0/16", False),
         # An IP never matches a hostname pattern.
         ("172.20.1.10", "lab.local", False),
+        # A target must be a single host: a range equal to the allowlist entry
+        # is not itself a permitted target.
+        ("172.20.1.0/24", "172.20.1.0/24", False),
+        # URLs are never parsed down to a host (parser-differential bypasses).
+        ("http://evil.example\\@172.20.1.10/", "172.20.1.0/24", False),
+        ("https://attacker.com@172.20.1.10", "172.20.1.0/24", False),
+        ("http://172.20.1.10:8080", "172.20.1.0/24", False),
     ],
 )
 def test_target_matches(target: str, pattern: str, expected: bool) -> None:
