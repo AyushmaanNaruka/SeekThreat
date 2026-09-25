@@ -40,7 +40,6 @@ from packages.schema.models.engagement import Authorization, ScanRequest
 from services.scanners.base import AuthorizationError, ScannerAdapter, ScannerUnavailableError
 from services.scanners.nmap_adapter import NmapAdapter
 from services.scanners.nuclei_adapter import NucleiAdapter
-from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
@@ -63,12 +62,11 @@ def run_scan(
     options: dict[str, Any],
     authorization_dict: dict[str, Any],
     task: Any = None,
-    db: Session | None = None,
 ) -> None:
     """Execute a scan and persist the results.
 
-    Can be invoked directly in local fallback mode (task=None) or by the
-    Celery task worker (task=self).
+    Invoked by the Celery task worker (task=self). Opens its own database
+    session via ``SessionLocal()`` and closes it on exit.
 
     Args:
         scan_id: Unique identifier of the pending scan record.
@@ -78,18 +76,11 @@ def run_scan(
         options: Scanner-specific execution options.
         authorization_dict: JSON-safe representation of the
             ``Authorization`` record.
-        task: Optional Celery task instance. If provided and supporting
-            Celery retry semantics, retry behavior is used for transient errors
-            and the exception is re-raised on failure so Celery marks task failure.
-            If None (or local thread fallback mode), errors mark the scan as
-            failed with the actual error message and the thread exits cleanly.
-        db: Optional database session. If not provided, a worker-owned session
-            is created via ``SessionLocal()`` and closed on exit.
+        task: Optional Celery task instance. When provided, transient errors
+            are retried and the exception is re-raised on final failure so
+            Celery marks the task as FAILURE.
     """
-    owns_db = False
-    if db is None:
-        db = SessionLocal()
-        owns_db = True
+    db = SessionLocal()
 
     scan_repo = ScanRepository(db)
     actor = (
@@ -127,7 +118,8 @@ def run_scan(
         # non-retried error instead of an opaque OSError retried four times.
         if not adapter.is_available():
             raise ScannerUnavailableError(
-                f"Scanner {scanner!r} is not installed or not runnable in this environment."
+                f"Scanner {scanner!r} is not installed or not runnable "
+                "in this environment."
             )
 
         scan_result = adapter.scan(request)
@@ -217,8 +209,7 @@ def run_scan(
         if is_celery:
             raise
     finally:
-        if owns_db:
-            db.close()
+        db.close()
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]  # celery ships no type stubs for .task()

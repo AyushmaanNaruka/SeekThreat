@@ -15,7 +15,7 @@ from packages.schema.models.observation import Observation, ObservationKind, Raw
 from packages.schema.models.provenance import Provenance
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite.
-JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
+JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[no-untyped-call]
 
 
 def _aware(value: datetime) -> datetime:

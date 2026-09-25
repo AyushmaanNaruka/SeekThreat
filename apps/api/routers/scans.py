@@ -18,14 +18,14 @@ from apps.api.db.repositories import (
     ObservationRepository,
     ScanRepository,
 )
-from apps.api.db.session import get_db, get_session_factory
+from apps.api.db.session import get_db
 from apps.api.routers.observations import (
     DEFAULT_LIMIT,
     MAX_LIMIT,
     ObservationListResponse,
     ObservationResponse,
 )
-from apps.api.tasks.scans import execute_scan, run_scan
+from apps.api.tasks.scans import execute_scan
 from packages.schema.models.observation import ObservationKind
 
 logger = logging.getLogger(__name__)
@@ -103,9 +103,10 @@ def create_scan(
     db.commit()
 
     # 3. Dispatch Celery task — authorization serialized as JSON-safe dict.
-    # The scan row is already committed, so an unguarded dispatch failure (a
-    # broker outage, say) would leave it at 'pending' forever with nothing
-    # scheduled to advance it, and hand the caller a 500.
+    # If the broker is unavailable, mark the scan failed and return 503.
+    # The scan.dispatch_failed audit event is logged so every failure is
+    # traceable. The worker container is the one attached to the lab network;
+    # the API container must never scan anything.
     try:
         execute_scan.delay(
             scan_id,
@@ -116,34 +117,35 @@ def create_scan(
             auth.model_dump(mode="json"),
         )
     except Exception as exc:
-        logger.warning(
-            "Celery queue unavailable (%s); executing scan %s in background worker thread.",
-            exc,
+        error_msg = f"Dispatch failed: {exc}"
+        logger.error(
+            "Celery broker unavailable; scan %s not dispatched: %s",
             scan_id,
+            exc,
         )
-        import threading
-
-        session_factory = get_session_factory(db.get_bind())
-
-        def _run_bg() -> None:
-            thread_db = session_factory()
-            try:
-                run_scan(
-                    scan_id=scan_id,
-                    engagement_id=payload.engagement_id,
-                    scanner=payload.scanner,
-                    target=payload.target,
-                    options=payload.options,
-                    authorization_dict=auth.model_dump(mode="json"),
-                    db=thread_db,
-                )
-            except Exception as thread_exc:
-                logger.error("Background scan execution error for %s: %s", scan_id, thread_exc)
-            finally:
-                thread_db.close()
-
-        t = threading.Thread(target=_run_bg, daemon=True)
-        t.start()
+        try:
+            scan_repo.update_status(
+                scan_id=scan_id,
+                status="failed",
+                error_message=error_msg,
+                completed_at=datetime.now(UTC),
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
+        log_audit_event(
+            event="scan.dispatch_failed",
+            actor=auth.authorized_by,
+            target=payload.target,
+            engagement_id=payload.engagement_id,
+            scanner=payload.scanner,
+            status="error",
+            details={"scan_id": scan_id, "error": error_msg},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Scan queue unavailable; the scan was not dispatched.",
+        ) from exc
 
     return ScanStatusResponse(
         scan_id=scan.scan_id,
@@ -246,8 +248,11 @@ def get_scan_observations(
     summary="List scans for an engagement or all scans",
 )
 def list_scans(
-    engagement_id: str | None = Query(None, description="Optional filter scans by engagement ID"),
-    limit: int | None = Query(None, ge=1, le=500, description="Max number of scans to return"),
+    engagement_id: str | None = Query(
+        None, description="Optional filter scans by engagement ID"
+    ),
+    limit: int = Query(50, ge=1, le=500, description="Max number of scans to return"),
+    offset: int = Query(0, ge=0, description="Number of scans to skip"),
     db: Session = Depends(get_db),
 ) -> list[ScanStatusResponse]:
     """Return all scans recorded for an engagement or across all engagements."""
@@ -256,7 +261,7 @@ def list_scans(
     if engagement_id:
         scans = scan_repo.list_by_engagement(engagement_id)
     else:
-        scans = scan_repo.list_all(limit=limit)
+        scans = scan_repo.list_all(limit=limit, offset=offset)
 
     results = []
     for s in scans:

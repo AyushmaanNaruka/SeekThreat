@@ -23,6 +23,10 @@ def target_matches(target: str, pattern: str) -> bool:
 
     Patterns are either an IP address, a CIDR block, a hostname, or a
     `*.domain` wildcard matching subdomains but not the apex.
+
+    The target is compared exactly as provided — no URL parsing, no DNS
+    resolution. Until proper URL target support is added (see DECISIONS.md),
+    callers must supply the exact string that will be scanned.
     """
     target = target.strip()
     pattern = pattern.strip()
@@ -32,53 +36,30 @@ def target_matches(target: str, pattern: str) -> bool:
     if target.lower() == pattern.lower():
         return True
 
-    # Extract hostname/IP from URL or host:port if provided as target
-    host_target = target
-    if "://" in host_target:
-        from urllib.parse import urlsplit
-        host_target = urlsplit(host_target).hostname or host_target
-    elif ":" in host_target and not host_target.startswith("["):
-        parts = host_target.split(":")
-        if len(parts) == 2 and parts[1].isdigit():
-            host_target = parts[0]
-
-    # Extract hostname/IP from URL or host:port if provided as pattern
-    host_pattern = pattern
-    if "://" in host_pattern:
-        from urllib.parse import urlsplit
-        host_pattern = urlsplit(host_pattern).hostname or host_pattern
-    elif ":" in host_pattern and not host_pattern.startswith("["):
-        parts = host_pattern.split(":")
-        if len(parts) == 2 and parts[1].isdigit():
-            host_pattern = parts[0]
-
-    if host_target.lower() == host_pattern.lower():
-        return True
-
     try:
-        network = ipaddress.ip_network(host_pattern, strict=False)
+        network = ipaddress.ip_network(pattern, strict=False)
     except ValueError:
         network = None
 
     if network is not None:
         try:
-            return ipaddress.ip_address(host_target) in network
+            return ipaddress.ip_address(target) in network
         except ValueError:
             # A hostname is never resolved to compare against a network.
             return False
 
     # Pattern is a hostname. An IP target never matches one.
     try:
-        ipaddress.ip_address(host_target)
+        ipaddress.ip_address(target)
     except ValueError:
         pass
     else:
         return False
 
-    if host_pattern.startswith("*."):
-        return fnmatchcase(host_target.lower(), host_pattern.lower())
+    if pattern.startswith("*."):
+        return fnmatchcase(target.lower(), pattern.lower())
 
-    return host_target.lower() == host_pattern.lower()
+    return target.lower() == pattern.lower()
 
 
 class Authorization(BaseModel):
@@ -107,9 +88,10 @@ class Authorization(BaseModel):
     @field_validator("authorized_by")
     @classmethod
     def _authorizer_is_named(cls, value: str) -> str:
-        if not value.strip():
+        stripped = value.strip()
+        if not stripped:
             raise ValueError("authorized_by must name a human, not be blank")
-        return value
+        return stripped
 
     @model_validator(mode="after")
     def _window_is_not_inverted(self) -> Authorization:

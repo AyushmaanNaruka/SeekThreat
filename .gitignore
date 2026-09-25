@@ -41,6 +41,3 @@ models/
 !packages/schema/models/
 !packages/schema/models/**
 packages/schema/models/**/__pycache__/
-
-# Local vendor binaries
-vendor/bin/

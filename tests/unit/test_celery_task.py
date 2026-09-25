@@ -451,7 +451,7 @@ def test_failed_scan_raises_so_celery_records_failure(engine, seeded_scan, monke
 def test_local_fallback_scanner_exception_marks_failed_without_attribute_error(
     engine, seeded_scan, monkeypatch
 ) -> None:
-    """Local fallback mode catches scanner exceptions, records error, and does NOT crash on NoneType.retry.
+    """Local fallback catches scanner exceptions and does NOT crash on NoneType.retry.
 
     Scenario:
         local fallback (task=None)
@@ -508,7 +508,9 @@ def test_local_fallback_scanner_exception_marks_failed_without_attribute_error(
 def test_local_fallback_transient_error_marks_failed_without_retry(
     engine, seeded_scan, monkeypatch
 ) -> None:
-    """In local fallback mode (task=None), transient errors are not retried via Celery and cleanly mark scan failed."""
+    """In local fallback mode (task=None), transient errors skip Celery retry and mark
+    scan failed.
+    """
     from apps.api.tasks import scans as task_module
 
     scan_id, auth_dict = seeded_scan

@@ -22,14 +22,17 @@ def _settings_with_env(monkeypatch, **env: str) -> config_module.Settings:
     return config_module.Settings(_env_file=None)
 
 
+_PSYCOPG_URL = (
+    "postgresql+psycopg://seekthreat:changeme@postgres:5432/seekthreat"
+)
+
+
 def test_env_database_url_gets_psycopg_driver(monkeypatch) -> None:
     settings = _settings_with_env(
         monkeypatch,
         DATABASE_URL="postgresql://seekthreat:changeme@postgres:5432/seekthreat",
     )
-    assert (
-        settings.database_url == "postgresql+psycopg://seekthreat:changeme@postgres:5432/seekthreat"
-    )
+    assert settings.database_url == _PSYCOPG_URL
 
 
 def test_env_postgres_scheme_database_url_gets_psycopg_driver(monkeypatch) -> None:
@@ -37,9 +40,7 @@ def test_env_postgres_scheme_database_url_gets_psycopg_driver(monkeypatch) -> No
         monkeypatch,
         DATABASE_URL="postgres://seekthreat:changeme@postgres:5432/seekthreat",
     )
-    assert (
-        settings.database_url == "postgresql+psycopg://seekthreat:changeme@postgres:5432/seekthreat"
-    )
+    assert settings.database_url == _PSYCOPG_URL
 
 
 def test_env_database_url_already_normalized_is_unchanged(monkeypatch) -> None:
@@ -47,9 +48,7 @@ def test_env_database_url_already_normalized_is_unchanged(monkeypatch) -> None:
         monkeypatch,
         DATABASE_URL="postgresql+psycopg://seekthreat:changeme@postgres:5432/seekthreat",
     )
-    assert (
-        settings.database_url == "postgresql+psycopg://seekthreat:changeme@postgres:5432/seekthreat"
-    )
+    assert settings.database_url == _PSYCOPG_URL
 
 
 def test_default_database_url_is_normalized(monkeypatch) -> None:

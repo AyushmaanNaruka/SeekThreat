@@ -336,13 +336,22 @@ export default function DashboardPage() {
       const payload: CreateEngagementPayload = {
         engagement_id:
           createForm.engagement_id.trim() ||
-          `eng-${Math.floor(100 + Math.random() * 900)}`,
-        name: createForm.name.trim() || "Assessment Scope",
-        authorized_by: createForm.authorized_by.trim() || "Security Officer",
+          `eng-${crypto.randomUUID().slice(0, 8)}`,
+        name: createForm.name.trim(),
+        authorized_by: createForm.authorized_by.trim(),
         allowlist: allowlistArr,
         granted_at: granted,
         expires_at: expires,
       };
+
+      if (!payload.name) {
+        throw new Error("Assessment name is required.");
+      }
+      if (!payload.authorized_by) {
+        throw new Error(
+          "Authorized By is required. Every engagement must name a real human authorizer."
+        );
+      }
 
       const created = await api.createEngagement(payload);
       setShowCreateModal(false);
@@ -623,20 +632,27 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            {/* System Online Badge */}
+            {/* API Reachability Badge */}
             <div className="db-online-badge">
-              <span className="db-pulse-dot" />
-              <span>{loading ? "Syncing..." : "Backend Connected"}</span>
+              <span
+                className="db-pulse-dot"
+                style={{
+                  background: loading
+                    ? "#D9B85C"
+                    : apiError
+                    ? "#E56B73"
+                    : "#20D6A3",
+                }}
+              />
+              <span>
+                {loading
+                  ? "Syncing..."
+                  : apiError
+                  ? "API unreachable"
+                  : "API reachable"}
+              </span>
             </div>
 
-            {/* User Profile */}
-            <div className="db-user-pill">
-              <div className="db-user-avatar">MN</div>
-              <span className="db-user-name">Mayank Narang</span>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#7B8A8D" strokeWidth="2">
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
-            </div>
           </div>
         </header>
 
@@ -1521,18 +1537,34 @@ export default function DashboardPage() {
                           padding: "0.5rem 0.75rem",
                           display: "flex",
                           justifyContent: "space-between",
-                          alignItems: "center",
+                          alignItems: "flex-start",
                         }}
                       >
-                        <div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontWeight: 600, color: "#20D6A3", fontSize: "0.76rem" }}>
                             {obs.kind.toUpperCase()} — {obs.subject}
                           </div>
-                          <div style={{ fontSize: "0.7rem", color: "#7B8A8D", fontFamily: "monospace" }}>
+                          <div style={{ fontSize: "0.7rem", color: "#7B8A8D", fontFamily: "monospace", marginTop: "0.2rem" }}>
                             {JSON.stringify(obs.attributes)}
                           </div>
+                          {obs.provenance && (
+                            <div style={{ fontSize: "0.68rem", color: "#9BA6A8", marginTop: "0.25rem", display: "flex", gap: "0.75rem" }}>
+                              <span>
+                                Source:{" "}
+                                <span style={{ color: "#C5D0D3", fontWeight: 500 }}>
+                                  {obs.provenance.source}
+                                </span>
+                              </span>
+                              <span>
+                                Confidence:{" "}
+                                <span style={{ color: "#C5D0D3", fontWeight: 500 }}>
+                                  {obs.provenance.confidence}
+                                </span>
+                              </span>
+                            </div>
+                          )}
                         </div>
-                        <span style={{ fontSize: "0.68rem", color: "#7B8A8D" }}>
+                        <span style={{ fontSize: "0.68rem", color: "#7B8A8D", marginLeft: "0.75rem", whiteSpace: "nowrap" }}>
                           {formatDateStr(obs.observed_at)}
                         </span>
                       </div>

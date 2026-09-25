@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import subprocess
-import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -14,9 +13,22 @@ from packages.schema.models.engagement import Authorization, ScanRequest
 from services.scanners.nuclei_adapter import NucleiAdapter
 
 NOW = datetime.now(UTC)
-FIXTURE_TEMPLATE = Path(__file__).resolve().parents[1] / "fixtures" / "nuclei" / "test_http_detect.yaml"
+FIXTURE_TEMPLATE = (
+    Path(__file__).resolve().parents[1]
+    / "fixtures"
+    / "nuclei"
+    / "test_http_detect.yaml"
+)
 
-MINIMAL_JSONL = b'{"template-id":"test-http-detect","info":{"name":"Local HTTP Detection Test","author":["seekthreat"],"tags":[],"severity":"info"},"type":"http","host":"http://127.0.0.1:8799","matched-at":"http://127.0.0.1:8799/","extracted-results":["200"],"timestamp":"2026-09-22T10:00:00.000000Z"}\n'
+MINIMAL_JSONL = (
+    b'{"template-id":"test-http-detect"'
+    b',"info":{"name":"Local HTTP Detection Test"'
+    b',"author":["seekthreat"],"tags":[],"severity":"info"}'
+    b',"type":"http","host":"http://127.0.0.1:8799"'
+    b',"matched-at":"http://127.0.0.1:8799/"'
+    b',"extracted-results":["200"]'
+    b',"timestamp":"2026-09-22T10:00:00.000000Z"}\n'
+)
 
 
 def _authorization(target: str = "http://127.0.0.1:8799") -> Authorization:
@@ -30,7 +42,7 @@ def _authorization(target: str = "http://127.0.0.1:8799") -> Authorization:
 
 
 def test_local_template_command_construction() -> None:
-    """Test 1: When a local template is supplied, the generated command contains the resolved local template path."""
+    """Test 1: Verify that a local template path produces the resolved path in the command."""
     adapter = NucleiAdapter()
     req = ScanRequest(
         target="http://127.0.0.1:8799",
@@ -59,7 +71,7 @@ def test_local_template_command_construction() -> None:
 
 
 def test_nuclei_command_passes_no_stdin_and_closes_subprocess_stdin() -> None:
-    """Regression test: NucleiAdapter must pass -no-stdin flag and stdin=subprocess.DEVNULL to prevent stdin hangs."""
+    """Regression test: -no-stdin flag and stdin=DEVNULL must both be set to prevent hangs."""
     import subprocess
     adapter = NucleiAdapter()
     req = ScanRequest(
@@ -81,7 +93,7 @@ def test_nuclei_command_passes_no_stdin_and_closes_subprocess_stdin() -> None:
 
 
 def test_relative_local_template_path_is_resolved() -> None:
-    """Test 2: Relative local template path is resolved and not dependent on remote repository."""
+    """Test 2: Relative local template path is resolved relative to repo root."""
     adapter = NucleiAdapter()
     req = ScanRequest(
         target="http://127.0.0.1:8799",
@@ -144,7 +156,7 @@ def test_tags_option_passes_tags_flag() -> None:
 
 
 def test_missing_local_template_fails_cleanly() -> None:
-    """Test 5: Missing or invalid local template file path raises ValueError immediately without hanging or network fetch."""
+    """Test 5: Missing template raises ValueError without hanging or network fetch."""
     adapter = NucleiAdapter()
     req = ScanRequest(
         target="http://127.0.0.1:8799",
@@ -177,3 +189,47 @@ def test_successful_local_nuclei_execution_flow() -> None:
         obs = res.observations[0]
         assert obs.attributes["template_id"] == "test-http-detect"
         assert obs.subject == "http://127.0.0.1:8799/"
+
+
+def test_etags_exclude_destructive_checks_always_passed() -> None:
+    """Exclude-tags flag is always passed to ensure non-destructive scanning."""
+    adapter = NucleiAdapter()
+    req = ScanRequest(
+        target="http://127.0.0.1:8799",
+        authorization=_authorization(),
+        options={},
+    )
+    mock_res = MagicMock()
+    mock_res.stdout = MINIMAL_JSONL
+    with patch("subprocess.run", return_value=mock_res) as mock_run:
+        adapter.scan(req)
+        cmd = mock_run.call_args[0][0]
+        assert "-etags" in cmd
+        assert cmd[cmd.index("-etags") + 1] == "dos,intrusive,fuzz,bruteforce"
+
+
+def test_unapproved_tags_rejected() -> None:
+    """Tags outside the approved allowlist (e.g. dos, intrusive) raise ValueError."""
+    adapter = NucleiAdapter()
+    for bad_tag in ["dos", "intrusive", "bruteforce", "custom_exploit"]:
+        req = ScanRequest(
+            target="http://127.0.0.1:8799",
+            authorization=_authorization(),
+            options={"tags": bad_tag},
+        )
+        with pytest.raises(ValueError, match="not in approved tags allowlist"):
+            adapter.scan(req)
+
+
+def test_template_outside_allowed_directories_rejected() -> None:
+    """Templates outside the approved repo template directories raise ValueError."""
+    adapter = NucleiAdapter()
+    for bad_template in ["../outside.yaml", "/etc/passwd", "services/graph/rules.yaml"]:
+        req = ScanRequest(
+            target="http://127.0.0.1:8799",
+            authorization=_authorization(),
+            options={"template": bad_template},
+        )
+        with pytest.raises(ValueError, match="outside allowed template directories"):
+            adapter.scan(req)
+

@@ -8,6 +8,7 @@ Keep it that way.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 from datetime import datetime
@@ -15,32 +16,28 @@ from datetime import datetime
 from .base import Observation, RawArtifact, ScannerAdapter, ScanRequest
 from .nmap_xml import parse_nmap_xml, parse_run_timestamp
 
-
 DEFAULT_PORTS = "22,80,443,8000,8080"
+PORTS_REGEX = re.compile(r"^(?:-p-|[0-9,\-]+)$")
 
 
 def _resolve_nmap_bin() -> str | None:
-    found = shutil.which("nmap")
-    if found:
-        return found
-    from pathlib import Path
-    repo_root = Path(__file__).resolve().parents[2]
-    candidates = [
-        repo_root / "vendor" / "bin" / "nmap.exe",
-        repo_root / "vendor" / "bin" / "nmap",
-        Path(r"C:\Program Files (x86)\Nmap\nmap.exe"),
-        Path(r"C:\Program Files\Nmap\nmap.exe"),
-    ]
-    for c in candidates:
-        if c.is_file():
-            return str(c)
-    return None
+    from apps.api.core.config import settings
+    if settings.nmap_path:
+        from pathlib import Path
+        p = Path(settings.nmap_path)
+        if p.is_file():
+            return str(p)
+    return shutil.which("nmap")
 
 
 class NmapAdapter(ScannerAdapter):
     name = "nmap"
-    version_command = ["nmap", "--version"]
     content_type = "application/xml"
+
+    @property
+    def version_command(self) -> list[str]:  # type: ignore[override]
+        exe = _resolve_nmap_bin() or "nmap"
+        return [exe, "--version"]
 
     def is_available(self) -> bool:
         return _resolve_nmap_bin() is not None
@@ -59,8 +56,14 @@ class NmapAdapter(ScannerAdapter):
             cmd.append("-sV")  # service/version detection
         cmd.append("-T4")  # faster timing
 
-        if "ports" in request.options and isinstance(request.options["ports"], str) and request.options["ports"].strip():
-            cmd.extend(["-p", request.options["ports"].strip()])
+        ports_opt = request.options.get("ports", "")
+        if isinstance(ports_opt, str) and ports_opt.strip():
+            clean_ports = ports_opt.strip()
+            if not PORTS_REGEX.match(clean_ports):
+                raise ValueError(
+                    f"Invalid ports option {clean_ports!r}: must match ^[0-9,\\-]+$"
+                )
+            cmd.extend(["-p", clean_ports])
         elif request.options.get("fast", False):
             cmd.append("-F")
         else:

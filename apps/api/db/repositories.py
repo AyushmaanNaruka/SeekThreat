@@ -338,9 +338,11 @@ class ScanRepository:
         )
         return list(self.session.scalars(stmt).all())
 
-    def list_all(self, limit: int | None = None) -> list[ScanModel]:
-        """List all scans ordered newest first, optionally limited."""
+    def list_all(self, limit: int | None = None, offset: int = 0) -> list[ScanModel]:
+        """List all scans ordered newest first, optionally limited and paged."""
         stmt = select(ScanModel).order_by(ScanModel.created_at.desc())
+        if offset:
+            stmt = stmt.offset(offset)
         if limit is not None:
             stmt = stmt.limit(limit)
         return list(self.session.scalars(stmt).all())

@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
 import time
 from datetime import UTC, datetime, timedelta
-from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,7 +28,8 @@ MINIMAL_XML = b"""<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE nmaprun>
 <nmaprun scanner="nmap" start="1700000000" version="7.92">
 <host><status state="up" reason="syn-ack"/><address addr="127.0.0.1" addrtype="ipv4"/>
-<ports><port protocol="tcp" portid="8000"><state state="open" reason="syn-ack"/><service name="http" method="table"/></port></ports>
+<ports><port protocol="tcp" portid="8000"><state state="open" reason="syn-ack"/>
+<service name="http" method="table"/></port></ports>
 </host>
 <runstats><finished time="1700000010"/></runstats>
 </nmaprun>
@@ -166,3 +165,19 @@ def test_real_nmap_smoke_test_fast_ports() -> None:
     assert res.artifact.content_type == "application/xml"
     assert res.artifact.content.startswith("<?xml") or "<nmaprun" in res.artifact.content
     assert duration < 20.0, f"Real Nmap smoke test took too long: {duration:.2f}s"
+
+
+def test_invalid_ports_option_rejected() -> None:
+    """Invalid ports options that don't match ^[0-9,\\-]+$ raise ValueError."""
+    adapter = NmapAdapter()
+    for bad_port in ["80; rm -rf /", "80 foo", "http", ""]:
+        if not bad_port:
+            continue
+        req = ScanRequest(
+            target="127.0.0.1",
+            authorization=_authorization(),
+            options={"ports": bad_port},
+        )
+        with pytest.raises(ValueError, match="Invalid ports option"):
+            adapter.scan(req)
+

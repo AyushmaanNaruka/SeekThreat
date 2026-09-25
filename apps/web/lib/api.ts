@@ -46,6 +46,12 @@ export interface CreateScanPayload {
   options?: Record<string, any>;
 }
 
+export interface ObservationProvenance {
+  source: string;
+  confidence: string;
+  retrieved_at: string;
+}
+
 export interface ObservationItem {
   observation_id: string;
   engagement_id: string;
@@ -55,6 +61,7 @@ export interface ObservationItem {
   attributes: Record<string, any>;
   artifact_id: string;
   observed_at: string;
+  provenance: ObservationProvenance | null;
 }
 
 export interface ObservationListResponse {

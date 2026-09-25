@@ -9,31 +9,58 @@ from __future__ import annotations
 import shutil
 import subprocess
 from datetime import datetime
+from pathlib import Path
 
 from .base import Observation, RawArtifact, ScannerAdapter, ScanRequest
 from .nuclei_json import parse_nuclei_json, parse_run_timestamp
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ALLOWED_TEMPLATE_DIRS = (
+    (REPO_ROOT / "services" / "scanners" / "nuclei_templates").resolve(),
+    (REPO_ROOT / "tests" / "fixtures" / "nuclei").resolve(),
+)
+
+APPROVED_TAGS = frozenset({
+    "cve",
+    "rce",
+    "tech",
+    "panel",
+    "ssl",
+    "dns",
+    "exposure",
+    "misconfig",
+    "config",
+    "default-login",
+    "token",
+    "network",
+    "http",
+    "info",
+    "low",
+    "medium",
+    "high",
+    "critical",
+})
+EXCLUDE_TAGS = "dos,intrusive,fuzz,bruteforce"
+
 
 def _resolve_nuclei_bin() -> str | None:
-    found = shutil.which("nuclei")
-    if found:
-        return found
-    from pathlib import Path
-    repo_root = Path(__file__).resolve().parents[2]
-    candidates = [
-        repo_root / "vendor" / "bin" / "nuclei.exe",
-        repo_root / "vendor" / "bin" / "nuclei",
-    ]
-    for c in candidates:
-        if c.is_file():
-            return str(c)
-    return None
+    from apps.api.core.config import settings
+
+    if settings.nuclei_path:
+        p = Path(settings.nuclei_path)
+        if p.is_file():
+            return str(p)
+    return shutil.which("nuclei")
 
 
 class NucleiAdapter(ScannerAdapter):
     name = "nuclei"
-    version_command = ["nuclei", "-version"]
     content_type = "application/x-ndjson"
+
+    @property
+    def version_command(self) -> list[str]:  # type: ignore[override]
+        exe = _resolve_nuclei_bin() or "nuclei"
+        return [exe, "-version"]
 
     def is_available(self) -> bool:
         return _resolve_nuclei_bin() is not None
@@ -53,23 +80,40 @@ class NucleiAdapter(ScannerAdapter):
             "-duc",
             "-ni",
             "-no-stdin",
+            "-etags",
+            EXCLUDE_TAGS,
         ]
         template_opt = request.options.get("template") or request.options.get("templates")
-        if "tags" in request.options and isinstance(request.options["tags"], str) and request.options["tags"].strip():
-            cmd.extend(["-tags", request.options["tags"].strip()])
+        tags_opt = request.options.get("tags")
+        if tags_opt and isinstance(tags_opt, str) and tags_opt.strip():
+            raw_tags = [t.strip().lower() for t in tags_opt.split(",") if t.strip()]
+            for tag in raw_tags:
+                if tag not in APPROVED_TAGS:
+                    raise ValueError(
+                        f"Nuclei tag {tag!r} is not in approved tags allowlist: "
+                        f"{sorted(APPROVED_TAGS)}"
+                    )
+            cmd.extend(["-tags", ",".join(raw_tags)])
         elif template_opt and isinstance(template_opt, str) and template_opt.strip():
             t_str = template_opt.strip()
-            from pathlib import Path
-            repo_root = Path(__file__).resolve().parents[2]
-            p = Path(t_str)
-            if p.exists():
-                cmd.extend(["-t", str(p.resolve())])
-            elif (repo_root / t_str).exists():
-                cmd.extend(["-t", str((repo_root / t_str).resolve())])
-            elif t_str.endswith((".yaml", ".yml")) or "/" in t_str or "\\" in t_str:
-                raise ValueError(f"Nuclei template not found: {t_str}")
+            candidate = Path(t_str)
+            if not candidate.is_absolute():
+                candidate = (REPO_ROOT / candidate).resolve()
             else:
-                cmd.extend(["-t", t_str])
+                candidate = candidate.resolve()
+
+            is_allowed = any(
+                candidate.is_relative_to(allowed_dir)
+                for allowed_dir in ALLOWED_TEMPLATE_DIRS
+            )
+            if not is_allowed:
+                raise ValueError(
+                    f"Nuclei template path {t_str!r} is outside allowed template directories"
+                )
+            if not candidate.is_file():
+                raise ValueError(f"Nuclei template not found: {t_str}")
+
+            cmd.extend(["-t", str(candidate)])
 
         result = subprocess.run(
             cmd,
