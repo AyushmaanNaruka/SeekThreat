@@ -12,11 +12,19 @@ Design & Scoping:
     or JSON record, every ID is content-addressed sha256, and observations are returned
     in a deterministic sort order.
   - Safely handles both JSON Lines (one JSON object per line) and top-level JSON arrays.
+  - Reads the field set nuclei v3 actually emits. For HTTP templates that is a bare
+    `host` plus separate `port`/`scheme`/`url` keys, NOT a URL in `host`; network
+    templates put `host:port` in `host`. Both shapes are normalised into an
+    `endpoint` attribute spelled exactly like nmap's port subject
+    (`<host>:<port>/tcp`, IPv6 bracketed) so a vuln_candidate can be joined to the
+    port_open / service_version facts for the same listener. Without that key the
+    graph layer has nothing to attach a nuclei finding to.
 """
 
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import re
 from datetime import UTC, datetime
@@ -85,12 +93,21 @@ def parse_nuclei_json(artifact: RawArtifact, engagement_id: str) -> tuple[Observ
         if not isinstance(info, dict):
             info = {}
 
-        # Subject determination: matched-at > host > ip > unknown
+        # A record whose matcher did not fire is not a finding. nuclei only emits
+        # these when asked to report match failures, but an absent key must stay
+        # truthy-by-default: real findings carry "matcher-status": true.
+        if record.get("matcher-status") is False:
+            continue
+
+        # Subject determination: matched-at > url > host > ip > unknown
         matched_at = record.get("matched-at") or record.get("matched") or ""
+        url = record.get("url") or ""
         host = record.get("host") or ""
         ip = record.get("ip") or ""
+        port = record.get("port") or ""
+        scheme = record.get("scheme") or ""
 
-        subject_candidate = matched_at or host or ip or "unknown"
+        subject_candidate = matched_at or url or host or ip or "unknown"
         subject = _sanitize(str(subject_candidate))
 
         # Timestamp for this observation
@@ -123,6 +140,33 @@ def parse_nuclei_json(artifact: RawArtifact, engagement_id: str) -> tuple[Observ
             attrs["matched_at"] = _sanitize(str(matched_at))
         if ip:
             attrs["ip"] = _sanitize(str(ip))
+        if url:
+            attrs["url"] = _sanitize(str(url))
+        if scheme:
+            attrs["scheme"] = _sanitize(str(scheme).lower())
+        if port:
+            attrs["port"] = _sanitize(str(port))
+
+        # Join key back to nmap's port facts. See module docstring.
+        endpoint = _endpoint(
+            host=str(host),
+            ip=str(ip),
+            port=str(port),
+            url=str(url),
+            record_type=str(record.get("type") or ""),
+        )
+        if endpoint:
+            attrs["endpoint"] = _sanitize(endpoint)
+
+        template_path = record.get("template-path") or record.get("template_path")
+        if template_path:
+            attrs["template_path"] = _sanitize(str(template_path))
+
+        # Template tags decide whether a finding was even reachable under the
+        # adapter's -etags policy, so they have to survive into the fact store.
+        tags = info.get("tags")
+        if tags:
+            attrs["tags"] = _format_id_list(tags)
 
         desc = info.get("description")
         if desc:
@@ -138,6 +182,10 @@ def parse_nuclei_json(artifact: RawArtifact, engagement_id: str) -> tuple[Observ
                 attrs["extracted_results"] = _sanitize(", ".join(str(e) for e in extracted))
             else:
                 attrs["extracted_results"] = _sanitize(str(extracted))
+
+        extractor_name = record.get("extractor-name") or record.get("extractor_name")
+        if extractor_name:
+            attrs["extractor_name"] = _sanitize(str(extractor_name))
 
         curl_cmd = record.get("curl-command")
         if curl_cmd:
@@ -167,7 +215,7 @@ def parse_nuclei_json(artifact: RawArtifact, engagement_id: str) -> tuple[Observ
                 attrs["epss_score"] = _sanitize(str(epss_score))
 
         # Confidence based on scanner severity / finding certainty
-        confidence = _calculate_confidence(severity_raw, matcher_name)
+        confidence = _calculate_confidence(severity_raw)
 
         observations.append(
             _build_observation(
@@ -253,8 +301,14 @@ def _format_id_list(value: Any) -> str:
     return _sanitize(str(value).strip())
 
 
-def _calculate_confidence(severity: Any, matcher_name: Any) -> Confidence:
-    """Map reported severity to confidence level for the raw candidate fact."""
+def _calculate_confidence(severity: Any) -> Confidence:
+    """Map reported severity to confidence level for the raw candidate fact.
+
+    Severity is the only signal nuclei gives about how sure it is. `matcher-name`
+    used to be accepted here and never read: a named matcher is a label, not extra
+    evidence, so it said nothing about certainty. Dropped rather than given
+    invented meaning.
+    """
     if not severity:
         return Confidence.LOW
     sev = str(severity).lower().strip()
@@ -263,6 +317,69 @@ def _calculate_confidence(severity: Any, matcher_name: Any) -> Confidence:
     if sev in {"medium", "low"}:
         return Confidence.MEDIUM
     return Confidence.LOW
+
+
+# nuclei types that describe a TCP listener. `dns` is UDP; `file`, `code`,
+# `javascript` and `whois` have no endpoint on the scanned host at all.
+_TCP_TYPES = frozenset({"http", "network", "ssl", "websocket", "headless", "tcp"})
+_PORT_RE = re.compile(r"^[0-9]{1,5}$")
+_HOSTNAME_RE = re.compile(r"^[A-Za-z0-9](?:[A-Za-z0-9._\-]*[A-Za-z0-9])?$")
+_URL_PORT_RE = re.compile(r"^[a-z][a-z0-9+.\-]*://(?:[^/@]*@)?(?:\[[^\]]+\]|[^:/?#]+):([0-9]{1,5})")
+
+
+def _endpoint(*, host: str, ip: str, port: str, url: str, record_type: str) -> str:
+    """Build the nmap-compatible `<host>:<port>/<proto>` join key, or "" if unknown.
+
+    nmap's `_port_subject` is what every port_open / service_version observation is
+    keyed by, so a vuln_candidate has to spell its listener the same way or nothing
+    downstream can connect the two.
+
+    Emitted only when a port is actually present in the output. A default derived
+    from the scheme (80 for http, 443 for https) would be an inference, and every
+    attribute here has to trace to something the scanner reported.
+    """
+    proto = "udp" if record_type == "dns" else "tcp"
+    if record_type and record_type not in _TCP_TYPES and record_type != "dns":
+        return ""
+
+    host_part = host.strip()
+    port_part = port.strip()
+
+    # Network templates report `host` as "host:port"; HTTP templates report a bare
+    # host with the port in its own field.
+    if not port_part and host_part and ":" in host_part:
+        head, _, tail = host_part.rpartition(":")
+        if head and _PORT_RE.match(tail) and not _is_ipv6(host_part):
+            host_part, port_part = head, tail
+
+    if not port_part and url:
+        match = _URL_PORT_RE.match(url.strip().lower())
+        if match:
+            port_part = match.group(1)
+
+    if not host_part:
+        host_part = ip.strip()
+    if not host_part or not _PORT_RE.match(port_part):
+        return ""
+    if not 0 < int(port_part) < 65536:
+        return ""
+
+    host_part = host_part.strip("[]")
+    if _is_ipv6(host_part):
+        return f"[{ipaddress.ip_address(host_part).compressed}]:{int(port_part)}/{proto}"
+    # Anything that is not a bare hostname or IPv4 literal (a URL left in `host` by a
+    # hand-written fixture, say) would produce a join key nothing can match. Emit
+    # nothing rather than something that looks like a key and is not one.
+    if not _HOSTNAME_RE.match(host_part):
+        return ""
+    return f"{host_part}:{int(port_part)}/{proto}"
+
+
+def _is_ipv6(value: str) -> bool:
+    try:
+        return ipaddress.ip_address(value.strip("[]")).version == 6
+    except ValueError:
+        return False
 
 
 def _sanitize(value: str) -> str:
