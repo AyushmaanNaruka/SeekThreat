@@ -5,6 +5,7 @@ Fixtures live in tests/fixtures/nuclei/.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -205,3 +206,150 @@ def test_nuclei_adapter_scan_mocked_execution(monkeypatch: pytest.MonkeyPatch) -
     for obs in result.observations:
         assert obs.artifact_id == result.artifact.artifact_id
         assert obs.engagement_id == "eng-adapter-test"
+
+
+# --------------------------------------------------------------------------- #
+# Real nuclei v3 output shape
+#
+# The fixtures above were hand-authored. `real_capture_v3.11.1.jsonl` is a verbatim
+# capture from nuclei v3.11.1, and it is what proves the parser reads the field set
+# the tool actually emits rather than the one the fixtures assumed.
+# --------------------------------------------------------------------------- #
+
+
+def test_real_capture_uses_bare_host_with_separate_port_and_scheme() -> None:
+    """nuclei v3 reports `host` bare, with port/scheme/url in their own fields.
+
+    The older fixtures put a whole URL in `host`, which nuclei has not done since v3.0.
+    A parser that only reads `host` silently loses the port.
+    """
+    raw = _load("real_capture_v3.11.1.jsonl")
+    record = json.loads(raw.strip())
+
+    assert record["host"] == "127.0.0.1"
+    assert record["port"] == "8799"
+    assert record["scheme"] == "http"
+    assert record["url"] == "http://127.0.0.1:8799"
+    assert record["matcher-status"] is True
+    # -ot is passed on every run, so no base64 template copy rides along.
+    assert "template-encoded" not in record
+
+    observations = _parse("real_capture_v3.11.1.jsonl")
+    assert len(observations) == 1
+    attrs = observations[0].attributes
+    assert attrs["host"] == "127.0.0.1"
+    assert attrs["port"] == "8799"
+    assert attrs["scheme"] == "http"
+    assert attrs["url"] == "http://127.0.0.1:8799"
+    assert attrs["endpoint"] == "127.0.0.1:8799/tcp"
+
+
+def test_endpoint_is_spelled_like_an_nmap_port_subject() -> None:
+    """The endpoint attribute is the join key back to nmap's port facts.
+
+    nmap keys every port_open / service_version observation by `<host>:<port>/<proto>`
+    (services/scanners/nmap_xml.py::_port_subject). A vuln_candidate that does not
+    spell its listener identically cannot be attached to the service it was found on.
+    """
+    for obs in _parse("lab_extended.jsonl"):
+        endpoint = obs.attributes["endpoint"]
+        host, _, port_proto = endpoint.rpartition(":")
+        port, _, proto = port_proto.partition("/")
+        assert host
+        assert port.isdigit()
+        assert proto == "tcp"
+
+
+def test_matcher_status_false_records_are_not_findings() -> None:
+    """A record whose matcher did not fire is not a vulnerability candidate."""
+    raw = "\n".join(
+        [
+            json.dumps(
+                {
+                    "template-id": "did-not-match",
+                    "info": {"name": "n", "severity": "high"},
+                    "type": "http",
+                    "host": "127.0.0.1",
+                    "port": "80",
+                    "matched-at": "http://127.0.0.1:80/",
+                    "timestamp": "2026-09-19T10:15:30.123456Z",
+                    "matcher-status": False,
+                }
+            ),
+            json.dumps(
+                {
+                    "template-id": "did-match",
+                    "info": {"name": "n", "severity": "high"},
+                    "type": "http",
+                    "host": "127.0.0.1",
+                    "port": "80",
+                    "matched-at": "http://127.0.0.1:80/",
+                    "timestamp": "2026-09-19T10:15:30.123456Z",
+                    "matcher-status": True,
+                }
+            ),
+        ]
+    )
+    artifact = RawArtifact(
+        artifact_id="sha256:matcher-status",
+        scanner="nuclei",
+        content=raw,
+        content_type="application/x-ndjson",
+        captured_at=datetime(2026, 9, 19, tzinfo=UTC),
+    )
+    observations = parse_nuclei_json(artifact, engagement_id=ENGAGEMENT_ID)
+    assert [o.attributes["template_id"] for o in observations] == ["did-match"]
+
+
+def test_network_template_host_carries_host_and_port() -> None:
+    """Network templates report `host` as "host:port" with no separate port field."""
+    raw = json.dumps(
+        {
+            "template-id": "redis-detect",
+            "info": {"name": "Redis Service - Detect", "severity": "info"},
+            "type": "network",
+            "host": "172.20.3.20:6379",
+            "ip": "172.20.3.20",
+            "matched-at": "172.20.3.20:6379",
+            "timestamp": "2026-09-19T10:15:30.123456Z",
+        }
+    )
+    artifact = RawArtifact(
+        artifact_id="sha256:network",
+        scanner="nuclei",
+        content=raw,
+        content_type="application/x-ndjson",
+        captured_at=datetime(2026, 9, 19, tzinfo=UTC),
+    )
+    (obs,) = parse_nuclei_json(artifact, engagement_id=ENGAGEMENT_ID)
+    assert obs.attributes["endpoint"] == "172.20.3.20:6379/tcp"
+
+
+def test_no_endpoint_emitted_when_the_port_is_unknown() -> None:
+    """A port defaulted from the scheme would be an inference, not an observation."""
+    raw = json.dumps(
+        {
+            "template-id": "no-port",
+            "info": {"name": "n", "severity": "info"},
+            "type": "http",
+            "host": "example.test",
+            "matched-at": "https://example.test/",
+            "timestamp": "2026-09-19T10:15:30.123456Z",
+        }
+    )
+    artifact = RawArtifact(
+        artifact_id="sha256:no-port",
+        scanner="nuclei",
+        content=raw,
+        content_type="application/x-ndjson",
+        captured_at=datetime(2026, 9, 19, tzinfo=UTC),
+    )
+    (obs,) = parse_nuclei_json(artifact, engagement_id=ENGAGEMENT_ID)
+    assert "endpoint" not in obs.attributes
+
+
+def test_template_tags_are_preserved() -> None:
+    """Tags decide whether a finding was reachable under the adapter's -etags policy,
+    so they have to survive into the fact store to be auditable."""
+    by_template = {o.attributes["template_id"]: o for o in _parse("lab_extended.jsonl")}
+    assert "dos" in by_template["cve-2021-23017"].attributes["tags"]

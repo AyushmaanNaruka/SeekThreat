@@ -270,9 +270,41 @@ export default function DashboardPage() {
       const options: Record<string, any> = {};
       if (selectedScanner === "nuclei") {
         options.template = "tests/fixtures/nuclei/test_http_detect.yaml";
-        if (!target.startsWith("http://") && !target.startsWith("https://")) {
-          target = `http://${target}`;
+        // Send the BARE HOST, never a URL. The API's authorization gate compares
+        // `target` as an exact string and deliberately refuses to parse a URL down
+        // to a host (packages/schema/models/engagement.py): if the browser and the
+        // server disagreed about where the host ended, an allowlist check could
+        // pass for one host while the scan hit another. The adapter rebuilds the
+        // URL from the validated `scheme` and `port` options instead. See
+        // DECISIONS.md D-025. Sending "http://localhost" here is what produced
+        // "Target 'http://localhost' is not authorized" against an allowlist that
+        // plainly contained "localhost".
+        let scheme = "http";
+        let port: string | null = null;
+        if (target.includes("://")) {
+          try {
+            const parsed = new URL(target);
+            scheme = parsed.protocol === "https:" ? "https" : "http";
+            target = parsed.hostname;
+            if (parsed.port) port = parsed.port;
+          } catch {
+            target = target.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0];
+            const bits = target.split(":");
+            target = bits[0];
+            if (bits[1] && /^\d+$/.test(bits[1])) port = bits[1];
+          }
+        } else if (target.includes(":") && !target.includes("/")) {
+          const bits = target.split(":");
+          target = bits[0];
+          if (bits[1] && /^\d+$/.test(bits[1])) port = bits[1];
         }
+        // new URL() brackets an IPv6 literal; the gate matches on the bare address
+        // and the adapter re-brackets it for nuclei.
+        if (target.startsWith("[") && target.endsWith("]")) {
+          target = target.slice(1, -1);
+        }
+        options.scheme = scheme;
+        if (port) options.port = port;
       } else if (selectedScanner === "nmap") {
         options.no_ping = true;
         if (target.startsWith("http://") || target.startsWith("https://")) {

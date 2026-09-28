@@ -15,8 +15,8 @@ Design decisions:
   30-second back-off before the scan is marked failed.
 - Permanent errors are *not* retried. Every retry is a full rescan, so
   re-attempting an error whose outcome cannot change (an unsupported
-  scanner name, a missing binary) only multiplies the work. See
-  ``PERMANENT_ERRORS``.
+  scanner name, a missing binary, a scan that cannot finish inside its
+  own timeout) only multiplies the work. See ``PERMANENT_ERRORS``.
 - However the scan fails, the task re-raises once the row is marked
   failed. Celery derives task state from the return value, so swallowing
   the exception would record the task as SUCCESS while the scan sat at
@@ -37,19 +37,26 @@ from apps.api.db.repositories import (
 from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.engagement import Authorization, ScanRequest
-from services.scanners.base import AuthorizationError, ScannerAdapter, ScannerUnavailableError
+from services.scanners.base import (
+    AuthorizationError,
+    ScannerAdapter,
+    ScannerTimeoutError,
+    ScannerUnavailableError,
+)
 from services.scanners.nmap_adapter import NmapAdapter
 from services.scanners.nuclei_adapter import NucleiAdapter
 
 logger = logging.getLogger(__name__)
 
 # Failures that a retry cannot fix. An unsupported scanner name stays
-# unsupported, a missing binary stays missing, and an unauthorized target must
+# unsupported, a missing binary stays missing, a scan that blew its timeout blows
+# it again with the same budget and template set, and an unauthorized target must
 # never be re-attempted at all. Retrying any of these costs a full rescan per
 # attempt for an outcome that cannot change.
 PERMANENT_ERRORS = (
     ValueError,
     ScannerUnavailableError,
+    ScannerTimeoutError,
     AuthorizationError,
 )
 
