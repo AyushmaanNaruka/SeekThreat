@@ -1,0 +1,310 @@
+{
+  "CVE-2021-44228": {
+    "dataType": "CVE_RECORD",
+    "dataVersion": "5.1",
+    "cveMetadata": {
+      "cveId": "CVE-2021-44228",
+      "assignerOrgId": "apache",
+      "state": "PUBLISHED",
+      "datePublished": "2021-12-10T10:00:00.000Z"
+    },
+    "containers": {
+      "cna": {
+        "title": "Apache Log4j2 JNDI RCE (Log4Shell)",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "Apache Log4j2 2.0-beta9 through 2.15.0 JNDI features do not protect against attacker controlled LDAP and other JNDI related endpoints."
+          }
+        ],
+        "metrics": [
+          {
+            "format": "CVSS",
+            "cvssV3_1": {
+              "version": "3.1",
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+              "baseScore": 10.0,
+              "baseSeverity": "CRITICAL"
+            }
+          }
+        ],
+        "problemTypes": [
+          {
+            "descriptions": [
+              {
+                "cweId": "CWE-502",
+                "description": "Deserialization of Untrusted Data",
+                "lang": "en",
+                "type": "CWE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "CVE-2021-41773": {
+    "dataType": "CVE_RECORD",
+    "dataVersion": "5.1",
+    "cveMetadata": {
+      "cveId": "CVE-2021-41773",
+      "assignerOrgId": "apache",
+      "state": "PUBLISHED",
+      "datePublished": "2021-10-05T00:00:00.000Z"
+    },
+    "containers": {
+      "cna": {
+        "title": "Apache HTTP Server 2.4.49 Path Traversal and File Disclosure",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "A flaw was found in a change made to path normalization in Apache HTTP Server 2.4.49."
+          }
+        ],
+        "metrics": [
+          {
+            "format": "CVSS",
+            "cvssV3_1": {
+              "version": "3.1",
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+              "baseScore": 7.5,
+              "baseSeverity": "HIGH"
+            }
+          }
+        ],
+        "problemTypes": [
+          {
+            "descriptions": [
+              {
+                "cweId": "CWE-22",
+                "description": "Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal')",
+                "lang": "en",
+                "type": "CWE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "CVE-2022-22947": {
+    "dataType": "CVE_RECORD",
+    "dataVersion": "5.1",
+    "cveMetadata": {
+      "cveId": "CVE-2022-22947",
+      "assignerOrgId": "spring",
+      "state": "PUBLISHED",
+      "datePublished": "2022-03-03T00:00:00.000Z"
+    },
+    "containers": {
+      "cna": {
+        "title": "Spring Cloud Gateway Code Injection",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "Applications using Spring Cloud Gateway prior to 3.1.1+ and 3.0.7+ are vulnerable to a code injection attack when the Gateway Actuator endpoint is enabled, exposed and unsecured."
+          }
+        ],
+        "metrics": [
+          {
+            "format": "CVSS",
+            "cvssV3_1": {
+              "version": "3.1",
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+              "baseScore": 9.8,
+              "baseSeverity": "CRITICAL"
+            }
+          }
+        ],
+        "problemTypes": [
+          {
+            "descriptions": [
+              {
+                "cweId": "CWE-94",
+                "description": "Improper Control of Generation of Code ('Code Injection')",
+                "lang": "en",
+                "type": "CWE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "CVE-2022-22965": {
+    "dataType": "CVE_RECORD",
+    "dataVersion": "5.1",
+    "cveMetadata": {
+      "cveId": "CVE-2022-22965",
+      "assignerOrgId": "spring",
+      "state": "PUBLISHED",
+      "datePublished": "2022-04-01T00:00:00.000Z"
+    },
+    "containers": {
+      "cna": {
+        "title": "Spring Framework RCE via Data Binding (Spring4Shell)",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "A Spring MVC or Spring WebFlux application running on JDK 9+ may be vulnerable to remote code execution (RCE) via data binding."
+          }
+        ],
+        "metrics": [
+          {
+            "format": "CVSS",
+            "cvssV3_1": {
+              "version": "3.1",
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+              "baseScore": 9.8,
+              "baseSeverity": "CRITICAL"
+            }
+          }
+        ],
+        "problemTypes": [
+          {
+            "descriptions": [
+              {
+                "cweId": "CWE-94",
+                "description": "Improper Control of Generation of Code",
+                "lang": "en",
+                "type": "CWE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "CVE-2024-23897": {
+    "dataType": "CVE_RECORD",
+    "dataVersion": "5.1",
+    "cveMetadata": {
+      "cveId": "CVE-2024-23897",
+      "assignerOrgId": "jenkins",
+      "state": "PUBLISHED",
+      "datePublished": "2024-01-24T00:00:00.000Z"
+    },
+    "containers": {
+      "cna": {
+        "title": "Jenkins CLI Arbitrary File Read",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "Jenkins uses the args4j library to parse command arguments and options on the Jenkins controller when processing CLI commands."
+          }
+        ],
+        "metrics": [
+          {
+            "format": "CVSS",
+            "cvssV3_1": {
+              "version": "3.1",
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+              "baseScore": 9.8,
+              "baseSeverity": "CRITICAL"
+            }
+          }
+        ],
+        "problemTypes": [
+          {
+            "descriptions": [
+              {
+                "cweId": "CWE-200",
+                "description": "Exposure of Sensitive Information to an Unauthorized Actor",
+                "lang": "en",
+                "type": "CWE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "CVE-2020-7699": {
+    "dataType": "CVE_RECORD",
+    "dataVersion": "5.1",
+    "cveMetadata": {
+      "cveId": "CVE-2020-7699",
+      "assignerOrgId": "snyk",
+      "state": "PUBLISHED",
+      "datePublished": "2020-07-30T00:00:00.000Z"
+    },
+    "containers": {
+      "cna": {
+        "title": "express-fileupload Prototype Pollution",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "This affects the package express-fileupload before 1.1.8. A prototype pollution vulnerability exists in the parseNested parameter."
+          }
+        ],
+        "metrics": [
+          {
+            "format": "CVSS",
+            "cvssV3_1": {
+              "version": "3.1",
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:L",
+              "baseScore": 7.3,
+              "baseSeverity": "HIGH"
+            }
+          }
+        ],
+        "problemTypes": [
+          {
+            "descriptions": [
+              {
+                "cweId": "CWE-1321",
+                "description": "Improperly Controlled Modification of Dynamically-Determined Object Attributes",
+                "lang": "en",
+                "type": "CWE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "CVE-2020-15778": {
+    "dataType": "CVE_RECORD",
+    "dataVersion": "5.1",
+    "cveMetadata": {
+      "cveId": "CVE-2020-15778",
+      "assignerOrgId": "mitre",
+      "state": "PUBLISHED",
+      "datePublished": "2020-07-24T00:00:00.000Z"
+    },
+    "containers": {
+      "cna": {
+        "title": "OpenSSH scp Command Injection",
+        "descriptions": [
+          {
+            "lang": "en",
+            "value": "OpenSSH 8.3p1 and earlier allows injection of commands via SCP argument parsing."
+          }
+        ],
+        "metrics": [
+          {
+            "format": "CVSS",
+            "cvssV3_1": {
+              "version": "3.1",
+              "vectorString": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+              "baseScore": 6.8,
+              "baseSeverity": "MEDIUM"
+            }
+          }
+        ],
+        "problemTypes": [
+          {
+            "descriptions": [
+              {
+                "cweId": "CWE-78",
+                "description": "Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection')",
+                "lang": "en",
+                "type": "CWE"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
