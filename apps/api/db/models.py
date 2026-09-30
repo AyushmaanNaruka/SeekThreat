@@ -5,14 +5,16 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from apps.api.db.base import Base
 from packages.schema.models.engagement import Authorization, Engagement
+from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
 from packages.schema.models.observation import Observation, ObservationKind, RawArtifact
-from packages.schema.models.provenance import Provenance
+from packages.schema.models.provenance import Attributed, Provenance
+from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite.
 JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[no-untyped-call]
@@ -205,3 +207,70 @@ class ScanModel(Base):
 
     engagement: Mapped[EngagementModel] = relationship("EngagementModel", back_populates="scans")
     artifact: Mapped[RawArtifactModel | None] = relationship("RawArtifactModel")
+
+
+class EnrichedFindingModel(Base):
+    """Enriched finding with fused multi-source intelligence and composite risk score.
+
+    Stores the complete serialized Finding in ``finding_data`` so that
+    ``to_schema()`` can reconstruct the full ``EnrichedFinding`` domain model
+    without requiring a separate Finding table or join.
+    """
+
+    __tablename__ = "enriched_findings"
+
+    finding_id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    engagement_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
+    finding_data: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
+    fields: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False, default=dict)
+    ers_value: Mapped[float | None] = mapped_column(Float, nullable=True)
+    ers_components: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON_TYPE, nullable=True
+    )
+    enriched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    @classmethod
+    def from_schema(
+        cls,
+        enriched: EnrichedFinding,
+        enriched_at: datetime | None = None,
+    ) -> "EnrichedFindingModel":
+        """Create an ORM model instance from a Pydantic EnrichedFinding domain model."""
+        fields_json: dict[str, Any] = {
+            k: v.model_dump(mode="json") for k, v in enriched.fields.items()
+        }
+        ers_value: float | None = None
+        ers_components_json: list[dict[str, Any]] | None = None
+        if enriched.ers is not None:
+            ers_value = enriched.ers.value
+            ers_components_json = [
+                c.model_dump(mode="json") for c in enriched.ers.components
+            ]
+
+        return cls(
+            finding_id=enriched.finding.finding_id,
+            engagement_id=enriched.finding.engagement_id,
+            finding_data=enriched.finding.model_dump(mode="json"),
+            fields=fields_json,
+            ers_value=ers_value,
+            ers_components=ers_components_json,
+            enriched_at=enriched_at or datetime.now(UTC),
+        )
+
+    def to_schema(self) -> EnrichedFinding:
+        """Convert ORM model to immutable Pydantic EnrichedFinding domain model."""
+        finding = Finding.model_validate(self.finding_data)
+
+        fields: dict[str, Attributed[EnrichmentValue]] = {
+            k: Attributed[EnrichmentValue].model_validate(v)
+            for k, v in (self.fields or {}).items()
+        }
+
+        ers: ExposureRiskScore | None = None
+        if self.ers_value is not None and self.ers_components is not None:
+            components = tuple(
+                ScoreComponent.model_validate(c) for c in self.ers_components
+            )
+            ers = ExposureRiskScore(value=self.ers_value, components=components)
+
+        return EnrichedFinding(finding=finding, fields=fields, ers=ers)

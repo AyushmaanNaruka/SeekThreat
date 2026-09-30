@@ -15,11 +15,13 @@ from sqlalchemy.orm import Session
 
 from apps.api.db.models import (
     EngagementModel,
+    EnrichedFindingModel,
     ObservationModel,
     RawArtifactModel,
     ScanModel,
 )
 from packages.schema.models.engagement import Engagement
+from packages.schema.models.finding import EnrichedFinding, Finding
 from packages.schema.models.observation import (
     Observation,
     ObservationKind,
@@ -346,3 +348,125 @@ class ScanRepository:
         if limit is not None:
             stmt = stmt.limit(limit)
         return list(self.session.scalars(stmt).all())
+
+
+class EnrichedFindingRepository:
+    """Repository handling persistence of EnrichedFinding records with idempotent upserts.
+
+    Re-running enrichment on the same finding_id overwrites fields, ERS value,
+    ERS components, and enriched_at without creating duplicate rows.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def upsert(
+        self,
+        enriched: EnrichedFinding,
+        enriched_at: datetime | None = None,
+    ) -> EnrichedFinding:
+        """Idempotently persist a single EnrichedFinding record.
+
+        ON CONFLICT (finding_id) DO UPDATE: repeat enrichment runs always write
+        the latest fused fields and score; they never duplicate records.
+        """
+        self.upsert_all([enriched], enriched_at=enriched_at)
+        return enriched
+
+    def upsert_all(
+        self,
+        enriched_list: Sequence[EnrichedFinding],
+        enriched_at: datetime | None = None,
+    ) -> tuple[EnrichedFinding, ...]:
+        """Idempotently persist a batch of EnrichedFinding records in one operation."""
+        if not enriched_list:
+            return ()
+
+        now = enriched_at or datetime.now(UTC)
+        records: list[dict[str, Any]] = []
+        for enriched in enriched_list:
+            model = EnrichedFindingModel.from_schema(enriched, enriched_at=now)
+            records.append(
+                {
+                    "finding_id": model.finding_id,
+                    "engagement_id": model.engagement_id,
+                    "finding_data": model.finding_data,
+                    "fields": model.fields,
+                    "ers_value": model.ers_value,
+                    "ers_components": model.ers_components,
+                    "enriched_at": model.enriched_at,
+                }
+            )
+
+        update_cols = {
+            "finding_data": "finding_data",
+            "fields": "fields",
+            "ers_value": "ers_value",
+            "ers_components": "ers_components",
+            "enriched_at": "enriched_at",
+        }
+        dialect = self.session.bind.dialect.name if self.session.bind else ""
+
+        stmt: PGInsert | SQLiteInsert
+        if dialect == "postgresql":
+            pg_stmt = pg_insert(EnrichedFindingModel).values(records)
+            stmt = pg_stmt.on_conflict_do_update(
+                index_elements=["finding_id"],
+                set_={k: getattr(pg_stmt.excluded, v) for k, v in update_cols.items()},
+            )
+            self.session.execute(stmt)
+        elif dialect == "sqlite":
+            sq_stmt = sqlite_insert(EnrichedFindingModel).values(records)
+            stmt = sq_stmt.on_conflict_do_update(
+                index_elements=["finding_id"],
+                set_={k: getattr(sq_stmt.excluded, v) for k, v in update_cols.items()},
+            )
+            self.session.execute(stmt)
+        else:
+            # Generic fallback: merge uses the primary key to decide insert vs update.
+            for rec in records:
+                orm_obj = EnrichedFindingModel(**rec)
+                self.session.merge(orm_obj)
+
+        self.session.flush()
+        return tuple(enriched_list)
+
+    def get(self, finding_id: str) -> EnrichedFinding | None:
+        """Retrieve a single enriched finding by its primary key ID."""
+        model = self.session.get(EnrichedFindingModel, finding_id)
+        return model.to_schema() if model is not None else None
+
+    def get_by_engagement(
+        self,
+        engagement_id: str,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[EnrichedFinding]:
+        """Retrieve enriched findings associated with an engagement.
+
+        Ordering is stable (enriched_at descending, then finding_id) so paging
+        through with a fixed limit never skips or repeats a row.
+        """
+        stmt = select(EnrichedFindingModel).where(
+            EnrichedFindingModel.engagement_id == engagement_id
+        )
+        stmt = stmt.order_by(
+            EnrichedFindingModel.enriched_at.desc(),
+            EnrichedFindingModel.finding_id.asc(),
+        )
+        if offset:
+            stmt = stmt.offset(offset)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        results = self.session.scalars(stmt).all()
+        return [m.to_schema() for m in results]
+
+    def count_by_engagement(self, engagement_id: str) -> int:
+        """Count enriched findings associated with an engagement."""
+        stmt = (
+            select(func.count())
+            .select_from(EnrichedFindingModel)
+            .where(EnrichedFindingModel.engagement_id == engagement_id)
+        )
+        count = self.session.scalar(stmt)
+        return int(count) if count is not None else 0
