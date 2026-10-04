@@ -115,3 +115,33 @@ def test_vuln_candidate_cves_trace_back_to_ground_truth(
                 f"observation {obs.observation_id} references {cve_id!r}, not present in "
                 "lab/ground_truth.yaml's expected_cves"
             )
+
+
+def test_every_vuln_candidate_joins_a_port_fact(
+    all_observations: list[Observation],
+) -> None:
+    """A vulnerability candidate has to be attachable to the listener it was found on.
+
+    nmap keys port_open / service_version observations by `<host>:<port>/<proto>`
+    (nmap_xml.py::_port_subject); nuclei's subject is a URL, which shares no key with
+    it. The parser emits an `endpoint` attribute in nmap's spelling to bridge the two.
+    Without this the graph layer has no deterministic way to hang a nuclei finding off
+    the service that produced it, so paths through it can never be enumerated.
+    """
+    port_subjects = {
+        o.subject
+        for o in all_observations
+        if o.kind in (ObservationKind.PORT_OPEN, ObservationKind.SERVICE_VERSION)
+    }
+    vuln_candidates = [o for o in all_observations if o.kind is ObservationKind.VULN_CANDIDATE]
+    assert vuln_candidates, "no vuln_candidate observations to check"
+
+    unjoinable = [
+        (o.attributes.get("template_id"), o.attributes.get("endpoint"))
+        for o in vuln_candidates
+        if o.attributes.get("endpoint") not in port_subjects
+    ]
+    assert not unjoinable, (
+        "vuln_candidate observations whose endpoint matches no port_open/service_version "
+        f"subject in the fixture set: {unjoinable}"
+    )

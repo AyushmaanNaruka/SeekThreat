@@ -45,6 +45,33 @@ def _auth(
         ("lab.local", "172.20.0.0/16", False),
         # An IP never matches a hostname pattern.
         ("172.20.1.10", "lab.local", False),
+        # A target must be a single host: a range equal to the allowlist entry
+        # is not itself a permitted target.
+        ("172.20.1.0/24", "172.20.1.0/24", False),
+        # URLs are never parsed down to a host (parser-differential bypasses).
+        ("http://evil.example\\@172.20.1.10/", "172.20.1.0/24", False),
+        ("https://attacker.com@172.20.1.10", "172.20.1.0/24", False),
+        ("http://172.20.1.10:8080", "172.20.1.0/24", False),
+        # A wildcard must not glob across URL or path syntax: `*` in fnmatch matches
+        # `/ @ ? # \ :` too, so each of these would otherwise "end in .lab.local"
+        # and nuclei would scan evil.com.
+        ("http://evil.com/.lab.local", "*.lab.local", False),
+        ("http://evil.com#.lab.local", "*.lab.local", False),
+        ("evil.com/x.lab.local", "*.lab.local", False),
+        ("evil.com?.lab.local", "*.lab.local", False),
+        ("attacker@web.lab.local", "*.lab.local", False),
+        ("evil.com:80.lab.local", "*.lab.local", False),
+        ("evil.com\\.lab.local", "*.lab.local", False),
+        ("evil com.lab.local", "*.lab.local", False),
+        # Wildcard targets must be syntactically valid DNS names.
+        ("-web.lab.local", "*.lab.local", False),
+        ("web-.lab.local", "*.lab.local", False),
+        ("web..lab.local", "*.lab.local", False),
+        (".lab.local", "*.lab.local", False),
+        ("a" * 64 + ".lab.local", "*.lab.local", False),
+        ("a" * 63 + ".lab.local", "*.lab.local", True),
+        ("WEB-1.Lab.Local", "*.lab.local", True),
+        ("weblab.local", "*.lab.local", False),
     ],
 )
 def test_target_matches(target: str, pattern: str, expected: bool) -> None:

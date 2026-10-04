@@ -11,10 +11,27 @@ running (`docs/02-architecture.md`, "Why an append-only fact store").
   `services/scanners/nmap_xml.py`. Source XML: `tests/fixtures/nmap/lab_baseline.xml`.
   Covers the DMZ segment only, no vulnerability observations.
 
-The real `tests/fixtures/nuclei/lab_baseline.jsonl` capture (dvwa's `CVE-2021-41773`, plus
-an unrelated `CVE-2021-44228`/`nginx-version` pair against hosts outside this lab's IP
-ranges) has not yet been folded into a matching `observations/` snapshot; it is exercised
-directly by `tests/unit/test_nuclei_json.py`.
+`tests/fixtures/nuclei/lab_baseline.jsonl` (dvwa's `CVE-2021-41773`, plus an unrelated
+`CVE-2021-44228`/`nginx-version` pair against hosts outside this lab's IP ranges) has not
+been folded into a matching `observations/` snapshot; it is exercised directly by
+`tests/unit/test_nuclei_json.py`.
+
+**It is not a nuclei v3 capture, whatever its provenance.** Every record in it puts a full
+URL in `host` and carries no `port`, `scheme`, `url`, `matcher-status` or `template-path`
+key. nuclei v3 reports `host` bare, with the port and scheme in fields of their own, and
+emits all five keys on every finding — verified against nuclei v3.11.1, the version
+`apps/api/Dockerfile` pins. Left in place rather than rewritten, because it is labelled as
+evidence and overwriting it would destroy whatever it really is; treat its shape as
+legacy, not as a reference for what nuclei emits.
+
+`tests/fixtures/nuclei/real_capture_v3.11.1.jsonl` is that reference: a verbatim,
+unedited capture from nuclei v3.11.1 run through the adapter's own argv against a local
+HTTP server. Its `template-path` is an absolute path on the machine it was captured on —
+that is part of the verbatim output, not a value to keep in sync. The synthetic source
+fixtures (`lab_extended.jsonl`, `single_cve.jsonl`, `json_array.json`,
+`malicious_attributes.jsonl`) were corrected to this shape; every host, port and scheme
+added to them was derived from the URL already in the file, so no new facts were
+introduced.
 
 ## Synthetic (hand-authored tool output run through the real parsers)
 

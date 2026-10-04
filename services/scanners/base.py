@@ -34,6 +34,7 @@ __all__ = [
     "ScanRequest",
     "ScanResult",
     "ScannerAdapter",
+    "ScannerTimeoutError",
     "ScannerUnavailableError",
 ]
 
@@ -47,6 +48,17 @@ class ScannerUnavailableError(Exception):
 
     Permanent by nature: a binary that is missing when the job starts will
     still be missing on a retry, so callers must not re-attempt the scan.
+    """
+
+
+class ScannerTimeoutError(Exception):
+    """Raised when the scanner process outlived its timeout and was killed.
+
+    Permanent by nature: a retry re-runs the same template set against the same target
+    with the same budget and times out again, so callers must not re-attempt it —
+    raise the timeout or narrow the template selection instead. Whatever the process
+    had written before it was killed is not recorded as a result: a ScanResult cannot
+    represent a partial run, and presenting one as complete would overstate coverage.
     """
 
 

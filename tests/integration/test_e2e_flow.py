@@ -372,8 +372,19 @@ def test_nmap_adapter_and_persistence(db_session: Session) -> None:
 
 @requires_nuclei
 def test_nuclei_adapter_and_persistence(db_session: Session, local_http_fixture: str) -> None:
-    """6. Verify Nuclei adapter executes against local HTTP server and persists."""
+    """6. Verify Nuclei adapter executes against local HTTP server and persists.
+
+    The target here is the bare IP the allowlist actually names, with the port supplied
+    as an option. Passing the fixture's URL straight through fails the authorization
+    gate: target_matches() compares the target as an exact string and never parses a
+    URL down to a host, so "http://127.0.0.1:8799" matches neither "127.0.0.1" nor
+    "127.0.0.1/32". That is the gate working as designed — see the parser-differential
+    cases in tests/unit/test_authorization_matching.py — so the adapter, not the gate,
+    is what assembles nuclei's URL.
+    """
     nuclei = NucleiAdapter()
+
+    host, _, port = local_http_fixture.removeprefix("http://").partition(":")
 
     now = datetime.now(UTC)
     auth = Authorization(
@@ -385,15 +396,27 @@ def test_nuclei_adapter_and_persistence(db_session: Session, local_http_fixture:
     )
 
     req = ScanRequest(
-        target=local_http_fixture,
+        target=host,
         authorization=auth,
-        options={"template": "tests/fixtures/nuclei/test_http_detect.yaml", "timeout": 120},
+        options={
+            "template": "tests/fixtures/nuclei/test_http_detect.yaml",
+            "port": port,
+            "scheme": "http",
+            "timeout": 120,
+        },
     )
     res = nuclei.scan(req)
 
     assert res.artifact.scanner == "nuclei"
     assert res.artifact.artifact_id.startswith("sha256:")
     assert res.artifact.content_type == "application/x-ndjson"
+
+    # The scan really reached the server, and the finding carries the join key back to
+    # the port facts nmap produces for the same listener.
+    assert len(res.observations) == 1
+    attrs = res.observations[0].attributes
+    assert attrs["template_id"] == "test-http-detect"
+    assert attrs["endpoint"] == f"{host}:{port}/tcp"
 
     # Persist artifact to database
     art_repo = RawArtifactRepository(db_session)

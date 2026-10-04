@@ -158,6 +158,13 @@ Nine endpoints exist. Both the write path and the read path are complete.
 
 - 🚫 **Not demonstrated.** No end-to-end `POST /scans` → worker → stored observation run against a real lab target has been completed. Blocked on the `pgvector/pgvector:pg16` image pull (see Blockers).
 - ⚠️ The pinned nuclei binary in `apps/api/Dockerfile` (v3.11.1, checksum-verified) has **never been built** — same blocker. The nuclei path has not run against the lab.
+- ✅ 2026-09-26: the nuclei path *has* now run outside the container, against a local HTTP
+  target, with the real v3.11.1 binary and the pinned v10.4.9 template archive. Both
+  Dockerfile checksums were verified against the upstream release checksums and are correct.
+  `tests/integration/test_e2e_flow.py::test_nuclei_adapter_and_persistence` had been
+  skipping since it was written (no nuclei binary anywhere); its first actual execution
+  failed at the authorization gate, and three further defects only reachable with a live
+  binary came out of the same session. See D-025 and D-026. The lab run is still blocked.
 
 ---
 
