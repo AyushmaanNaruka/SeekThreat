@@ -160,7 +160,7 @@ In `infra/docker-compose.yml`, both `api` and `worker` are defined under the `co
         condition: service_healthy
       redis:
         condition: service_started
-    command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans
+    command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans,enrichment
 ```
 
 ---

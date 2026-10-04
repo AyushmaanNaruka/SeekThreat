@@ -3,12 +3,14 @@
 from apps.api.db.base import Base
 from apps.api.db.models import (
     EngagementModel,
+    EnrichedFindingModel,
     ObservationModel,
     RawArtifactModel,
     ScanModel,
 )
 from apps.api.db.repositories import (
     EngagementRepository,
+    EnrichedFindingRepository,
     ObservationRepository,
     RawArtifactRepository,
     ScanRepository,
@@ -20,6 +22,8 @@ __all__ = [
     "Base",
     "EngagementModel",
     "EngagementRepository",
+    "EnrichedFindingModel",
+    "EnrichedFindingRepository",
     "ObservationModel",
     "ObservationRepository",
     "RawArtifactModel",

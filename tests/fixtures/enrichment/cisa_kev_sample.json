@@ -1,0 +1,58 @@
+{
+  "_synthetic": true,
+  "_comment": "SYNTHETIC test fixture shaped like the real feed format. Values are illustrative, not real measurements. See README.md in this directory.",
+  "title": "CISA Known Exploited Vulnerabilities Catalog",
+  "catalogVersion": "2024.09.20",
+  "dateReleased": "2024-09-20T12:00:00.000Z",
+  "count": 4,
+  "vulnerabilities": [
+    {
+      "cveID": "CVE-2021-44228",
+      "vendorProject": "Apache",
+      "product": "Log4j",
+      "vulnerabilityName": "Apache Log4j2 Remote Code Execution Vulnerability",
+      "dateAdded": "2021-12-10",
+      "shortDescription": "Apache Log4j2 contains an insecure JNDI lookup feature that allows an unauthenticated remote attacker to execute arbitrary code.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2021-12-24",
+      "knownRansomwareCampaignUse": "Known",
+      "notes": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+    },
+    {
+      "cveID": "CVE-2021-41773",
+      "vendorProject": "Apache",
+      "product": "HTTP Server",
+      "vulnerabilityName": "Apache HTTP Server Path Traversal and Remote Code Execution Vulnerability",
+      "dateAdded": "2021-11-03",
+      "shortDescription": "Apache HTTP Server 2.4.49 contains a path traversal vulnerability that could allow an attacker to access files outside the document root.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2021-11-17",
+      "knownRansomwareCampaignUse": "Known",
+      "notes": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+    },
+    {
+      "cveID": "CVE-2022-22947",
+      "vendorProject": "VMware / Spring",
+      "product": "Spring Cloud Gateway",
+      "vulnerabilityName": "Spring Cloud Gateway Code Injection Vulnerability",
+      "dateAdded": "2022-03-25",
+      "shortDescription": "Spring Cloud Gateway contains a code injection vulnerability that allows an unauthenticated attacker to execute arbitrary code.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2022-04-15",
+      "knownRansomwareCampaignUse": "Unknown",
+      "notes": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+    },
+    {
+      "cveID": "CVE-2024-23897",
+      "vendorProject": "Jenkins",
+      "product": "Jenkins",
+      "vulnerabilityName": "Jenkins CLI Arbitrary File Read Vulnerability",
+      "dateAdded": "2024-01-30",
+      "shortDescription": "Jenkins CLI contains an arbitrary file read vulnerability that allows unauthenticated remote attackers to read arbitrary files.",
+      "requiredAction": "Apply updates per vendor instructions.",
+      "dueDate": "2024-02-20",
+      "knownRansomwareCampaignUse": "Known",
+      "notes": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+    }
+  ]
+}
