@@ -61,7 +61,7 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 
 ### C. Background Synchronization Coordinator
 * **[services/enrichment/sources/sync.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/sync.py)**:
-  * `SourceSynchronizer`: Coordinates downloading and atomic local filesystem caching.
+  * `SourceSynchronizer`: Atomically writes an already-fetched feed payload to its local mirror file (`MIRROR_FILENAMES`). It does **not** download feeds, and no scheduled job invokes it yet.
   * `sync_from_data(source, data, count)`: Writes feed data to a temporary file (`.tmp`) and performs an atomic filesystem replace, preventing race conditions or corrupted cache files if an update is interrupted.
   * `get_source_path(source)`: Generates standardized cache file paths (`cve_org.json`, `cisa_kev.json`, `epss_v4.json`).
 

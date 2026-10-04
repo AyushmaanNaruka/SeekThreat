@@ -17,7 +17,7 @@ from packages.schema.models.provenance import Attributed, Provenance
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite.
-JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[no-untyped-call]
+JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
 
 
 def _aware(value: datetime) -> datetime:
@@ -219,14 +219,21 @@ class EnrichedFindingModel(Base):
 
     __tablename__ = "enriched_findings"
 
+    # Composite primary key: finding_id is only unique within an engagement, so a
+    # global finding_id key would let one engagement's enrichment overwrite
+    # another's row. engagement_id is declared first so the PK is
+    # (engagement_id, finding_id) and session.get() takes that tuple order.
+    engagement_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("engagements.engagement_id", ondelete="CASCADE"),
+        primary_key=True,
+        index=True,
+    )
     finding_id: Mapped[str] = mapped_column(String(128), primary_key=True)
-    engagement_id: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     finding_data: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
     fields: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False, default=dict)
     ers_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    ers_components: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        JSON_TYPE, nullable=True
-    )
+    ers_components: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON_TYPE, nullable=True)
     enriched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     @classmethod
@@ -234,7 +241,7 @@ class EnrichedFindingModel(Base):
         cls,
         enriched: EnrichedFinding,
         enriched_at: datetime | None = None,
-    ) -> "EnrichedFindingModel":
+    ) -> EnrichedFindingModel:
         """Create an ORM model instance from a Pydantic EnrichedFinding domain model."""
         fields_json: dict[str, Any] = {
             k: v.model_dump(mode="json") for k, v in enriched.fields.items()
@@ -243,9 +250,7 @@ class EnrichedFindingModel(Base):
         ers_components_json: list[dict[str, Any]] | None = None
         if enriched.ers is not None:
             ers_value = enriched.ers.value
-            ers_components_json = [
-                c.model_dump(mode="json") for c in enriched.ers.components
-            ]
+            ers_components_json = [c.model_dump(mode="json") for c in enriched.ers.components]
 
         return cls(
             finding_id=enriched.finding.finding_id,
@@ -262,15 +267,12 @@ class EnrichedFindingModel(Base):
         finding = Finding.model_validate(self.finding_data)
 
         fields: dict[str, Attributed[EnrichmentValue]] = {
-            k: Attributed[EnrichmentValue].model_validate(v)
-            for k, v in (self.fields or {}).items()
+            k: Attributed[EnrichmentValue].model_validate(v) for k, v in (self.fields or {}).items()
         }
 
         ers: ExposureRiskScore | None = None
         if self.ers_value is not None and self.ers_components is not None:
-            components = tuple(
-                ScoreComponent.model_validate(c) for c in self.ers_components
-            )
+            components = tuple(ScoreComponent.model_validate(c) for c in self.ers_components)
             ers = ExposureRiskScore(value=self.ers_value, components=components)
 
         return EnrichedFinding(finding=finding, fields=fields, ers=ers)

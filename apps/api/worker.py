@@ -1,11 +1,11 @@
 """Celery application instance for SeekThreat async task processing.
 
 This module defines the single Celery app used by the API to dispatch
-scan jobs and by the worker process to execute them.
+scan and enrichment jobs and by the worker process to execute them.
 
 Usage:
     # Start the worker (from project root):
-    celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans
+    celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans,enrichment
 
     # In the API, import and use:
     from apps.api.tasks.scans import execute_scan

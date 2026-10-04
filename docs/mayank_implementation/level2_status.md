@@ -110,10 +110,10 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
      - `BaseSourceRecord` with `to_attributed()` method enforcing non-optional provenance and attribution.
   2. Implement MVP Source Clients:
      - **CVE.org (`services/enrichment/sources/cve_org.py`)**: Priority 1 client parsing CVE Services v5.1 records (CNA CVSS v3.1/v4.0 baseScore, vectorString, CWE problemTypes, descriptions).
-     - **CISA KEV (`services/enrichment/sources/cisa_kev.py`)**: Priority 3 client parsing KEV catalog, providing confirmed active exploitation flags, date added, ransomware usage, and affirmative negative records for non-KEV vulnerabilities.
+     - **CISA KEV (`services/enrichment/sources/cisa_kev.py`)**: Priority 3 client parsing KEV catalog, providing confirmed active exploitation flags, date added, ransomware usage (only when CISA marks it "Known"), and affirmative negative records for non-KEV vulnerabilities only when the catalog is loaded. A missing or empty KEV mirror yields "KEV status unknown", never a negative.
      - **FIRST EPSS v4 (`services/enrichment/sources/epss.py`)**: Priority 4 client parsing EPSS v4 probability scores and percentile rankings.
   3. Scheduled Mirroring / Sync Coordinator (`services/enrichment/sources/sync.py`):
-     - Background sync helper `SourceSynchronizer` for scheduled batch feed refreshes with atomic file replacement.
+     - `SourceSynchronizer` atomically writes an already-fetched payload to its mirror file. It does not download feeds and is not scheduled yet.
   4. Secondary Source Stubs (`services/enrichment/sources/secondary.py`):
      - Prioritized stubs for CISA Vulnrichment, NVD 2.0, ENISA EUVD, OSV.dev, GitHub Advisories, ExploitDB, Metasploit.
   5. Automated unit tests (`tests/unit/test_enrichment_sources.py` - 11/11 tests passing).
@@ -254,15 +254,35 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 | MVP Source Client: CVE.org | `services/enrichment/sources/cve_org.py` | ✅ Complete | Mayank |
 | MVP Source Client: CISA KEV | `services/enrichment/sources/cisa_kev.py` | ✅ Complete | Mayank |
 | MVP Source Client: FIRST EPSS v4 | `services/enrichment/sources/epss.py` | ✅ Complete | Mayank |
-| Background Mirroring / Sync Job | `services/enrichment/sources/sync.py` | ✅ Complete | Mayank |
+| Background Mirroring / Sync Job | `services/enrichment/sources/sync.py` | ⚠️ Partial — atomic file writer only; no download, no schedule | Mayank |
 | Multi-Source Fusion & Fallback Chain | `services/enrichment/fusion.py` | ✅ Complete | Mayank |
-| Additive Exposure Risk Score (ERS) | `services/enrichment/ers.py` | ✅ Complete | Mayank |
+| Additive Exposure Risk Score (ERS) | `services/enrichment/ers.py` | ⚠️ Partial — weights lack D-008 rationale and sensitivity analysis | Mayank |
+| Secondary sources: Vulnrichment, EUVD | `services/enrichment/sources/secondary.py` | ❌ Stubs — load no data | Mayank |
+| Coverage vs NVD-only baseline | `evals/` | ❌ Not measured | Mayank |
 | EnrichedFinding ORM Model & Migration | `apps/api/db/models.py`, `alembic/versions/` | ✅ Complete | Mayank |
 | Idempotent EnrichedFinding Repository | `apps/api/db/repositories.py` | ✅ Complete | Mayank |
 | Enrichment Pipeline Coordinator | `services/enrichment/service.py`, `apps/api/tasks/enrichment.py`, `apps/api/routers/findings.py` | ✅ Complete | Mayank |
 | Fallback & Provenance Unit Tests | `tests/unit/test_enrichment_fallback.py`, `tests/unit/test_enrichment_provenance.py` | ✅ Complete | Mayank |
 | ERS Anti-Multiplication & KEV Boost Guards | `tests/unit/test_ers_invariants.py`, `tests/unit/test_kev_scoring.py` | ✅ Complete | Mayank |
 | Offline Execution & Persistence Tests | `tests/unit/test_offline_mirror.py`, `tests/unit/test_enriched_finding_persistence.py` | ✅ Complete | Mayank |
+
+---
+
+### Overall status
+
+Track 2 is not complete. What is done and what is not, stated plainly:
+
+**Done (code + unit tests against synthetic fixtures):**
+* Source clients for CVE.org, CISA KEV and FIRST EPSS v4 that read local mirror files.
+* Per-field fusion with the CVE.org -> Vulnrichment -> EUVD -> derived chain, provenance on every field, and labelled derived placeholders.
+* Additive ERS with per-component explanations; derived placeholders and unknown KEV status are explained as such.
+* `EnrichmentService` / `FusionEngine` accept a `cache_dir` mirror directory; persistence, Celery task and `/findings` endpoints.
+
+**Not done:**
+* No download or sync job is scheduled. `SourceSynchronizer` only writes a payload it is handed; nothing fetches upstream feeds yet, so a fresh deployment has no mirror and KEV status is reported as unknown.
+* CISA Vulnrichment and ENISA EUVD are stubs that load no data, so the fallback chain beyond CVE.org is untested against real records.
+* ERS weights (0.40 / 0.35 / 0.25) are provisional: D-008 requires documented rationale and a sensitivity analysis, neither of which exists yet.
+* Coverage against an NVD-only baseline (the Layer 2 "done when" criterion) has not been measured. All fixture values are synthetic.
 
 ---
 

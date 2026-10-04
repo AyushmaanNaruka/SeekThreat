@@ -14,10 +14,7 @@ from services.scanners.nuclei_adapter import NucleiAdapter
 
 NOW = datetime.now(UTC)
 FIXTURE_TEMPLATE = (
-    Path(__file__).resolve().parents[1]
-    / "fixtures"
-    / "nuclei"
-    / "test_http_detect.yaml"
+    Path(__file__).resolve().parents[1] / "fixtures" / "nuclei" / "test_http_detect.yaml"
 )
 
 MINIMAL_JSONL = (
@@ -73,6 +70,7 @@ def test_local_template_command_construction() -> None:
 def test_nuclei_command_passes_no_stdin_and_closes_subprocess_stdin() -> None:
     """Regression test: -no-stdin flag and stdin=DEVNULL must both be set to prevent hangs."""
     import subprocess
+
     adapter = NucleiAdapter()
     req = ScanRequest(
         target="http://127.0.0.1:8799",
@@ -232,4 +230,3 @@ def test_template_outside_allowed_directories_rejected() -> None:
         )
         with pytest.raises(ValueError, match="outside allowed template directories"):
             adapter.scan(req)
-

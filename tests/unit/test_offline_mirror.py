@@ -13,7 +13,6 @@ from __future__ import annotations
 import socket
 import urllib.request
 from pathlib import Path
-from unittest.mock import patch
 
 import pytest
 
@@ -115,9 +114,7 @@ class TestOfflineMirrorIsolation:
         results = offline_enrichment_service.enrich_batch(findings, persist=False)
         assert len(results) == len(findings)
 
-    def test_network_block_fixture_actually_catches_connections(
-        self, offline_guard: None
-    ) -> None:
+    def test_network_block_fixture_actually_catches_connections(self, offline_guard: None) -> None:
         """Guards that our offline test fixture genuinely traps network attempts."""
         with pytest.raises(NetworkAttemptForbiddenError):
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

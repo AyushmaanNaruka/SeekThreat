@@ -13,13 +13,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-import pytest
-
 from packages.schema.models.finding import EnrichmentValue
 from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
 from services.enrichment.ers import (
-    DEFAULT_WEIGHT_CVSS,
-    DEFAULT_WEIGHT_EPSS,
     DEFAULT_WEIGHT_KEV,
     calculate_ers,
 )
@@ -88,7 +84,10 @@ class TestKEVScoringInvariants:
         assert kev_comp is not None
         assert kev_comp.value == 10.0
         assert kev_comp.weight == DEFAULT_WEIGHT_KEV
-        assert "confirmed" in kev_comp.explanation.lower() or "active exploitation" in kev_comp.explanation.lower()
+        assert (
+            "confirmed" in kev_comp.explanation.lower()
+            or "active exploitation" in kev_comp.explanation.lower()
+        )
         assert kev_comp.provenance.source == Source.KEV
 
         fields_without_kev = _make_fields(cvss=7.5, epss=0.3, in_kev=False)

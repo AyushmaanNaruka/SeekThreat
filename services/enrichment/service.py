@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
 
 from sqlalchemy.orm import Session
 
@@ -32,13 +32,28 @@ class EnrichmentService:
         self,
         fusion_engine: FusionEngine | None = None,
         repository: EnrichedFindingRepository | None = None,
+        cache_dir: Path | None = None,
     ) -> None:
-        self.fusion_engine = fusion_engine or FusionEngine()
+        """Create the service.
+
+        Args:
+            fusion_engine: Pre-built engine. Mutually exclusive with ``cache_dir``.
+            repository: Optional repository for persistence.
+            cache_dir: Local mirror directory; builds ``FusionEngine(cache_dir=...)``.
+                File names follow ``sources.sync.MIRROR_FILENAMES`` (``cve_org.json``,
+                ``cisa_kev.json``, ``epss_v4.json``, ``vulnrichment.json``,
+                ``euvd.json``). When None and no engine is given, sources are
+                unloaded: CVSS/EPSS fall back to labelled placeholders and KEV
+                status is reported as unknown.
+        """
+        if fusion_engine is not None and cache_dir is not None:
+            raise ValueError(
+                "Pass either fusion_engine or cache_dir to EnrichmentService, not both"
+            )
+        self.fusion_engine = fusion_engine or FusionEngine(cache_dir=cache_dir)
         self.repository = repository
 
-    def _resolve_repository(
-        self, session: Session | None = None
-    ) -> EnrichedFindingRepository:
+    def _resolve_repository(self, session: Session | None = None) -> EnrichedFindingRepository:
         """Resolve repository from explicit session or existing instance."""
         if session is not None:
             return EnrichedFindingRepository(session)
@@ -69,9 +84,7 @@ class EnrichmentService:
         Returns:
             Fully populated EnrichedFinding domain model.
         """
-        enriched = self.fusion_engine.fuse_to_enriched_finding(
-            finding, compute_ers=compute_ers
-        )
+        enriched = self.fusion_engine.fuse_to_enriched_finding(finding, compute_ers=compute_ers)
         if persist:
             repo = self._resolve_repository(session)
             repo.upsert(enriched, enriched_at=enriched_at or datetime.now(UTC))
@@ -124,9 +137,7 @@ class EnrichmentService:
         repo = self._resolve_repository(session)
         return repo.get_by_engagement(engagement_id, limit=limit, offset=offset)
 
-    def count_by_engagement(
-        self, engagement_id: str, session: Session | None = None
-    ) -> int:
+    def count_by_engagement(self, engagement_id: str, session: Session | None = None) -> int:
         """Count enriched findings belonging to an engagement."""
         repo = self._resolve_repository(session)
         return repo.count_by_engagement(engagement_id)

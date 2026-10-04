@@ -8,23 +8,20 @@ Verifies:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Any
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
 from pydantic import ValidationError
-from sqlalchemy import create_engine, event, func, select
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 
 from apps.api.core.audit import clear_audit_log, get_audit_log
 from apps.api.db.base import Base
-from apps.api.db.models import EnrichedFindingModel
-from apps.api.db.repositories import EnrichedFindingRepository
+from apps.api.db.repositories import EngagementRepository, EnrichedFindingRepository
 from apps.api.tasks.enrichment import run_enrichment
-from packages.schema.models.finding import EnrichedFinding, Finding
-from packages.schema.models.provenance import Source
-from services.enrichment.fusion import FusionEngine
+from packages.schema.models.engagement import Authorization, Engagement
+from packages.schema.models.finding import EnrichedFinding
 from services.enrichment.service import EnrichmentService
 from tests.fixtures.findings.baseline_findings import (
     ENGAGEMENT_ID,
@@ -50,6 +47,22 @@ def db_session() -> Session:
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
     session = session_factory()
+    # enriched_findings.engagement_id is a foreign key to engagements.
+    EngagementRepository(session).save(
+        Engagement(
+            engagement_id=ENGAGEMENT_ID,
+            name="Lab baseline engagement",
+            authorization=Authorization(
+                engagement_id=ENGAGEMENT_ID,
+                authorized_by="test-operator",
+                allowlist=("172.20.0.0/16",),
+                granted_at=NOW - timedelta(hours=1),
+                expires_at=NOW + timedelta(days=30),
+            ),
+            created_at=NOW,
+        )
+    )
+    session.commit()
     try:
         yield session
     finally:
@@ -84,16 +97,16 @@ class TestEnrichmentService:
 
     def test_enrich_finding_raises_if_persist_without_repo_or_session(self) -> None:
         service = EnrichmentService()
-        with pytest.raises(ValueError, match="neither an active Session nor an EnrichedFindingRepository"):
+        with pytest.raises(
+            ValueError, match="neither an active Session nor an EnrichedFindingRepository"
+        ):
             service.enrich_finding(FINDING_LOG4SHELL, persist=True)
 
     def test_enrich_finding_with_persistence(self, db_session: Session) -> None:
         repo = EnrichedFindingRepository(db_session)
         service = EnrichmentService(repository=repo)
 
-        enriched = service.enrich_finding(
-            FINDING_LOG4SHELL, persist=True, enriched_at=NOW
-        )
+        enriched = service.enrich_finding(FINDING_LOG4SHELL, persist=True, enriched_at=NOW)
         db_session.commit()
 
         # Verify persisted via repository get
@@ -132,9 +145,7 @@ class TestEnrichmentService:
 
     def test_enrich_finding_with_explicit_session(self, db_session: Session) -> None:
         service = EnrichmentService()  # no repo bound at init
-        enriched = service.enrich_finding(
-            FINDING_APACHE_PATH_TRAVERSAL, persist=True, session=db_session
-        )
+        service.enrich_finding(FINDING_APACHE_PATH_TRAVERSAL, persist=True, session=db_session)
         db_session.commit()
 
         # Query using same session
@@ -175,25 +186,103 @@ class TestCeleryEnrichmentWorker:
         result = run_enrichment([])
         assert result == []
 
+    def test_run_enrichment_records_requesting_actor(self, db_session: Session) -> None:
+        findings_data = [FINDING_LOG4SHELL.model_dump(mode="json")]
+
+        with patch("apps.api.tasks.enrichment.SessionLocal", return_value=db_session):
+            run_enrichment(findings_data, engagement_id=ENGAGEMENT_ID, actor="lab-operator")
+
+        audits = get_audit_log()
+        assert [a["event"] for a in audits] == ["enrichment.complete"]
+        assert audits[0]["actor"] == "lab-operator"
+
     def test_run_enrichment_invalid_finding_raises_validation_error(self) -> None:
         invalid_data = [{"finding_id": "bad", "cve_ids": []}]  # missing mandatory fields
         with pytest.raises(ValidationError):
             run_enrichment(invalid_data)
 
-    def test_run_enrichment_transient_error_triggers_celery_retry(
+    def test_run_enrichment_invalid_finding_is_audited(self) -> None:
+        invalid_data = [{"finding_id": "bad", "cve_ids": []}]
+        with pytest.raises(ValidationError):
+            run_enrichment(invalid_data, engagement_id=ENGAGEMENT_ID, actor="lab-operator")
+
+        audits = get_audit_log()
+        assert len(audits) == 1
+        assert audits[0]["event"] == "enrichment.failed"
+        assert audits[0]["status"] == "failed"
+        assert audits[0]["engagement_id"] == ENGAGEMENT_ID
+        assert audits[0]["actor"] == "lab-operator"
+        assert audits[0]["details"]["reason"] == "payload_validation"
+
+    @staticmethod
+    def _mock_task(retries: int, max_retries: int = 3) -> MagicMock:
+        task = MagicMock()
+        task.request.retries = retries
+        task.max_retries = max_retries
+        task.retry.side_effect = RuntimeError("RetryScheduled")
+        return task
+
+    def test_run_enrichment_transient_error_triggers_celery_retry_with_backoff(
         self, db_session: Session
     ) -> None:
         findings_data = [FINDING_LOG4SHELL.model_dump(mode="json")]
-        mock_task = MagicMock()
-        mock_task.retry.side_effect = RuntimeError("RetryScheduled")
+        mock_task = self._mock_task(retries=1)
 
-        with patch("apps.api.tasks.enrichment.SessionLocal", return_value=db_session):
-            with patch.object(
-                EnrichmentService, "enrich_batch", side_effect=IOError("DB connection lost")
-            ):
-                with pytest.raises(RuntimeError, match="RetryScheduled"):
-                    run_enrichment(
-                        findings_data, engagement_id=ENGAGEMENT_ID, task=mock_task
-                    )
+        with (
+            patch("apps.api.tasks.enrichment.SessionLocal", return_value=db_session),
+            patch.object(
+                EnrichmentService, "enrich_batch", side_effect=OSError("DB connection lost")
+            ),
+            pytest.raises(RuntimeError, match="RetryScheduled"),
+        ):
+            run_enrichment(findings_data, engagement_id=ENGAGEMENT_ID, task=mock_task)
 
         mock_task.retry.assert_called_once()
+        assert mock_task.retry.call_args.kwargs["countdown"] == 60  # 30 * 2**1
+        # A scheduled retry is not a terminal failure.
+        assert [a for a in get_audit_log() if a["event"] == "enrichment.failed"] == []
+
+    def test_run_enrichment_exhausted_retries_audits_failure_and_raises(
+        self, db_session: Session
+    ) -> None:
+        findings_data = [FINDING_LOG4SHELL.model_dump(mode="json")]
+        mock_task = self._mock_task(retries=3, max_retries=3)
+
+        with (
+            patch("apps.api.tasks.enrichment.SessionLocal", return_value=db_session),
+            patch.object(
+                EnrichmentService, "enrich_batch", side_effect=OSError("DB connection lost")
+            ),
+            pytest.raises(OSError, match="DB connection lost"),
+        ):
+            run_enrichment(
+                findings_data, engagement_id=ENGAGEMENT_ID, task=mock_task, actor="lab-operator"
+            )
+
+        mock_task.retry.assert_not_called()
+        audits = [a for a in get_audit_log() if a["event"] == "enrichment.failed"]
+        assert len(audits) == 1
+        assert audits[0]["actor"] == "lab-operator"
+        assert audits[0]["details"]["retries"] == 3
+
+    def test_run_enrichment_max_retries_exceeded_from_celery_is_audited(
+        self, db_session: Session
+    ) -> None:
+        """If Celery itself refuses the retry, the failure must still be audited."""
+        from celery.exceptions import MaxRetriesExceededError
+
+        findings_data = [FINDING_LOG4SHELL.model_dump(mode="json")]
+        mock_task = self._mock_task(retries=0)
+        mock_task.retry.side_effect = MaxRetriesExceededError("no more")
+
+        with (
+            patch("apps.api.tasks.enrichment.SessionLocal", return_value=db_session),
+            patch.object(
+                EnrichmentService, "enrich_batch", side_effect=OSError("DB connection lost")
+            ),
+            pytest.raises(MaxRetriesExceededError),
+        ):
+            run_enrichment(findings_data, engagement_id=ENGAGEMENT_ID, task=mock_task)
+
+        audits = [a for a in get_audit_log() if a["event"] == "enrichment.failed"]
+        assert len(audits) == 1

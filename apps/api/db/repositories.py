@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
@@ -21,13 +21,18 @@ from apps.api.db.models import (
     ScanModel,
 )
 from packages.schema.models.engagement import Engagement
-from packages.schema.models.finding import EnrichedFinding, Finding
+from packages.schema.models.finding import EnrichedFinding
 from packages.schema.models.observation import (
     Observation,
     ObservationKind,
     RawArtifact,
     ScanResult,
 )
+
+# Rows per INSERT ... ON CONFLICT statement. enriched_findings has 7 columns, so
+# 500 rows is 3500 bind parameters -- far below PostgreSQL's 65535 limit and
+# SQLite's 32766 default.
+UPSERT_CHUNK_SIZE = 500
 
 
 class RawArtifactRepository:
@@ -152,6 +157,23 @@ class ObservationRepository:
         """Retrieve a single observation by its primary key ID."""
         model = self.session.get(ObservationModel, observation_id)
         return model.to_schema() if model is not None else None
+
+    def existing_ids(self, engagement_id: str, observation_ids: Iterable[str]) -> set[str]:
+        """Return the subset of ``observation_ids`` stored under ``engagement_id``.
+
+        Queried in chunks so a large batch never exceeds the database's
+        bind-parameter limit.
+        """
+        wanted = sorted(set(observation_ids))
+        found: set[str] = set()
+        for start in range(0, len(wanted), UPSERT_CHUNK_SIZE):
+            chunk = wanted[start : start + UPSERT_CHUNK_SIZE]
+            stmt = select(ObservationModel.observation_id).where(
+                ObservationModel.engagement_id == engagement_id,
+                ObservationModel.observation_id.in_(chunk),
+            )
+            found.update(self.session.scalars(stmt).all())
+        return found
 
     def get_by_engagement(
         self,
@@ -353,8 +375,10 @@ class ScanRepository:
 class EnrichedFindingRepository:
     """Repository handling persistence of EnrichedFinding records with idempotent upserts.
 
-    Re-running enrichment on the same finding_id overwrites fields, ERS value,
-    ERS components, and enriched_at without creating duplicate rows.
+    Rows are keyed by (engagement_id, finding_id). Re-running enrichment on the
+    same key overwrites fields, ERS value, ERS components, and enriched_at
+    without creating duplicate rows; the same finding_id in a different
+    engagement is a different row and is never touched.
     """
 
     def __init__(self, session: Session) -> None:
@@ -367,8 +391,8 @@ class EnrichedFindingRepository:
     ) -> EnrichedFinding:
         """Idempotently persist a single EnrichedFinding record.
 
-        ON CONFLICT (finding_id) DO UPDATE: repeat enrichment runs always write
-        the latest fused fields and score; they never duplicate records.
+        ON CONFLICT (engagement_id, finding_id) DO UPDATE: repeat enrichment runs
+        always write the latest fused fields and score; they never duplicate records.
         """
         self.upsert_all([enriched], enriched_at=enriched_at)
         return enriched
@@ -378,62 +402,83 @@ class EnrichedFindingRepository:
         enriched_list: Sequence[EnrichedFinding],
         enriched_at: datetime | None = None,
     ) -> tuple[EnrichedFinding, ...]:
-        """Idempotently persist a batch of EnrichedFinding records in one operation."""
+        """Idempotently persist a batch of EnrichedFinding records.
+
+        - Duplicate keys within the batch are collapsed, last occurrence wins.
+          PostgreSQL rejects an INSERT ... ON CONFLICT DO UPDATE that would
+          touch the same row twice ("cannot affect row a second time").
+        - Rows are written in chunks of ``UPSERT_CHUNK_SIZE`` so one statement
+          never approaches PostgreSQL's 65535 bind-parameter limit.
+        """
         if not enriched_list:
             return ()
 
         now = enriched_at or datetime.now(UTC)
-        records: list[dict[str, Any]] = []
+        # dict preserves first-insertion order; reassigning a key keeps its slot
+        # but replaces the value, giving last-wins semantics.
+        by_key: dict[tuple[str, str], dict[str, Any]] = {}
         for enriched in enriched_list:
             model = EnrichedFindingModel.from_schema(enriched, enriched_at=now)
-            records.append(
-                {
-                    "finding_id": model.finding_id,
-                    "engagement_id": model.engagement_id,
-                    "finding_data": model.finding_data,
-                    "fields": model.fields,
-                    "ers_value": model.ers_value,
-                    "ers_components": model.ers_components,
-                    "enriched_at": model.enriched_at,
-                }
-            )
+            by_key[(model.engagement_id, model.finding_id)] = {
+                "engagement_id": model.engagement_id,
+                "finding_id": model.finding_id,
+                "finding_data": model.finding_data,
+                "fields": model.fields,
+                "ers_value": model.ers_value,
+                "ers_components": model.ers_components,
+                "enriched_at": model.enriched_at,
+            }
+        records = list(by_key.values())
 
-        update_cols = {
-            "finding_data": "finding_data",
-            "fields": "fields",
-            "ers_value": "ers_value",
-            "ers_components": "ers_components",
-            "enriched_at": "enriched_at",
-        }
+        update_cols = ("finding_data", "fields", "ers_value", "ers_components", "enriched_at")
+        conflict_target = ["engagement_id", "finding_id"]
         dialect = self.session.bind.dialect.name if self.session.bind else ""
 
-        stmt: PGInsert | SQLiteInsert
-        if dialect == "postgresql":
-            pg_stmt = pg_insert(EnrichedFindingModel).values(records)
-            stmt = pg_stmt.on_conflict_do_update(
-                index_elements=["finding_id"],
-                set_={k: getattr(pg_stmt.excluded, v) for k, v in update_cols.items()},
-            )
-            self.session.execute(stmt)
-        elif dialect == "sqlite":
-            sq_stmt = sqlite_insert(EnrichedFindingModel).values(records)
-            stmt = sq_stmt.on_conflict_do_update(
-                index_elements=["finding_id"],
-                set_={k: getattr(sq_stmt.excluded, v) for k, v in update_cols.items()},
-            )
-            self.session.execute(stmt)
-        else:
-            # Generic fallback: merge uses the primary key to decide insert vs update.
-            for rec in records:
-                orm_obj = EnrichedFindingModel(**rec)
-                self.session.merge(orm_obj)
+        chunk_size = UPSERT_CHUNK_SIZE
+        for start in range(0, len(records), chunk_size):
+            chunk = records[start : start + chunk_size]
+            stmt: PGInsert | SQLiteInsert
+            if dialect == "postgresql":
+                pg_stmt = pg_insert(EnrichedFindingModel).values(chunk)
+                stmt = pg_stmt.on_conflict_do_update(
+                    index_elements=conflict_target,
+                    set_={col: getattr(pg_stmt.excluded, col) for col in update_cols},
+                )
+                self.session.execute(stmt)
+            elif dialect == "sqlite":
+                sq_stmt = sqlite_insert(EnrichedFindingModel).values(chunk)
+                stmt = sq_stmt.on_conflict_do_update(
+                    index_elements=conflict_target,
+                    set_={col: getattr(sq_stmt.excluded, col) for col in update_cols},
+                )
+                self.session.execute(stmt)
+            else:
+                # Generic fallback: merge uses the primary key to decide insert vs update.
+                for rec in chunk:
+                    self.session.merge(EnrichedFindingModel(**rec))
 
         self.session.flush()
         return tuple(enriched_list)
 
-    def get(self, finding_id: str) -> EnrichedFinding | None:
-        """Retrieve a single enriched finding by its primary key ID."""
-        model = self.session.get(EnrichedFindingModel, finding_id)
+    def get(self, finding_id: str, engagement_id: str | None = None) -> EnrichedFinding | None:
+        """Retrieve a single enriched finding.
+
+        Pass ``engagement_id`` whenever it is known -- every API path does. The
+        key is (engagement_id, finding_id); without an engagement the lookup
+        falls back to the first match by engagement_id, which is only
+        unambiguous when finding_id is unique across engagements.
+        """
+        model: EnrichedFindingModel | None
+        if engagement_id is not None:
+            model = self.session.get(EnrichedFindingModel, (engagement_id, finding_id))
+        else:
+            stmt = (
+                select(EnrichedFindingModel)
+                .where(EnrichedFindingModel.finding_id == finding_id)
+                .order_by(EnrichedFindingModel.engagement_id.asc())
+                .limit(1)
+            )
+            model = self.session.scalars(stmt).first()
         return model.to_schema() if model is not None else None
 
     def get_by_engagement(
@@ -444,15 +489,14 @@ class EnrichedFindingRepository:
     ) -> list[EnrichedFinding]:
         """Retrieve enriched findings associated with an engagement.
 
-        Ordering is stable (enriched_at descending, then finding_id) so paging
-        through with a fixed limit never skips or repeats a row.
+        Ordered by finding_id: a key that does not change on re-enrichment, so
+        paging with a fixed limit never skips or repeats a row even while
+        enrichment is rewriting enriched_at underneath the reader.
         """
-        stmt = select(EnrichedFindingModel).where(
-            EnrichedFindingModel.engagement_id == engagement_id
-        )
-        stmt = stmt.order_by(
-            EnrichedFindingModel.enriched_at.desc(),
-            EnrichedFindingModel.finding_id.asc(),
+        stmt = (
+            select(EnrichedFindingModel)
+            .where(EnrichedFindingModel.engagement_id == engagement_id)
+            .order_by(EnrichedFindingModel.finding_id.asc())
         )
         if offset:
             stmt = stmt.offset(offset)

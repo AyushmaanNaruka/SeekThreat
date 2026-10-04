@@ -1,4 +1,6 @@
 {
+  "_synthetic": true,
+  "_comment": "SYNTHETIC test fixture shaped like the real feed format. Values are illustrative, not real measurements. See README.md in this directory.",
   "CVE-2021-44228": {
     "dataType": "CVE_RECORD",
     "dataVersion": "5.1",

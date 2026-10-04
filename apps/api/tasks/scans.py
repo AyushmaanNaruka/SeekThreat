@@ -118,8 +118,7 @@ def run_scan(
         # non-retried error instead of an opaque OSError retried four times.
         if not adapter.is_available():
             raise ScannerUnavailableError(
-                f"Scanner {scanner!r} is not installed or not runnable "
-                "in this environment."
+                f"Scanner {scanner!r} is not installed or not runnable in this environment."
             )
 
         scan_result = adapter.scan(request)

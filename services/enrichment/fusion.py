@@ -5,20 +5,61 @@ Load-bearing rules from services/enrichment/README.md:
    Every field is wrapped in Attributed[EnrichmentValue] — an unattributed value
    must be unrepresentable, not just discouraged.
 2. Fallback chain: CVE.org -> Vulnrichment -> EUVD -> derived. Label derived values.
+   The chain runs PER FIELD (CVSS, CWE, description independently), so each field's
+   provenance names the source it actually came from.
 5. Mirror sources locally. Don't hit APIs on the request path.
+
+An unloaded or empty mirror is never turned into a confident negative: missing KEV
+data yields ``in_kev`` = None attributed DERIVED/LOW ("KEV status unknown").
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from pathlib import Path
 
 from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
 from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
-from services.enrichment.sources.cisa_kev import CISAKevSource
+from services.enrichment.sources.base import BaseSourceRecord
+from services.enrichment.sources.cisa_kev import CISAKevRecord, CISAKevSource
 from services.enrichment.sources.cve_org import CVEOrgSource
 from services.enrichment.sources.epss import FirstEPSSSource
 from services.enrichment.sources.secondary import EUVDSource, VulnrichmentSource
+from services.enrichment.sources.sync import mirror_path
+
+# Derived placeholders used when no source has data. They are NOT measurements:
+# they are attributed Source.DERIVED / Confidence.LOW and ERS explains them as
+# placeholders (services/enrichment/ers.py). Values unchanged from the original
+# implementation; they have no documented rationale yet.
+PLACEHOLDER_CVSS: float = 5.0
+PLACEHOLDER_EPSS: float = 0.001
+PLACEHOLDER_EPSS_PERCENTILE: float = 0.05
+PLACEHOLDER_CVSS_NON_CVE: float = 4.0
+PLACEHOLDER_EPSS_NON_CVE: float = 0.0001
+PLACEHOLDER_EPSS_PERCENTILE_NON_CVE: float = 0.01
+
+KEV_UNKNOWN_NOTE = "KEV mirror not loaded; KEV status unknown"
+
+_CHAIN_ORDER = (Source.CVE_ORG, Source.VULNRICHMENT, Source.EUVD)
+_CONFIDENCE_RANK = {Confidence.LOW: 0, Confidence.MEDIUM: 1, Confidence.HIGH: 2}
+
+
+def _record_cvss(record: BaseSourceRecord) -> float | None:
+    value = getattr(record, "cvss_score", None)
+    return float(value) if value is not None else None
+
+
+def _record_cwes(record: BaseSourceRecord) -> list[str]:
+    return list(getattr(record, "cwe_ids", None) or [])
+
+
+def _record_description(record: BaseSourceRecord) -> str | None:
+    description = getattr(record, "description", "") or getattr(record, "title", "")
+    return description or None
+
+
+def _chain_rank(source: Source) -> int:
+    return _CHAIN_ORDER.index(source) if source in _CHAIN_ORDER else len(_CHAIN_ORDER)
 
 
 class FusionEngine:
@@ -31,116 +72,122 @@ class FusionEngine:
         first_epss: FirstEPSSSource | None = None,
         vulnrichment: VulnrichmentSource | None = None,
         euvd: EUVDSource | None = None,
+        cache_dir: Path | None = None,
     ) -> None:
-        self.cve_org = cve_org or CVEOrgSource()
-        self.cisa_kev = cisa_kev or CISAKevSource()
-        self.first_epss = first_epss or FirstEPSSSource()
-        self.vulnrichment = vulnrichment
-        self.euvd = euvd
+        """Build the engine from explicit sources and/or a local mirror directory.
+
+        Args:
+            cve_org, cisa_kev, first_epss, vulnrichment, euvd: Explicit source
+                instances. An explicit source always wins over ``cache_dir``.
+            cache_dir: Directory of local mirror files, laid out exactly as
+                ``SourceSynchronizer`` writes it (``sources.sync.MIRROR_FILENAMES``):
+
+                - ``cve_org.json``      -> CVEOrgSource
+                - ``cisa_kev.json``     -> CISAKevSource
+                - ``epss_v4.json``      -> FirstEPSSSource
+                - ``vulnrichment.json`` -> VulnrichmentSource (stub; loads nothing yet)
+                - ``euvd.json``         -> EUVDSource (stub; loads nothing yet)
+
+                A missing or empty file leaves that source unloaded. When
+                ``cache_dir`` is None, any source not passed explicitly is created
+                unloaded, and Vulnrichment/EUVD are left out of the chain.
+        """
+
+        def _path(source: Source) -> Path | None:
+            return mirror_path(cache_dir, source) if cache_dir is not None else None
+
+        self.cve_org = cve_org or CVEOrgSource(cache_file=_path(Source.CVE_ORG))
+        self.cisa_kev = cisa_kev or CISAKevSource(cache_file=_path(Source.KEV))
+        self.first_epss = first_epss or FirstEPSSSource(cache_file=_path(Source.EPSS))
+        self.vulnrichment = vulnrichment or (
+            VulnrichmentSource(cache_file=_path(Source.VULNRICHMENT))
+            if cache_dir is not None
+            else None
+        )
+        self.euvd = euvd or (
+            EUVDSource(cache_file=_path(Source.EUVD)) if cache_dir is not None else None
+        )
 
     def fuse(self, finding: Finding) -> dict[str, Attributed[EnrichmentValue]]:
         """Fuse intelligence across sources into an attributed field dictionary."""
         now = datetime.now(UTC)
-        fields: dict[str, Attributed[EnrichmentValue]] = {}
 
         if not finding.cve_ids:
             return self._fuse_non_cve_finding(finding, now)
 
-        # 1. Fallback chain for CVSS and CWE per CVE, selecting maximum severity
-        best_cvss_score: float | None = None
-        best_cvss_vector: str | None = None
-        best_cvss_source: Source = Source.DERIVED
-        best_cvss_confidence: Confidence = Confidence.LOW
-        best_cvss_note: str = ""
-        best_cvss_cve: str | None = None
+        cve_ids = [c.strip().upper() for c in finding.cve_ids]
+        fields: dict[str, Attributed[EnrichmentValue]] = {}
 
-        all_cwes: list[str] = []
-        cwe_source: Source = Source.DERIVED
-        cwe_confidence: Confidence = Confidence.LOW
-        cwe_source_cve: str | None = None
+        # 1. Per-field fallback chain (CVE.org -> Vulnrichment -> EUVD -> derived).
+        best_cvss: tuple[float, str, BaseSourceRecord] | None = None
+        cwe_values: list[str] = []
+        cwe_contributors: list[tuple[str, BaseSourceRecord]] = []
+        summary: tuple[str, str, BaseSourceRecord] | None = None
 
-        cve_summaries: list[str] = []
-        summary_source: Source = Source.DERIVED
-        summary_confidence: Confidence = Confidence.LOW
+        for cve_id in cve_ids:
+            chain = self._chain_records(cve_id)
 
-        for cve_id in finding.cve_ids:
-            norm_cve = cve_id.strip().upper()
+            for rec in chain:
+                score = _record_cvss(rec)
+                if score is not None:
+                    if best_cvss is None or score > best_cvss[0]:
+                        best_cvss = (score, cve_id, rec)
+                    break
 
-            # Execute fallback chain: CVE.org -> Vulnrichment -> EUVD -> derived
-            cvss_cand, vec_cand, cwe_cand, desc_cand, s_cand, conf_cand, note_cand = (
-                self._resolve_cvss_and_cwe(norm_cve)
-            )
+            for rec in chain:
+                cwes = _record_cwes(rec)
+                if cwes:
+                    cwe_contributors.append((cve_id, rec))
+                    cwe_values.extend(c for c in cwes if c not in cwe_values)
+                    break
 
-            if cvss_cand is not None:
-                if best_cvss_score is None or cvss_cand > best_cvss_score:
-                    best_cvss_score = cvss_cand
-                    best_cvss_vector = vec_cand
-                    best_cvss_source = s_cand
-                    best_cvss_confidence = conf_cand
-                    best_cvss_cve = norm_cve
-                    best_cvss_note = f"{note_cand} (selected from {norm_cve})"
+            if summary is None:
+                for rec in chain:
+                    text = _record_description(rec)
+                    if text:
+                        summary = (text, cve_id, rec)
+                        break
 
-            if cwe_cand:
-                for cwe in cwe_cand:
-                    if cwe not in all_cwes:
-                        all_cwes.append(cwe)
-                # Keep highest confidence source for CWE
-                if cwe_source == Source.DERIVED or (
-                    conf_cand == Confidence.HIGH and cwe_confidence != Confidence.HIGH
-                ):
-                    cwe_source = s_cand
-                    cwe_confidence = conf_cand
-                    cwe_source_cve = norm_cve
-
-            if desc_cand and not cve_summaries:
-                cve_summaries.append(desc_cand)
-                summary_source = s_cand
-                summary_confidence = conf_cand
-
-        # Populate CVSS fields
-        if best_cvss_score is not None:
+        # CVSS
+        if best_cvss is not None:
+            score, cvss_cve, rec = best_cvss
             fields["cvss_score"] = Attributed[EnrichmentValue](
-                value=best_cvss_score,
+                value=score,
                 provenance=Provenance(
-                    source=best_cvss_source,
-                    confidence=best_cvss_confidence,
-                    retrieved_at=now,
-                    note=best_cvss_note,
+                    source=rec.source,
+                    confidence=rec.confidence,
+                    retrieved_at=rec.retrieved_at,
+                    note=f"{self._cvss_note(rec)} (selected from {cvss_cve})",
                 ),
             )
-            if best_cvss_vector:
+            vector = getattr(rec, "cvss_vector", None)
+            if vector:
                 fields["cvss_vector"] = Attributed[EnrichmentValue](
-                    value=best_cvss_vector,
+                    value=vector,
                     provenance=Provenance(
-                        source=best_cvss_source,
-                        confidence=best_cvss_confidence,
-                        retrieved_at=now,
-                        note=f"Vector for {best_cvss_cve}",
+                        source=rec.source,
+                        confidence=rec.confidence,
+                        retrieved_at=rec.retrieved_at,
+                        note=f"Vector for {cvss_cve} from {rec.source.value}",
                     ),
                 )
         else:
-            # Derived fallback CVSS
             fields["cvss_score"] = Attributed[EnrichmentValue](
-                value=5.0,
+                value=PLACEHOLDER_CVSS,
                 provenance=Provenance(
                     source=Source.DERIVED,
                     confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Derived fallback CVSS; all upstream sources lacked metrics",
+                    note=(
+                        "Derived placeholder CVSS; no CVSS in CVE.org, Vulnrichment or "
+                        "EUVD mirrors. Not a measurement."
+                    ),
                 ),
             )
 
-        # Populate CWE fields
-        if all_cwes:
-            fields["cwe_ids"] = Attributed[EnrichmentValue](
-                value=sorted(all_cwes),
-                provenance=Provenance(
-                    source=cwe_source,
-                    confidence=cwe_confidence,
-                    retrieved_at=now,
-                    note=f"CWE taxonomy from {cwe_source.value} ({cwe_source_cve})",
-                ),
-            )
+        # CWE
+        if cwe_contributors:
+            fields["cwe_ids"] = self._attributed_cwes(cwe_values, cwe_contributors)
         else:
             fields["cwe_ids"] = Attributed[EnrichmentValue](
                 value=["CWE-Other"],
@@ -148,203 +195,198 @@ class FusionEngine:
                     source=Source.DERIVED,
                     confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Derived fallback CWE classification",
+                    note="Derived fallback CWE classification; no source supplied a CWE",
                 ),
             )
 
-        # 2. CISA KEV Intelligence
-        matching_kev_cve: str | None = None
-        kev_record: Any = None
-        for cve_id in finding.cve_ids:
-            rec = self.cisa_kev.lookup(cve_id)
-            if rec and rec.is_in_kev:
-                matching_kev_cve = cve_id
-                kev_record = rec
-                break
+        # 2. CISA KEV
+        fields.update(self._kev_fields(cve_ids, now))
 
-        if matching_kev_cve and kev_record:
-            fields["in_kev"] = Attributed[EnrichmentValue](
-                value=True,
-                provenance=Provenance(
-                    source=Source.KEV,
-                    confidence=Confidence.HIGH,
-                    retrieved_at=now,
-                    note=f"Confirmed active exploitation in the wild via {matching_kev_cve}",
-                ),
-            )
-            if kev_record.date_added:
-                fields["kev_date_added"] = Attributed[EnrichmentValue](
-                    value=kev_record.date_added,
-                    provenance=Provenance(
-                        source=Source.KEV,
-                        confidence=Confidence.HIGH,
-                        retrieved_at=now,
-                        note=f"Date added to KEV catalog ({matching_kev_cve})",
-                    ),
-                )
-            if kev_record.known_ransomware_campaign_use:
-                fields["ransomware_use"] = Attributed[EnrichmentValue](
-                    value=kev_record.known_ransomware_campaign_use,
-                    provenance=Provenance(
-                        source=Source.KEV,
-                        confidence=Confidence.HIGH,
-                        retrieved_at=now,
-                        note=f"Known ransomware campaign use per CISA ({matching_kev_cve})",
-                    ),
-                )
-        else:
-            fields["in_kev"] = Attributed[EnrichmentValue](
-                value=False,
-                provenance=Provenance(
-                    source=Source.KEV,
-                    confidence=Confidence.HIGH,
-                    retrieved_at=now,
-                    note="No associated CVEs listed in CISA KEV catalog",
-                ),
-            )
-
-        # 3. FIRST EPSS v4 Intelligence (max probability selection)
-        best_epss_score: float | None = None
-        best_epss_percentile: float | None = None
-        best_epss_cve: str | None = None
-
-        for cve_id in finding.cve_ids:
+        # 3. FIRST EPSS v4 (max probability selection)
+        best_epss: tuple[float, float, str, BaseSourceRecord] | None = None
+        for cve_id in cve_ids:
             rec_epss = self.first_epss.lookup(cve_id)
-            if rec_epss and rec_epss.epss is not None:
-                if best_epss_score is None or rec_epss.epss > best_epss_score:
-                    best_epss_score = rec_epss.epss
-                    best_epss_percentile = rec_epss.percentile
-                    best_epss_cve = cve_id
+            if rec_epss is not None and (best_epss is None or rec_epss.epss > best_epss[0]):
+                best_epss = (rec_epss.epss, rec_epss.percentile, cve_id, rec_epss)
 
-        if best_epss_score is not None and best_epss_percentile is not None:
+        if best_epss is not None:
+            epss_score, epss_percentile, epss_cve, epss_rec = best_epss
             fields["epss_score"] = Attributed[EnrichmentValue](
-                value=best_epss_score,
+                value=epss_score,
                 provenance=Provenance(
                     source=Source.EPSS,
                     confidence=Confidence.HIGH,
-                    retrieved_at=now,
-                    note=f"FIRST EPSS v4 probability score for {best_epss_cve}",
+                    retrieved_at=epss_rec.retrieved_at,
+                    note=f"FIRST EPSS v4 probability score for {epss_cve}",
                 ),
             )
             fields["epss_percentile"] = Attributed[EnrichmentValue](
-                value=best_epss_percentile,
+                value=epss_percentile,
                 provenance=Provenance(
                     source=Source.EPSS,
                     confidence=Confidence.HIGH,
-                    retrieved_at=now,
-                    note=f"FIRST EPSS v4 percentile ranking for {best_epss_cve}",
+                    retrieved_at=epss_rec.retrieved_at,
+                    note=f"FIRST EPSS v4 percentile ranking for {epss_cve}",
                 ),
             )
         else:
-            # Derived baseline floor when EPSS feed lacks score
             fields["epss_score"] = Attributed[EnrichmentValue](
-                value=0.001,
+                value=PLACEHOLDER_EPSS,
                 provenance=Provenance(
                     source=Source.DERIVED,
                     confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="No EPSS score found; conservative baseline floor applied",
+                    note="Derived placeholder EPSS; no EPSS score in mirror. Not a measurement.",
                 ),
             )
             fields["epss_percentile"] = Attributed[EnrichmentValue](
-                value=0.05,
+                value=PLACEHOLDER_EPSS_PERCENTILE,
                 provenance=Provenance(
                     source=Source.DERIVED,
                     confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Derived baseline percentile floor",
+                    note="Derived placeholder EPSS percentile. Not a measurement.",
                 ),
             )
 
         # Summary
-        if cve_summaries:
+        if summary is not None:
+            text, summary_cve, desc_rec = summary
             fields["summary"] = Attributed[EnrichmentValue](
-                value=cve_summaries[0],
+                value=text,
                 provenance=Provenance(
-                    source=summary_source,
-                    confidence=summary_confidence,
-                    retrieved_at=now,
-                    note="Vulnerability summary from intelligence feed",
+                    source=desc_rec.source,
+                    confidence=desc_rec.confidence,
+                    retrieved_at=desc_rec.retrieved_at,
+                    note=f"Vulnerability description for {summary_cve} "
+                    f"from {desc_rec.source.value}",
                 ),
             )
 
         return fields
 
-    def _resolve_cvss_and_cwe(
-        self, cve_id: str
-    ) -> tuple[
-        float | None,
-        str | None,
-        list[str],
-        str | None,
-        Source,
-        Confidence,
-        str,
-    ]:
-        """Execute fallback chain: CVE.org -> Vulnrichment -> EUVD -> derived."""
-        # 1. Primary: CVE.org
+    def _chain_records(self, cve_id: str) -> list[BaseSourceRecord]:
+        """Records for a CVE in fallback-chain order: CVE.org -> Vulnrichment -> EUVD."""
+        records: list[BaseSourceRecord] = []
         cve_record = self.cve_org.lookup(cve_id)
-        if cve_record and cve_record.cvss_score is not None:
-            return (
-                cve_record.cvss_score,
-                cve_record.cvss_vector,
-                list(cve_record.cwe_ids),
-                cve_record.description or cve_record.title,
-                Source.CVE_ORG,
-                Confidence.HIGH,
-                f"Canonical CVE.org CVSS {cve_record.cvss_version or 'v3.1'}",
-            )
-
-        # 2. Secondary fallback: CISA Vulnrichment
-        if self.vulnrichment:
+        if cve_record is not None:
+            records.append(cve_record)
+        if self.vulnrichment is not None:
             vuln_record = self.vulnrichment.lookup(cve_id)
-            if vuln_record and vuln_record.cvss_score is not None:
-                return (
-                    vuln_record.cvss_score,
-                    vuln_record.cvss_vector,
-                    list(vuln_record.cwe_ids),
-                    None,
-                    Source.VULNRICHMENT,
-                    Confidence.MEDIUM,
-                    "CISA Vulnrichment fallback CVSS",
-                )
-
-        # 3. Secondary fallback: ENISA EUVD
-        if self.euvd:
+            if vuln_record is not None:
+                records.append(vuln_record)
+        if self.euvd is not None:
             euvd_record = self.euvd.lookup(cve_id)
-            if euvd_record and euvd_record.cvss_score is not None:
-                return (
-                    euvd_record.cvss_score,
-                    euvd_record.cvss_vector,
-                    list(euvd_record.cwe_ids),
-                    None,
-                    Source.EUVD,
-                    Confidence.MEDIUM,
-                    "ENISA EUVD fallback CVSS",
-                )
+            if euvd_record is not None:
+                records.append(euvd_record)
+        return records
 
-        # 4. If CVE.org had description or CWE but no CVSS
-        if cve_record and (cve_record.cwe_ids or cve_record.description):
-            return (
-                None,
-                None,
-                list(cve_record.cwe_ids),
-                cve_record.description or cve_record.title,
-                Source.CVE_ORG,
-                Confidence.HIGH,
-                "Canonical CVE.org record (metrics missing)",
-            )
+    @staticmethod
+    def _cvss_note(record: BaseSourceRecord) -> str:
+        if record.source == Source.CVE_ORG:
+            version = getattr(record, "cvss_version", None)
+            return f"Canonical CVE.org CNA CVSS{f' v{version}' if version else ''}"
+        if record.source == Source.VULNRICHMENT:
+            return "CISA Vulnrichment fallback CVSS (CVE.org lacked metrics)"
+        if record.source == Source.EUVD:
+            return "ENISA EUVD fallback CVSS (CVE.org and Vulnrichment lacked metrics)"
+        return f"CVSS from {record.source.value}"
 
-        # Fallback to derived
-        return (
-            None,
-            None,
-            [],
-            None,
-            Source.DERIVED,
-            Confidence.LOW,
-            "All sources lacked metrics",
+    @staticmethod
+    def _attributed_cwes(
+        cwe_values: list[str], contributors: list[tuple[str, BaseSourceRecord]]
+    ) -> Attributed[EnrichmentValue]:
+        """Attribute a CWE union across a finding's CVEs.
+
+        Provenance holds a single source, so when CVEs got their CWEs from different
+        sources it names the most authoritative one in chain order, takes the LOWEST
+        contributing confidence, and lists every per-CVE source in the note.
+        """
+        primary = min((rec.source for _, rec in contributors), key=_chain_rank)
+        confidence = min(
+            (rec.confidence for _, rec in contributors), key=lambda c: _CONFIDENCE_RANK[c]
         )
+        per_cve = "; ".join(f"{cve} from {rec.source.value}" for cve, rec in contributors)
+        return Attributed[EnrichmentValue](
+            value=sorted(cwe_values),
+            provenance=Provenance(
+                source=primary,
+                confidence=confidence,
+                retrieved_at=min(rec.retrieved_at for _, rec in contributors),
+                note=f"CWE taxonomy: {per_cve}",
+            ),
+        )
+
+    def _kev_fields(
+        self, cve_ids: list[str], now: datetime
+    ) -> dict[str, Attributed[EnrichmentValue]]:
+        """KEV fields. Unloaded/empty mirror -> unknown (None, DERIVED/LOW), never False."""
+        if not self.cisa_kev.is_loaded:
+            return {
+                "in_kev": Attributed[EnrichmentValue](
+                    value=None,
+                    provenance=Provenance(
+                        source=Source.DERIVED,
+                        confidence=Confidence.LOW,
+                        retrieved_at=now,
+                        note=KEV_UNKNOWN_NOTE,
+                    ),
+                )
+            }
+
+        hit: tuple[str, CISAKevRecord] | None = None
+        for cve_id in cve_ids:
+            rec = self.cisa_kev.lookup(cve_id)
+            if rec is not None and rec.is_in_kev:
+                hit = (cve_id, rec)
+                break
+
+        if hit is None:
+            return {
+                "in_kev": Attributed[EnrichmentValue](
+                    value=False,
+                    provenance=Provenance(
+                        source=Source.KEV,
+                        confidence=Confidence.HIGH,
+                        retrieved_at=self.cisa_kev.catalog_date or now,
+                        note=f"None of {', '.join(cve_ids)} listed in the loaded CISA KEV catalog",
+                    ),
+                )
+            }
+
+        kev_cve, kev_record = hit
+        out: dict[str, Attributed[EnrichmentValue]] = {
+            "in_kev": Attributed[EnrichmentValue](
+                value=True,
+                provenance=Provenance(
+                    source=Source.KEV,
+                    confidence=Confidence.HIGH,
+                    retrieved_at=kev_record.retrieved_at,
+                    note=f"Confirmed active exploitation in the wild via {kev_cve}",
+                ),
+            )
+        }
+        if kev_record.date_added:
+            out["kev_date_added"] = Attributed[EnrichmentValue](
+                value=kev_record.date_added,
+                provenance=Provenance(
+                    source=Source.KEV,
+                    confidence=Confidence.HIGH,
+                    retrieved_at=kev_record.retrieved_at,
+                    note=f"Date added to KEV catalog ({kev_cve})",
+                ),
+            )
+        if kev_record.has_known_ransomware_use:
+            out["ransomware_use"] = Attributed[EnrichmentValue](
+                value=kev_record.known_ransomware_campaign_use,
+                provenance=Provenance(
+                    source=Source.KEV,
+                    confidence=Confidence.HIGH,
+                    retrieved_at=kev_record.retrieved_at,
+                    note=f"Known ransomware campaign use per CISA ({kev_cve})",
+                ),
+            )
+        return out
 
     def _fuse_non_cve_finding(
         self, finding: Finding, now: datetime
@@ -352,12 +394,13 @@ class FusionEngine:
         """Synthesize derived attributes for non-CVE heuristic findings."""
         return {
             "cvss_score": Attributed[EnrichmentValue](
-                value=4.0,
+                value=PLACEHOLDER_CVSS_NON_CVE,
                 provenance=Provenance(
                     source=Source.DERIVED,
                     confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Derived baseline score for non-CVE scanner heuristic",
+                    note="Derived placeholder CVSS for non-CVE scanner heuristic. "
+                    "Not a measurement.",
                 ),
             ),
             "cwe_ids": Attributed[EnrichmentValue](
@@ -375,25 +418,27 @@ class FusionEngine:
                     source=Source.DERIVED,
                     confidence=Confidence.HIGH,
                     retrieved_at=now,
-                    note="Non-CVE finding is not tracked in CISA KEV catalog",
+                    note="Finding has no CVE identifiers; CISA KEV lists only CVEs",
                 ),
             ),
             "epss_score": Attributed[EnrichmentValue](
-                value=0.0001,
+                value=PLACEHOLDER_EPSS_NON_CVE,
                 provenance=Provenance(
                     source=Source.DERIVED,
                     confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Non-CVE finding has no EPSS probability",
+                    note="Derived placeholder EPSS; non-CVE finding has no EPSS score. "
+                    "Not a measurement.",
                 ),
             ),
             "epss_percentile": Attributed[EnrichmentValue](
-                value=0.01,
+                value=PLACEHOLDER_EPSS_PERCENTILE_NON_CVE,
                 provenance=Provenance(
                     source=Source.DERIVED,
                     confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Non-CVE finding assigned floor percentile",
+                    note="Derived placeholder EPSS percentile for non-CVE finding. "
+                    "Not a measurement.",
                 ),
             ),
             "summary": Attributed[EnrichmentValue](
@@ -429,6 +474,7 @@ def fuse_finding(
     first_epss: FirstEPSSSource | None = None,
     vulnrichment: VulnrichmentSource | None = None,
     euvd: EUVDSource | None = None,
+    cache_dir: Path | None = None,
 ) -> dict[str, Attributed[EnrichmentValue]]:
     """Convenience helper to fuse a single finding with given sources."""
     engine = FusionEngine(
@@ -437,5 +483,6 @@ def fuse_finding(
         first_epss=first_epss,
         vulnrichment=vulnrichment,
         euvd=euvd,
+        cache_dir=cache_dir,
     )
     return engine.fuse(finding)

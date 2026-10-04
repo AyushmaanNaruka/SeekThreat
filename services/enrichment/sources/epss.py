@@ -7,12 +7,15 @@ Priority 4 source per services/enrichment/README.md:
 from __future__ import annotations
 
 import json
-from pathlib import Path
-from typing import Any
+from datetime import UTC, datetime
 
 from packages.schema.models.finding import EnrichmentValue
 from packages.schema.models.provenance import Attributed, Confidence, Source
-from services.enrichment.sources.base import BaseEnrichmentSource, BaseSourceRecord
+from services.enrichment.sources.base import (
+    BaseEnrichmentSource,
+    BaseSourceRecord,
+    parse_feed_date,
+)
 
 
 class FirstEPSSRecord(BaseSourceRecord):
@@ -73,12 +76,16 @@ class FirstEPSSSource(BaseEnrichmentSource[FirstEPSSRecord]):
                 except (KeyError, ValueError, TypeError):
                     continue
 
+                # The EPSS score date is when FIRST computed this value; use it as
+                # retrieved_at so provenance reflects the data, not fusion time.
+                score_date = parse_feed_date(item.get("date"))
                 records[cve_id] = FirstEPSSRecord(
                     cve_id=cve_id,
                     epss=epss_val,
                     percentile=percentile_val,
                     date=item.get("date"),
                     raw_payload=item,
+                    retrieved_at=score_date or datetime.now(UTC),
                 )
 
         self._cache = records

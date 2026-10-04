@@ -25,14 +25,21 @@ json_type = sa.JSON().with_variant(postgresql.JSONB(), "postgresql")
 def upgrade() -> None:
     op.create_table(
         "enriched_findings",
-        sa.Column("finding_id", sa.String(length=128), nullable=False),
         sa.Column("engagement_id", sa.String(length=128), nullable=False),
+        sa.Column("finding_id", sa.String(length=128), nullable=False),
         sa.Column("finding_data", json_type, nullable=False),
         sa.Column("fields", json_type, nullable=False),
         sa.Column("ers_value", sa.Float(), nullable=True),
         sa.Column("ers_components", json_type, nullable=True),
         sa.Column("enriched_at", sa.DateTime(timezone=True), nullable=False),
-        sa.PrimaryKeyConstraint("finding_id"),
+        sa.ForeignKeyConstraint(
+            ["engagement_id"],
+            ["engagements.engagement_id"],
+            ondelete="CASCADE",
+        ),
+        # finding_id is unique only within an engagement; a global key would let
+        # one engagement's enrichment overwrite another's row.
+        sa.PrimaryKeyConstraint("engagement_id", "finding_id"),
     )
 
     op.create_index(

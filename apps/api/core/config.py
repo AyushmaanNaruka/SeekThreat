@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from typing import Annotated, Any
 
 from pydantic import Field, field_validator
@@ -57,8 +58,16 @@ class Settings(BaseSettings):
     nuclei_path: str | None = Field(
         default_factory=lambda: os.getenv("NUCLEI_PATH"),
         description=(
-            "Absolute path to the nuclei binary. "
-            "If unset, shutil.which('nuclei') is used."
+            "Absolute path to the nuclei binary. If unset, shutil.which('nuclei') is used."
+        ),
+    )
+
+    enrichment_cache_dir: Path | None = Field(
+        default=None,
+        description=(
+            "Directory holding the local enrichment feed mirrors (KEV, EPSS, CVE). "
+            "Read from ENRICHMENT_CACHE_DIR. If unset, EnrichmentService uses its "
+            "own default source configuration."
         ),
     )
 
@@ -82,4 +91,3 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
-

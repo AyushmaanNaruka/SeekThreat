@@ -185,10 +185,7 @@ def test_observations_endpoint_matches_repository_for_full_fixture_set(
     assert body["total"] == expected_total
     assert len(body["items"]) == expected_total
 
-    expected_ids = {
-        o.observation_id
-        for o in obs_repo.get_by_engagement(ENGAGEMENT_ID, limit=None)
-    }
+    expected_ids = {o.observation_id for o in obs_repo.get_by_engagement(ENGAGEMENT_ID, limit=None)}
 
     api_ids = {item["observation_id"] for item in body["items"]}
     assert api_ids == expected_ids

@@ -589,4 +589,3 @@ def test_local_fallback_happy_path_completes(engine, seeded_scan, monkeypatch) -
     assert len(completed_events) == 1
     assert completed_events[0]["status"] == "completed"
     assert completed_events[0]["details"]["celery_task_id"] is None
-

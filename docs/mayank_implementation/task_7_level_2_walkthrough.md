@@ -142,7 +142,21 @@ Zero regressions across all 315 tests in the SeekThreat repository.
 
 ## 4. Track 2 (Level 2: Vulnerability Enrichment) Completion Summary
 
-With the successful completion and verification of Task 7, **Track 2 is 100% complete**:
+Task 7 adds the invariant test suite. Track 2 is **not** complete. What is done and what is not, stated plainly:
+
+**Done (code + unit tests against synthetic fixtures):**
+* Source clients for CVE.org, CISA KEV and FIRST EPSS v4 that read local mirror files.
+* Per-field fusion with the CVE.org -> Vulnrichment -> EUVD -> derived chain, provenance on every field, and labelled derived placeholders.
+* Additive ERS with per-component explanations; derived placeholders and unknown KEV status are explained as such.
+* `EnrichmentService` / `FusionEngine` accept a `cache_dir` mirror directory; persistence, Celery task and `/findings` endpoints.
+
+**Not done:**
+* No download or sync job is scheduled. `SourceSynchronizer` only writes a payload it is handed; nothing fetches upstream feeds yet, so a fresh deployment has no mirror and KEV status is reported as unknown.
+* CISA Vulnrichment and ENISA EUVD are stubs that load no data, so the fallback chain beyond CVE.org is untested against real records.
+* ERS weights (0.40 / 0.35 / 0.25) are provisional: D-008 requires documented rationale and a sensitivity analysis, neither of which exists yet.
+* Coverage against an NVD-only baseline (the Layer 2 "done when" criterion) has not been measured. All fixture values are synthetic.
+
+Task walkthroughs:
 
 * **Task 1 (Fixtures & Baseline):** [Task 1 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_1_level_2_walkthrough.md) — Finding fixtures and feed sample caches.
 * **Task 2 (Source Clients & Local Cache):** [Task 2 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_2_level_2_walkthrough.md) — Base cache contracts, CVE.org, CISA KEV, FIRST EPSS v4 clients, and background sync job.

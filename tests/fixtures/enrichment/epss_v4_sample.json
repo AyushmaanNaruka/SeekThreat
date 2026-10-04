@@ -1,4 +1,6 @@
 {
+  "_synthetic": true,
+  "_comment": "SYNTHETIC test fixture shaped like the real feed format. Values are illustrative, not real measurements. See README.md in this directory.",
   "status": "OK",
   "status-code": 200,
   "version": "v4",

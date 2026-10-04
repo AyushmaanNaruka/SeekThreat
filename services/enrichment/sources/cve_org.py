@@ -7,14 +7,18 @@ Priority 1 source per services/enrichment/README.md:
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import Field
 
 from packages.schema.models.finding import EnrichmentValue
 from packages.schema.models.provenance import Attributed, Confidence, Source
-from services.enrichment.sources.base import BaseEnrichmentSource, BaseSourceRecord
+from services.enrichment.sources.base import (
+    BaseEnrichmentSource,
+    BaseSourceRecord,
+    parse_feed_date,
+)
 
 
 class CVEOrgRecord(BaseSourceRecord):
@@ -131,13 +135,11 @@ class CVEOrgSource(BaseEnrichmentSource[CVEOrgRecord]):
             for key in ("cvssV4_0", "cvssV3_1", "cvssV3_0", "cvssV2_0"):
                 if key in metric and isinstance(metric[key], dict):
                     cvss_data = metric[key]
-                    cvss_score = (
-                        float(cvss_data["baseScore"])
-                        if "baseScore" in cvss_data
-                        else None
-                    )
+                    cvss_score = float(cvss_data["baseScore"]) if "baseScore" in cvss_data else None
                     cvss_vector = cvss_data.get("vectorString")
-                    cvss_version = cvss_data.get("version", key.replace("cvssV", "").replace("_", "."))
+                    cvss_version = cvss_data.get(
+                        "version", key.replace("cvssV", "").replace("_", ".")
+                    )
                     base_severity = cvss_data.get("baseSeverity")
                     break
             if cvss_score is not None:
@@ -151,6 +153,10 @@ class CVEOrgSource(BaseEnrichmentSource[CVEOrgRecord]):
                 if cwe_id and cwe_id not in cwe_ids:
                     cwe_ids.append(cwe_id.strip().upper())
 
+        # cveMetadata.dateUpdated is the record's last modification; it is the best
+        # available "as of" date for this data. Fall back to fusion time if absent.
+        updated = parse_feed_date(metadata.get("dateUpdated"))
+
         return CVEOrgRecord(
             cve_id=cve_id,
             title=title,
@@ -161,4 +167,5 @@ class CVEOrgSource(BaseEnrichmentSource[CVEOrgRecord]):
             base_severity=base_severity,
             cwe_ids=cwe_ids,
             raw_payload=record_dict,
+            retrieved_at=updated or datetime.now(UTC),
         )

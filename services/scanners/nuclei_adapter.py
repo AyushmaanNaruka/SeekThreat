@@ -20,26 +20,28 @@ ALLOWED_TEMPLATE_DIRS = (
     (REPO_ROOT / "tests" / "fixtures" / "nuclei").resolve(),
 )
 
-APPROVED_TAGS = frozenset({
-    "cve",
-    "rce",
-    "tech",
-    "panel",
-    "ssl",
-    "dns",
-    "exposure",
-    "misconfig",
-    "config",
-    "default-login",
-    "token",
-    "network",
-    "http",
-    "info",
-    "low",
-    "medium",
-    "high",
-    "critical",
-})
+APPROVED_TAGS = frozenset(
+    {
+        "cve",
+        "rce",
+        "tech",
+        "panel",
+        "ssl",
+        "dns",
+        "exposure",
+        "misconfig",
+        "config",
+        "default-login",
+        "token",
+        "network",
+        "http",
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical",
+    }
+)
 EXCLUDE_TAGS = "dos,intrusive,fuzz,bruteforce"
 
 
@@ -103,8 +105,7 @@ class NucleiAdapter(ScannerAdapter):
                 candidate = candidate.resolve()
 
             is_allowed = any(
-                candidate.is_relative_to(allowed_dir)
-                for allowed_dir in ALLOWED_TEMPLATE_DIRS
+                candidate.is_relative_to(allowed_dir) for allowed_dir in ALLOWED_TEMPLATE_DIRS
             )
             if not is_allowed:
                 raise ValueError(

@@ -203,3 +203,102 @@ class TestFusionIntelligenceOutputs:
 
         enriched_no_ers = engine.fuse_to_enriched_finding(FINDING_LOG4SHELL, compute_ers=False)
         assert enriched_no_ers.ers is None
+
+
+def _bare_finding(cve_id: str) -> Finding:
+    return Finding(
+        finding_id=f"find-{cve_id.lower()}",
+        engagement_id="eng-001",
+        asset_id="asset-001",
+        scanner="nuclei",
+        cve_ids=[cve_id],
+        observation_ids=["obs-001"],
+        detected_at=FINDING_LOG4SHELL.detected_at,
+    )
+
+
+class TestPerFieldFallbackChain:
+    """Each field resolves independently: CVE.org -> Vulnrichment -> EUVD -> derived."""
+
+    def test_cve_org_cwe_and_description_kept_when_cvss_from_vulnrichment(self) -> None:
+        from services.enrichment.sources.cve_org import CVEOrgRecord
+
+        cve_id = "CVE-2025-1000"
+        cve_org = CVEOrgSource()
+        cve_org._cache[cve_id] = CVEOrgRecord(
+            cve_id=cve_id, description="CNA description", cwe_ids=["CWE-89"]
+        )
+        cve_org._loaded = True
+        vuln = VulnrichmentSource()
+        vuln._cache[cve_id] = VulnrichmentRecord(cve_id=cve_id, cvss_score=8.8, cwe_ids=["CWE-20"])
+        vuln._loaded = True
+
+        fields = FusionEngine(cve_org=cve_org, vulnrichment=vuln).fuse(_bare_finding(cve_id))
+
+        assert fields["cvss_score"].value == 8.8
+        assert fields["cvss_score"].provenance.source == Source.VULNRICHMENT
+        assert fields["cwe_ids"].value == ["CWE-89"]
+        assert fields["cwe_ids"].provenance.source == Source.CVE_ORG
+        assert fields["summary"].value == "CNA description"
+        assert fields["summary"].provenance.source == Source.CVE_ORG
+
+    def test_vulnrichment_asked_for_cwe_when_cve_org_lacks_it(self) -> None:
+        from services.enrichment.sources.cve_org import CVEOrgRecord
+
+        cve_id = "CVE-2025-1001"
+        cve_org = CVEOrgSource()
+        cve_org._cache[cve_id] = CVEOrgRecord(cve_id=cve_id, cvss_score=7.0)
+        cve_org._loaded = True
+        vuln = VulnrichmentSource()
+        vuln._cache[cve_id] = VulnrichmentRecord(cve_id=cve_id, cwe_ids=["CWE-79"])
+        vuln._loaded = True
+
+        fields = FusionEngine(cve_org=cve_org, vulnrichment=vuln).fuse(_bare_finding(cve_id))
+
+        assert fields["cvss_score"].provenance.source == Source.CVE_ORG
+        assert fields["cwe_ids"].value == ["CWE-79"]
+        assert fields["cwe_ids"].provenance.source == Source.VULNRICHMENT
+        assert fields["cwe_ids"].provenance.confidence == Confidence.MEDIUM
+
+
+class TestRansomwareUse:
+    def test_ransomware_emitted_only_when_known(self) -> None:
+        engine = get_test_engine()
+        assert engine.fuse(FINDING_LOG4SHELL)["ransomware_use"].value == "Known"
+        # CVE-2022-22947 is in the KEV fixture with knownRansomwareCampaignUse == "Unknown"
+        assert "ransomware_use" not in engine.fuse(FINDING_SPRING_GATEWAY_RCE)
+
+
+class TestRecordDatesAsRetrievedAt:
+    def test_epss_retrieved_at_is_feed_date(self) -> None:
+        fields = get_test_engine().fuse(FINDING_LOG4SHELL)
+        retrieved = fields["epss_score"].provenance.retrieved_at
+        assert retrieved.date().isoformat() == "2026-09-20"
+        assert retrieved.tzinfo is not None
+
+    def test_kev_retrieved_at_is_catalog_release_date(self) -> None:
+        engine = get_test_engine()
+        for finding in (FINDING_LOG4SHELL, FINDING_NON_KEV_MODERATE):
+            retrieved = engine.fuse(finding)["in_kev"].provenance.retrieved_at
+            assert retrieved.date().isoformat() == "2024-09-20"
+
+    def test_cve_org_retrieved_at_is_date_updated(self, tmp_path: Path) -> None:
+        import json
+
+        record = {
+            "dataType": "CVE_RECORD",
+            "cveMetadata": {"cveId": "CVE-2025-2000", "dateUpdated": "2025-03-04T05:06:07Z"},
+            "containers": {
+                "cna": {"metrics": [{"cvssV3_1": {"baseScore": 6.1}}], "descriptions": []}
+            },
+        }
+        path = tmp_path / "cve_org.json"
+        path.write_text(json.dumps(record), encoding="utf-8")
+        fields = FusionEngine(cve_org=CVEOrgSource(cache_file=path)).fuse(
+            _bare_finding("CVE-2025-2000")
+        )
+        assert (
+            fields["cvss_score"]
+            .provenance.retrieved_at.isoformat()
+            .startswith("2025-03-04T05:06:07")
+        )

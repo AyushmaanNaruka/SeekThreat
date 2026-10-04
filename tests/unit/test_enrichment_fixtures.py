@@ -12,8 +12,6 @@ from tests.fixtures.findings.baseline_findings import (
     FINDING_APACHE_PATH_TRAVERSAL,
     FINDING_HEURISTIC_NO_CVE,
     FINDING_LOG4SHELL,
-    FINDING_NON_KEV_MODERATE,
-    FINDING_NVD_UNENRICHED_RECENT,
     FINDING_SPRING_GATEWAY_RCE,
     get_baseline_findings,
     get_baseline_findings_by_id,
@@ -172,3 +170,15 @@ class TestEnrichmentSampleFeeds:
             for cve in finding.cve_ids:
                 assert cve in cve_org, f"Missing CVE.org fixture for {cve}"
                 assert cve in epss_cves, f"Missing EPSS fixture for {cve}"
+
+
+@pytest.mark.parametrize(
+    "filename", ["cve_org_sample.json", "cisa_kev_sample.json", "epss_v4_sample.json"]
+)
+def test_sample_feeds_are_marked_synthetic(filename: str) -> None:
+    """Fixtures must declare themselves synthetic; values are not real measurements."""
+    with open(FIXTURES_DIR / filename, encoding="utf-8") as f:
+        data = json.load(f)
+    assert data["_synthetic"] is True
+    assert "not real measurements" in data["_comment"]
+    assert (FIXTURES_DIR / "README.md").exists()

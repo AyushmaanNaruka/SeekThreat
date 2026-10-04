@@ -133,6 +133,7 @@ def client(in_memory_engine, monkeypatch: pytest.MonkeyPatch):
 @pytest.fixture
 def local_http_fixture():
     """Starts a safe local test HTTP server on 127.0.0.1:8799 for integration tests."""
+
     class QuietHandler(http.server.SimpleHTTPRequestHandler):
         def log_message(self, format, *args):
             pass
@@ -400,6 +401,3 @@ def test_nuclei_adapter_and_persistence(db_session: Session, local_http_fixture:
     db_session.commit()
 
     assert art_repo.exists(res.artifact.artifact_id) is True
-
-
-

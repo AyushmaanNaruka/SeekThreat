@@ -248,9 +248,7 @@ def get_scan_observations(
     summary="List scans for an engagement or all scans",
 )
 def list_scans(
-    engagement_id: str | None = Query(
-        None, description="Optional filter scans by engagement ID"
-    ),
+    engagement_id: str | None = Query(None, description="Optional filter scans by engagement ID"),
     limit: int = Query(50, ge=1, le=500, description="Max number of scans to return"),
     offset: int = Query(0, ge=0, description="Number of scans to skip"),
     db: Session = Depends(get_db),

@@ -8,25 +8,18 @@ not just discouraged."
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import pytest
-from pydantic import ValidationError
 
-from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
-from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
+from packages.schema.models.finding import EnrichedFinding
+from packages.schema.models.provenance import Attributed, Confidence, Source
 from services.enrichment.fusion import FusionEngine
 from services.enrichment.service import EnrichmentService
 from services.enrichment.sources import CISAKevSource, CVEOrgSource, FirstEPSSSource
 from tests.fixtures.findings.baseline_findings import (
-    FINDING_APACHE_PATH_TRAVERSAL,
     FINDING_HEURISTIC_NO_CVE,
     FINDING_LOG4SHELL,
-    FINDING_NON_KEV_MODERATE,
-    FINDING_NVD_UNENRICHED_RECENT,
-    FINDING_SPRING_GATEWAY_RCE,
     get_baseline_findings,
 )
 
@@ -57,7 +50,8 @@ class TestProvenanceCompleteness:
             for field_name, attr in enriched.fields.items():
                 # 1. Type check
                 assert isinstance(attr, Attributed), (
-                    f"Field '{field_name}' in finding {finding.finding_id} is not wrapped in Attributed"
+                    f"Field '{field_name}' in finding {finding.finding_id} "
+                    "is not wrapped in Attributed"
                 )
 
                 # 2. Provenance presence
@@ -80,9 +74,7 @@ class TestProvenanceCompleteness:
                     f"retrieved_at is naive for '{field_name}'"
                 )
 
-    def test_ers_components_carry_provenance(
-        self, enrichment_service: EnrichmentService
-    ) -> None:
+    def test_ers_components_carry_provenance(self, enrichment_service: EnrichmentService) -> None:
         """Every ScoreComponent inside ERS must carry a valid Provenance."""
         for finding in get_baseline_findings():
             enriched = enrichment_service.enrich_finding(finding, persist=False)
@@ -106,15 +98,16 @@ class TestProvenanceCompleteness:
         cvss_attr = enriched.fields["cvss_score"]
         assert cvss_attr.provenance.source == Source.DERIVED
         assert cvss_attr.provenance.confidence == Confidence.LOW
-        assert "fallback" in cvss_attr.provenance.note.lower() or "derived" in cvss_attr.provenance.note.lower()
+        assert (
+            "fallback" in cvss_attr.provenance.note.lower()
+            or "derived" in cvss_attr.provenance.note.lower()
+        )
 
         epss_attr = enriched.fields["epss_score"]
         assert epss_attr.provenance.source == Source.DERIVED
         assert epss_attr.provenance.confidence == Confidence.LOW
 
-    def test_cve_org_provenance_attributes(
-        self, enrichment_service: EnrichmentService
-    ) -> None:
+    def test_cve_org_provenance_attributes(self, enrichment_service: EnrichmentService) -> None:
         enriched = enrichment_service.enrich_finding(FINDING_LOG4SHELL, persist=False)
 
         cvss_attr = enriched.fields["cvss_score"]
@@ -122,9 +115,7 @@ class TestProvenanceCompleteness:
         assert cvss_attr.provenance.confidence == Confidence.HIGH
         assert cvss_attr.value == 10.0
 
-    def test_cisa_kev_provenance_attributes(
-        self, enrichment_service: EnrichmentService
-    ) -> None:
+    def test_cisa_kev_provenance_attributes(self, enrichment_service: EnrichmentService) -> None:
         enriched = enrichment_service.enrich_finding(FINDING_LOG4SHELL, persist=False)
 
         kev_attr = enriched.fields["in_kev"]
@@ -133,9 +124,7 @@ class TestProvenanceCompleteness:
         assert kev_attr.value is True
         assert "CVE-2021-44228" in (kev_attr.provenance.note or "")
 
-    def test_first_epss_provenance_attributes(
-        self, enrichment_service: EnrichmentService
-    ) -> None:
+    def test_first_epss_provenance_attributes(self, enrichment_service: EnrichmentService) -> None:
         enriched = enrichment_service.enrich_finding(FINDING_LOG4SHELL, persist=False)
 
         epss_attr = enriched.fields["epss_score"]

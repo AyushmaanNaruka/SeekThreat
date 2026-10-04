@@ -7,16 +7,20 @@ EnrichedFinding domain model survives a round-trip through the ORM.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock
 
 import pytest
 from sqlalchemy import create_engine, event, func, select
+from sqlalchemy.dialects import postgresql
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, sessionmaker
 
+from apps.api.db import repositories as repositories_module
 from apps.api.db.base import Base
 from apps.api.db.models import EnrichedFindingModel
-from apps.api.db.repositories import EnrichedFindingRepository
+from apps.api.db.repositories import EngagementRepository, EnrichedFindingRepository
+from packages.schema.models.engagement import Authorization, Engagement
 from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
 from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
@@ -26,6 +30,24 @@ from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 # ---------------------------------------------------------------------------
 
 NOW = datetime(2026, 9, 30, 10, 0, 0, tzinfo=UTC)
+SEEDED_ENGAGEMENTS = ("eng-001", "eng-002", "eng-A", "eng-B", "eng-X", "eng-Y")
+
+
+def _seed_engagement(session: Session, engagement_id: str) -> None:
+    EngagementRepository(session).save(
+        Engagement(
+            engagement_id=engagement_id,
+            name=f"Engagement {engagement_id}",
+            authorization=Authorization(
+                engagement_id=engagement_id,
+                authorized_by="test-operator",
+                allowlist=("172.20.0.0/16",),
+                granted_at=NOW - timedelta(hours=1),
+                expires_at=NOW + timedelta(days=30),
+            ),
+            created_at=NOW,
+        )
+    )
 
 
 @pytest.fixture
@@ -42,6 +64,10 @@ def db_session() -> Session:
     Base.metadata.create_all(bind=engine)
     session_factory = sessionmaker(bind=engine, expire_on_commit=False)
     session = session_factory()
+    # enriched_findings.engagement_id is a foreign key to engagements.
+    for engagement_id in SEEDED_ENGAGEMENTS:
+        _seed_engagement(session, engagement_id)
+    session.commit()
     try:
         yield session
     finally:
@@ -234,9 +260,7 @@ class TestEnrichedFindingIdempotentUpsert:
         assert result_2 is not None
         assert result_1.model_dump(mode="json") == result_2.model_dump(mode="json")
 
-    def test_upsert_overwrites_stale_fields_on_re_enrichment(
-        self, db_session: Session
-    ) -> None:
+    def test_upsert_overwrites_stale_fields_on_re_enrichment(self, db_session: Session) -> None:
         """Re-enrichment with updated fields replaces old data in place."""
         enriched_v1 = _enriched_finding()
         repo = EnrichedFindingRepository(db_session)
@@ -270,9 +294,7 @@ class TestEnrichedFindingIdempotentUpsert:
         # ERS is gone (re-enrichment produced None)
         assert result.ers is None
 
-    def test_batch_upsert_all_produces_correct_row_count(
-        self, db_session: Session
-    ) -> None:
+    def test_batch_upsert_all_produces_correct_row_count(self, db_session: Session) -> None:
         """upsert_all on N distinct findings creates exactly N rows."""
         findings = [
             _enriched_finding(finding_id=f"fnd-{i:03d}", engagement_id="eng-001")
@@ -282,14 +304,10 @@ class TestEnrichedFindingIdempotentUpsert:
         repo.upsert_all(findings, enriched_at=NOW)
         db_session.commit()
 
-        count = db_session.scalar(
-            select(func.count()).select_from(EnrichedFindingModel)
-        )
+        count = db_session.scalar(select(func.count()).select_from(EnrichedFindingModel))
         assert count == 5
 
-    def test_batch_upsert_all_twice_stays_idempotent(
-        self, db_session: Session
-    ) -> None:
+    def test_batch_upsert_all_twice_stays_idempotent(self, db_session: Session) -> None:
         """Running upsert_all twice on the same batch keeps row count stable."""
         findings = [
             _enriched_finding(finding_id=f"fnd-{i:03d}", engagement_id="eng-001")
@@ -301,9 +319,7 @@ class TestEnrichedFindingIdempotentUpsert:
         repo.upsert_all(findings, enriched_at=NOW)
         db_session.commit()
 
-        count = db_session.scalar(
-            select(func.count()).select_from(EnrichedFindingModel)
-        )
+        count = db_session.scalar(select(func.count()).select_from(EnrichedFindingModel))
         assert count == 3
 
 
@@ -338,9 +354,7 @@ class TestEnrichedFindingRepositoryQueries:
         assert len(results) == 3
         assert all(r.finding.engagement_id == "eng-A" for r in results)
 
-    def test_get_by_engagement_does_not_return_other_engagements(
-        self, db_session: Session
-    ) -> None:
+    def test_get_by_engagement_does_not_return_other_engagements(self, db_session: Session) -> None:
         repo = EnrichedFindingRepository(db_session)
         repo.upsert(
             _enriched_finding(finding_id="fnd-001", engagement_id="eng-X"),
@@ -351,9 +365,7 @@ class TestEnrichedFindingRepositoryQueries:
         results = repo.get_by_engagement("eng-Y")
         assert results == []
 
-    def test_count_by_engagement_returns_correct_count(
-        self, db_session: Session
-    ) -> None:
+    def test_count_by_engagement_returns_correct_count(self, db_session: Session) -> None:
         repo = EnrichedFindingRepository(db_session)
         for i in range(1, 6):
             repo.upsert(
@@ -365,9 +377,7 @@ class TestEnrichedFindingRepositoryQueries:
         assert repo.count_by_engagement("eng-001") == 5
         assert repo.count_by_engagement("eng-999") == 0
 
-    def test_get_by_engagement_respects_limit_and_offset(
-        self, db_session: Session
-    ) -> None:
+    def test_get_by_engagement_respects_limit_and_offset(self, db_session: Session) -> None:
         repo = EnrichedFindingRepository(db_session)
         for i in range(1, 11):
             repo.upsert(
@@ -384,3 +394,141 @@ class TestEnrichedFindingRepositoryQueries:
         ids_1 = {r.finding.finding_id for r in page_1}
         ids_2 = {r.finding.finding_id for r in page_2}
         assert ids_1.isdisjoint(ids_2)
+
+
+# ---------------------------------------------------------------------------
+# Engagement scoping and batch-safety tests
+# ---------------------------------------------------------------------------
+
+
+class TestEnrichedFindingEngagementScoping:
+    """finding_id is only unique within an engagement; the key is composite."""
+
+    def test_same_finding_id_in_two_engagements_does_not_overwrite(
+        self, db_session: Session
+    ) -> None:
+        repo = EnrichedFindingRepository(db_session)
+        repo.upsert(_enriched_finding(finding_id="fnd-001", engagement_id="eng-001"), NOW)
+        repo.upsert(
+            _enriched_finding(finding_id="fnd-001", engagement_id="eng-002", with_ers=False),
+            NOW,
+        )
+        db_session.commit()
+
+        assert db_session.scalar(select(func.count()).select_from(EnrichedFindingModel)) == 2
+        first = repo.get("fnd-001", engagement_id="eng-001")
+        second = repo.get("fnd-001", engagement_id="eng-002")
+        assert first is not None
+        assert first.finding.engagement_id == "eng-001"
+        assert first.ers is not None
+        assert second is not None
+        assert second.finding.engagement_id == "eng-002"
+        assert second.ers is None
+
+    def test_scoped_get_returns_none_for_other_engagement(self, db_session: Session) -> None:
+        repo = EnrichedFindingRepository(db_session)
+        repo.upsert(_enriched_finding(finding_id="fnd-001", engagement_id="eng-001"), NOW)
+        db_session.commit()
+
+        assert repo.get("fnd-001", engagement_id="eng-002") is None
+
+    def test_upsert_for_unknown_engagement_is_rejected(self, db_session: Session) -> None:
+        repo = EnrichedFindingRepository(db_session)
+        with pytest.raises(IntegrityError):
+            repo.upsert(_enriched_finding(engagement_id="eng-does-not-exist"), NOW)
+
+    def test_get_by_engagement_orders_by_finding_id(self, db_session: Session) -> None:
+        repo = EnrichedFindingRepository(db_session)
+        for i, fid in enumerate(["fnd-c", "fnd-a", "fnd-b"]):
+            repo.upsert(
+                _enriched_finding(finding_id=fid, engagement_id="eng-001"),
+                enriched_at=NOW + timedelta(minutes=i),
+            )
+        db_session.commit()
+
+        ids = [r.finding.finding_id for r in repo.get_by_engagement("eng-001")]
+        assert ids == ["fnd-a", "fnd-b", "fnd-c"]
+
+
+class TestEnrichedFindingBatchSafety:
+    """Postgres failure modes of a single multi-row INSERT ... ON CONFLICT."""
+
+    def test_duplicate_keys_in_one_batch_last_wins(self, db_session: Session) -> None:
+        repo = EnrichedFindingRepository(db_session)
+        first = _enriched_finding(finding_id="fnd-001", with_ers=True)
+        last = _enriched_finding(finding_id="fnd-001", with_ers=False)
+        repo.upsert_all([first, last], enriched_at=NOW)
+        db_session.commit()
+
+        assert db_session.scalar(select(func.count()).select_from(EnrichedFindingModel)) == 1
+        result = repo.get("fnd-001", engagement_id="eng-001")
+        assert result is not None
+        assert result.ers is None
+
+    def test_large_batch_is_chunked(
+        self, db_session: Session, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(repositories_module, "UPSERT_CHUNK_SIZE", 4)
+        repo = EnrichedFindingRepository(db_session)
+        findings = [_enriched_finding(finding_id=f"fnd-{i:03d}") for i in range(10)]
+
+        executed: list[object] = []
+        real_execute = db_session.execute
+
+        def _spy(stmt, *args, **kwargs):  # type: ignore[no-untyped-def]
+            executed.append(stmt)
+            return real_execute(stmt, *args, **kwargs)
+
+        monkeypatch.setattr(db_session, "execute", _spy)
+        repo.upsert_all(findings, enriched_at=NOW)
+        db_session.commit()
+
+        assert len(executed) == 3  # 4 + 4 + 2
+        assert db_session.scalar(select(func.count()).select_from(EnrichedFindingModel)) == 10
+
+    def test_postgres_statements_are_deduplicated_chunked_and_engagement_scoped(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Exercise the postgresql branch without a server by capturing statements."""
+        monkeypatch.setattr(repositories_module, "UPSERT_CHUNK_SIZE", 2)
+        session = MagicMock()
+        session.bind.dialect.name = "postgresql"
+        repo = EnrichedFindingRepository(session)
+
+        batch = [
+            _enriched_finding(finding_id="fnd-001"),
+            _enriched_finding(finding_id="fnd-002"),
+            _enriched_finding(finding_id="fnd-001", with_ers=False),  # duplicate: last wins
+            _enriched_finding(finding_id="fnd-003"),
+        ]
+        repo.upsert_all(batch, enriched_at=NOW)
+
+        statements = [call.args[0] for call in session.execute.call_args_list]
+        assert len(statements) == 2  # 3 unique rows, chunk size 2
+
+        seen_keys: list[tuple[str, str]] = []
+        for stmt in statements:
+            compiled = stmt.compile(dialect=postgresql.dialect())
+            assert "ON CONFLICT (engagement_id, finding_id) DO UPDATE" in str(compiled)
+            params = compiled.params
+            rows = len([k for k in params if k.startswith("finding_id_m")])
+            keys = [
+                (params[f"engagement_id_m{i}"], params[f"finding_id_m{i}"]) for i in range(rows)
+            ]
+            assert len(keys) == len(set(keys)), "duplicate key within one INSERT"
+            seen_keys.extend(keys)
+
+        assert sorted(seen_keys) == [
+            ("eng-001", "fnd-001"),
+            ("eng-001", "fnd-002"),
+            ("eng-001", "fnd-003"),
+        ]
+        # Last occurrence won: the surviving fnd-001 row carries no ERS.
+        fnd_001_rows = [stmt.compile(dialect=postgresql.dialect()).params for stmt in statements]
+        ers_for_001 = [
+            p[f"ers_value_m{i}"]
+            for p in fnd_001_rows
+            for i in range(len([k for k in p if k.startswith("finding_id_m")]))
+            if p[f"finding_id_m{i}"] == "fnd-001"
+        ]
+        assert ers_for_001 == [None]

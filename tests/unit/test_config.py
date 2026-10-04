@@ -22,9 +22,7 @@ def _settings_with_env(monkeypatch, **env: str) -> config_module.Settings:
     return config_module.Settings(_env_file=None)
 
 
-_PSYCOPG_URL = (
-    "postgresql+psycopg://seekthreat:changeme@postgres:5432/seekthreat"
-)
+_PSYCOPG_URL = "postgresql+psycopg://seekthreat:changeme@postgres:5432/seekthreat"
 
 
 def test_env_database_url_gets_psycopg_driver(monkeypatch) -> None:
