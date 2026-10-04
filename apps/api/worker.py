@@ -17,6 +17,11 @@ from __future__ import annotations
 from celery import Celery
 
 from apps.api.core.config import settings
+from services.scanners.nuclei_adapter import MAX_TIMEOUT_SECONDS
+
+# Headroom over the longest scan a caller may request, for broker latency, retry
+# back-off and result persistence after the scanner exits.
+VISIBILITY_TIMEOUT_MARGIN_SECONDS = 3600
 
 celery_app = Celery(
     "seekthreat",
@@ -39,6 +44,13 @@ celery_app.conf.update(
     # Retry policy defaults (overridden per-task where needed)
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    # With acks_late a scan's message stays unacknowledged until the task finishes,
+    # and Redis redelivers any message unacked after visibility_timeout (default 1h)
+    # to another worker. That must outlast the longest permitted scan, or a long
+    # scan is started a second time while the first is still running.
+    broker_transport_options={
+        "visibility_timeout": MAX_TIMEOUT_SECONDS + VISIBILITY_TIMEOUT_MARGIN_SECONDS,
+    },
 )
 
 # Explicit import, not autodiscover_tasks(): Celery's autodiscovery treats each

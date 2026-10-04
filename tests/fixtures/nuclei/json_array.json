@@ -3,7 +3,9 @@
     "template-id": "cve-2021-44228",
     "info": {
       "name": "Apache Log4j RCE",
-      "author": ["pdteam"],
+      "author": [
+        "pdteam"
+      ],
       "severity": "critical",
       "classification": {
         "cve-id": "CVE-2021-44228",
@@ -11,8 +13,12 @@
       }
     },
     "type": "http",
-    "host": "http://172.20.1.10:8080",
+    "host": "172.20.1.10",
+    "port": "8080",
+    "scheme": "http",
+    "url": "http://172.20.1.10:8080",
     "matched-at": "http://172.20.1.10:8080/login",
-    "timestamp": "2026-09-19T10:15:30.123456Z"
+    "timestamp": "2026-09-19T10:15:30.123456Z",
+    "matcher-status": true
   }
 ]

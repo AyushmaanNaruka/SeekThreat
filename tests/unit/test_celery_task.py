@@ -589,3 +589,39 @@ def test_local_fallback_happy_path_completes(engine, seeded_scan, monkeypatch) -
     assert len(completed_events) == 1
     assert completed_events[0]["status"] == "completed"
     assert completed_events[0]["details"]["celery_task_id"] is None
+
+
+# ---------------------------------------------------------------------------
+# Retry classification and broker redelivery
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "exc",
+    [
+        pytest.param("services.scanners.nuclei_json:NucleiParseError", id="nuclei"),
+        pytest.param("services.scanners.nmap_xml:NmapParseError", id="nmap"),
+    ],
+)
+def test_parser_errors_are_permanent(exc: str) -> None:
+    """A parse error is a deterministic function of the artifact. Retrying it re-runs
+    the whole scan to produce output the parser rejects again."""
+    import importlib
+
+    from apps.api.tasks.scans import PERMANENT_ERRORS
+
+    module_name, class_name = exc.split(":")
+    error_cls = getattr(importlib.import_module(module_name), class_name)
+    assert issubclass(error_cls, PERMANENT_ERRORS)
+
+
+def test_broker_visibility_timeout_outlasts_the_longest_allowed_scan() -> None:
+    """task_acks_late keeps a scan's message unacknowledged until it finishes. Redis
+    redelivers an unacked message after visibility_timeout (default 1h), so a scan
+    allowed to run longer than that would be handed to a second worker mid-run."""
+    from apps.api.worker import celery_app
+    from services.scanners.nuclei_adapter import MAX_TIMEOUT_SECONDS
+
+    assert celery_app.conf.task_acks_late is True
+    options = celery_app.conf.broker_transport_options or {}
+    assert options.get("visibility_timeout", 3600) > MAX_TIMEOUT_SECONDS
