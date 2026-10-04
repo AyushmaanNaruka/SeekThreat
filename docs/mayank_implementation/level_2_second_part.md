@@ -115,50 +115,50 @@ D-008 exists but says "rationale and sensitivity analysis still to be documented
 
 Write `tests/unit/test_feed_sync.py` **before** implementing:
 
-- [ ] Test `FeedSyncer.sync_kev()` calls the canonical CISA KEV URL, writes to `MIRROR_FILENAMES[Source.KEV]` atomically.
-- [ ] Test `FeedSyncer.sync_epss()` calls the FIRST EPSS v4 endpoint, writes to `MIRROR_FILENAMES[Source.EPSS]`.
-- [ ] Test `FeedSyncer.sync_cve_org()` calls CVE.org API, writes to `MIRROR_FILENAMES[Source.CVE_ORG]`.
-- [ ] Test atomic write safety: failed download does not corrupt the existing mirror.
-- [ ] Test each sync returns a valid `SyncResult` with correct metadata.
-- [ ] All tests mock HTTP — no real network in CI. Use `unittest.mock.patch` on `httpx` (or equivalent).
-- [ ] Confirm `test_offline_mirror.py` still passes after adding new test file.
+- [x] Test `FeedSyncer.sync_kev()` calls the canonical CISA KEV URL, writes to `MIRROR_FILENAMES[Source.KEV]` atomically.
+- [x] Test `FeedSyncer.sync_epss()` calls the FIRST EPSS v4 endpoint, writes to `MIRROR_FILENAMES[Source.EPSS]`.
+- [x] Test `FeedSyncer.sync_cve_org()` calls CVE.org API, writes to `MIRROR_FILENAMES[Source.CVE_ORG]`.
+- [x] Test atomic write safety: failed download does not corrupt the existing mirror.
+- [x] Test each sync returns a valid `SyncResult` with correct metadata.
+- [x] All tests mock HTTP — no real network in CI. Use `unittest.mock.patch` on `httpx` (or equivalent).
+- [x] Confirm `test_offline_mirror.py` still passes after adding new test file.
 
 ### 2.2 — Implement `FeedSyncer`
 
-- [ ] Extend `services/enrichment/sources/sync.py`:
+- [x] Extend `services/enrichment/sources/sync.py`:
   - Add `FeedSyncer` class with methods: `sync_kev()`, `sync_epss()`, `sync_cve_org()`, `sync_all()`.
   - Each method: HTTP GET → validate response → call existing `sync_from_data()` for atomic write.
   - Upstream URLs: use existing `DEFAULT_CISA_KEV_URL`, `DEFAULT_FIRST_EPSS_URL` constants; add CVE.org URL.
   - Read `ENRICHMENT_CACHE_DIR` from `apps/api/core/config.py`.settings.
-- [ ] Dependency: if `httpx` or `requests` needed, verify licence (both MIT — OK), add to `pyproject.toml` and `THIRD_PARTY.md`.
+- [x] Dependency: if `httpx` or `requests` needed, verify licence (both MIT — OK), add to `pyproject.toml` and `THIRD_PARTY.md` (httpx 0.28.1 already present in requirements.txt; verified MIT).
 
 ### 2.3 — CLI entry point
 
-- [ ] Add CLI callable without the full API/Celery stack:
+- [x] Add CLI callable without the full API/Celery stack:
   ```
   python -m services.enrichment.sync_feeds [--source kev|epss|cve_org|all]
   ```
-- [ ] Or management command in `apps/api/cli.py` — consistent with existing conventions.
+- [x] Or management command in `apps/api/cli.py` — implemented as standalone runnable module `services/enrichment/sync_feeds.py`.
 
 ### 2.4 — Celery beat schedule (preferred)
 
-- [ ] Add a periodic Celery task in `apps/api/tasks/` that calls `FeedSyncer.sync_all()`.
-- [ ] Configure beat schedule in `apps/api/worker.py` (daily or env-configurable interval).
-- [ ] Test task registers correctly (pattern from `test_worker_registration.py`).
+- [x] Add a periodic Celery task in `apps/api/tasks/` that calls `FeedSyncer.sync_all()`.
+- [x] Configure beat schedule in `apps/api/worker.py` (daily or env-configurable interval).
+- [x] Test task registers correctly (pattern from `test_worker_registration.py`).
 
 ### 2.5 — Verification
 
-- [ ] `test_offline_mirror.py` — must still pass unchanged.
-- [ ] Full suite CI green.
-- [ ] Manual smoke: run CLI, confirm files appear in `ENRICHMENT_CACHE_DIR`.
+- [x] `test_offline_mirror.py` — must still pass unchanged.
+- [x] Full suite CI green (496 passed, 3 skipped).
+- [x] Manual smoke: run CLI, confirm files appear in `ENRICHMENT_CACHE_DIR`.
 
 ### Level 2 checklist
 
-- [ ] Tests written before implementation
-- [ ] Network calls only in the sync job, never on request path
-- [ ] `test_offline_mirror.py` unchanged and passing
-- [ ] New dependency licence-checked and in `THIRD_PARTY.md`
-- [ ] CI green
+- [x] Tests written before implementation
+- [x] Network calls only in the sync job, never on request path
+- [x] `test_offline_mirror.py` unchanged and passing
+- [x] New dependency licence-checked and in `THIRD_PARTY.md` (httpx already in requirements.txt)
+- [x] CI green
 
 ---
 
@@ -403,7 +403,7 @@ interface EnrichedFindingListResponse {
 | Level | Description | Status | PR |
 |-------|-------------|--------|----|
 | **1** | Decisions & ERS Analysis | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level1_of_level2_second_part.md) | D-027–D-032 in DECISIONS.md |
-| **2** | Feed Sync Job | ⬜ Not started | — |
+| **2** | Feed Sync Job | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_of_level2_second_part.md) | D-033; FeedSyncer + Celery Beat + CLI |
 | **3** | Real Source Implementations | ⬜ Not started | — |
 | **4** | NVD-Only Baseline Eval | ⬜ Not started | — |
 | **5** | Dashboard: Enriched Findings UI | ⬜ Not started | — |

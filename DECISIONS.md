@@ -47,6 +47,26 @@ Newest first.
 
 ---
 
+### D-033 — Off-request-path feed synchronization via FeedSyncer, Celery Beat, and CLI
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+Download external intelligence feeds (CISA KEV, FIRST EPSS v4, CVE.org) strictly off the request path using `FeedSyncer`, scheduled daily via Celery beat (`seekthreat.sync_feeds.run`) on the `enrichment` queue and available on-demand via standalone CLI (`python -m services.enrichment.sync_feeds`). Downloads delegate to `SourceSynchronizer.sync_from_data()` for atomic file writes into `ENRICHMENT_CACHE_DIR`.
+
+**Why**
+Adheres strictly to Rule 5 of `services/enrichment/README.md` ("Mirror sources locally. Don't hit APIs on the request path"). Network calls are forbidden inside `EnrichmentService` and `FusionEngine`. Providing both Celery Beat (continuous production worker) and CLI (CI setup, container bootstrapping, manual sync) allows mirrors to be refreshed independently. Using `httpx` (already in `requirements.txt` v0.28.1) introduces zero new external dependencies.
+
+**Impact on plan**
+Implements Level 2 of Layer 2 second part. Adds `seekthreat.sync_feeds.run` Celery task and `sync-enrichment-feeds-daily` schedule in `apps/api/worker.py`.
+
+**Cost if we're wrong**
+Low. Mirror file contracts (`MIRROR_FILENAMES`) isolate feed download mechanics from source parsers. Switching transport or schedule requires no changes to fusion logic.
+
+---
+
 ### D-032 — /findings API contract: engagement_id required on all calls
 **Date:** 2026-10-05
 **Decided by:** Mayank
