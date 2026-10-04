@@ -6,12 +6,17 @@ as a subprocess and parse its JSONL output. We never vendor or link Nuclei sourc
 
 from __future__ import annotations
 
+import ipaddress
 import logging
+import math
 import re
 import shutil
 import subprocess
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
+
+from packages.schema.models.engagement import is_valid_hostname
 
 from .base import (
     Observation,
@@ -77,9 +82,14 @@ def _timeout_seconds(value: object) -> int:
     """Validate the caller's timeout. Options cross an HTTP and a Celery JSON boundary,
     so `timeout` arrives as whatever the client sent — a string, a float, None, a bool.
     `subprocess.run` accepts some of those and raises TypeError deep in the call on the
-    rest, which surfaces as an opaque transient error and gets retried."""
+    rest, which surfaces as an opaque transient error and gets retried. A non-finite
+    float is refused before `int()`, which raises OverflowError on infinity — not a
+    ValueError, so it too would be retried as transient. A fractional float is refused
+    rather than silently truncated."""
     if isinstance(value, bool) or not isinstance(value, int | float):
         raise ValueError(f"Nuclei timeout option must be a number of seconds, got {value!r}")
+    if isinstance(value, float) and (not math.isfinite(value) or not value.is_integer()):
+        raise ValueError(f"Nuclei timeout option must be a whole number of seconds, got {value!r}")
     seconds = int(value)
     if not 0 < seconds <= MAX_TIMEOUT_SECONDS:
         raise ValueError(
@@ -87,6 +97,32 @@ def _timeout_seconds(value: object) -> int:
             f"got {seconds}"
         )
     return seconds
+
+
+def _selection_options(options: Mapping[str, object]) -> tuple[str | None, str | None]:
+    """Return the (tags, template) the caller asked for, at most one of them set.
+
+    Fails closed. A selector that is present but malformed — not a string, blank, or
+    combined with another selector — raises instead of being ignored, because ignoring
+    it runs nuclei with neither -tags nor -t: the full template set, the widest scan
+    there is, in answer to a request for a narrow one. None counts as absent.
+    """
+    selected: dict[str, str] = {}
+    for key in ("tags", "template", "templates"):
+        value = options.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"Nuclei {key!r} option must be a non-empty string, got {value!r}")
+        if key == "tags" and not any(t.strip() for t in value.split(",")):
+            raise ValueError(f"Nuclei 'tags' option names no tags: {value!r}")
+        selected[key] = value
+    if len(selected) > 1:
+        raise ValueError(
+            f"Nuclei options {sorted(selected)} are mutually exclusive; pass 'tags' or "
+            f"one template, not both"
+        )
+    return selected.get("tags"), selected.get("template", selected.get("templates"))
 
 
 def _stderr_tail(stderr: bytes | str | None) -> str:
@@ -102,13 +138,19 @@ def _stderr_tail(stderr: bytes | str | None) -> str:
 def _nuclei_target(request: ScanRequest) -> str:
     """Build the value handed to nuclei's `-u`, from the target the gate approved.
 
-    The authorization gate compares `request.target` as an exact string and refuses to
-    parse a URL down to a host, deliberately: nuclei's Go URL parser and Python's need
-    only disagree about where the host ends for an allowlist check to pass on one host
-    and the scan to hit another (see the parser-differential cases in
-    tests/unit/test_authorization_matching.py). So this never parses a URL either. It
-    only ever *appends* a validated scheme and port to the approved target, which
-    cannot move the scan to a different host.
+    The authorization gate never parses a URL down to a host, deliberately: nuclei's Go
+    URL parser and Python's need only disagree about where the host ends for an
+    allowlist check to pass on one host and the scan to hit another (see the
+    parser-differential cases in tests/unit/test_authorization_matching.py). So this
+    never parses a URL either. It re-checks the target independently of the gate, so a
+    gate bug alone does not put an unapproved host in front of nuclei:
+
+    - A bare target must be an IP address or a strict DNS hostname — no port, path,
+      userinfo or fragment. Only then is a validated scheme and port *appended*, and
+      appending those to a bare host cannot move the scan to a different host.
+    - A URL target (containing `://`) is passed verbatim, and only when that exact
+      string is a non-wildcard entry of the authorization's allowlist: the authorizer
+      approved this URL, not a pattern that happened to match it.
     """
     target = request.target.strip()
     if not target:
@@ -129,9 +171,29 @@ def _nuclei_target(request: ScanRequest) -> str:
                 f"Nuclei target {target!r} is already a URL; the 'port' and 'scheme' "
                 f"options only apply to a bare host or IP target"
             )
+        exact_entries = {
+            entry.strip()
+            for entry in request.authorization.allowlist
+            if not entry.strip().startswith("*")
+        }
+        if target not in exact_entries:
+            raise ValueError(
+                f"Nuclei URL target {target!r} is not an exact allowlist entry; a URL is "
+                f"only scanned when the authorizer allowlisted that exact string"
+            )
         return target
 
-    host = f"[{target}]" if ":" in target and not target.startswith("[") else target
+    try:
+        ip: ipaddress.IPv4Address | ipaddress.IPv6Address | None = ipaddress.ip_address(target)
+    except ValueError:
+        ip = None
+        if not is_valid_hostname(target):
+            raise ValueError(
+                f"Nuclei target {target!r} is not an IP address or a valid hostname; pass "
+                f"the port and scheme as the 'port' and 'scheme' options instead"
+            ) from None
+
+    host = f"[{target}]" if isinstance(ip, ipaddress.IPv6Address) else target
 
     if port_opt is not None:
         port = str(port_opt).strip()
@@ -197,9 +259,8 @@ class NucleiAdapter(ScannerAdapter):
             # the parser's 64MB guard. `curl-command` survives either way, so a
             # finding stays reproducible.
             cmd.append("-or")
-        template_opt = request.options.get("template") or request.options.get("templates")
-        tags_opt = request.options.get("tags")
-        if tags_opt and isinstance(tags_opt, str) and tags_opt.strip():
+        tags_opt, template_opt = _selection_options(request.options)
+        if tags_opt is not None:
             raw_tags = [t.strip().lower() for t in tags_opt.split(",") if t.strip()]
             for tag in raw_tags:
                 if tag not in APPROVED_TAGS:
@@ -208,7 +269,7 @@ class NucleiAdapter(ScannerAdapter):
                         f"{sorted(APPROVED_TAGS)}"
                     )
             cmd.extend(["-tags", ",".join(raw_tags)])
-        elif template_opt and isinstance(template_opt, str) and template_opt.strip():
+        elif template_opt is not None:
             t_str = template_opt.strip()
             candidate = Path(t_str)
             if not candidate.is_absolute():
@@ -238,12 +299,14 @@ class NucleiAdapter(ScannerAdapter):
                 check=True,
             )
         except subprocess.TimeoutExpired as exc:
-            # Killing the process discards whatever it had buffered on stdout, so the
-            # findings it already produced are lost with it. Say so plainly instead of
-            # reporting an empty-but-successful scan.
+            # subprocess.run hands back what it had read so far on exc.stdout, but it
+            # is deliberately not recorded: a ScanResult has no notion of a partial run,
+            # so saving it would present whatever prefix of the template set finished
+            # as a completed scan. Say so plainly instead of reporting an
+            # empty-but-successful scan.
             raise ScannerTimeoutError(
                 f"nuclei exceeded its {timeout}s budget against {request.target!r} and was "
-                f"killed; any findings it had produced were discarded. Raise "
+                f"killed; its partial output was not recorded as a result. Raise "
                 f"options['timeout'] or narrow options['tags'] rather than retrying."
             ) from exc
         except FileNotFoundError as exc:

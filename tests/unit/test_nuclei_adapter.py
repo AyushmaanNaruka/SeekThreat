@@ -11,7 +11,7 @@ import pytest
 
 from packages.schema.models.engagement import Authorization, ScanRequest
 from services.scanners.base import ScannerTimeoutError, ScannerUnavailableError
-from services.scanners.nuclei_adapter import NucleiAdapter
+from services.scanners.nuclei_adapter import NucleiAdapter, _nuclei_target
 
 NOW = datetime.now(UTC)
 FIXTURE_TEMPLATE = (
@@ -405,8 +405,9 @@ def test_nonzero_exit_raises_value_error_carrying_nucleis_reason() -> None:
 
 
 def test_timeout_raises_scanner_timeout_error_not_a_transient_failure() -> None:
-    """A killed process loses its buffered findings, and the same budget times out
-    again, so this must not be retried."""
+    """The same budget times out again, so this must not be retried. The partial
+    output subprocess hands back on the exception is not recorded as a result, and
+    the error must say so rather than imply the scan found nothing."""
     adapter = NucleiAdapter()
     req = ScanRequest(
         target="http://127.0.0.1:8799",
@@ -415,7 +416,7 @@ def test_timeout_raises_scanner_timeout_error_not_a_transient_failure() -> None:
     )
     with (
         patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd=["nuclei"], timeout=5)),
-        pytest.raises(ScannerTimeoutError, match="were discarded"),
+        pytest.raises(ScannerTimeoutError, match="not recorded"),
     ):
         adapter.scan(req)
 
@@ -447,3 +448,143 @@ def test_invalid_timeout_option_rejected_before_the_subprocess_starts() -> None:
         )
         with pytest.raises(ValueError, match="timeout option must be"):
             adapter.scan(req)
+
+
+# --------------------------------------------------------------------------- #
+# Review fixes (PR #16): defence in depth behind the authorization gate, and
+# failing closed on options that would otherwise widen or mis-time a scan.
+# --------------------------------------------------------------------------- #
+
+
+def _wildcard_request(target: str, options: dict[str, object] | None = None) -> ScanRequest:
+    return ScanRequest(
+        target=target,
+        authorization=Authorization(
+            engagement_id="eng-nuclei-unit-01",
+            authorized_by="Security Engineer",
+            allowlist=["*.lab.local"],
+            granted_at=NOW - timedelta(minutes=5),
+            expires_at=NOW + timedelta(hours=1),
+        ),
+        options=options or {},
+    )
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "http://evil.com/.lab.local",
+        "http://evil.com#.lab.local",
+        "https://web.lab.local",
+    ],
+)
+def test_url_target_rejected_unless_exactly_allowlisted(target: str) -> None:
+    """A URL reaches nuclei verbatim, so the adapter only hands one over when the
+    authorizer allowlisted that exact string — never on the strength of a wildcard."""
+    with pytest.raises(ValueError, match="URL target"):
+        _nuclei_target(_wildcard_request(target))
+
+
+def test_url_target_must_match_allowlist_entry_case_sensitively() -> None:
+    """The gate compares hostnames case-insensitively; the adapter's URL check does
+    not, because a URL's path is case-sensitive and this string goes to nuclei as-is."""
+    req = ScanRequest(
+        target="HTTP://127.0.0.1:8799/Admin",
+        authorization=_authorization("http://127.0.0.1:8799/admin"),
+    )
+    with pytest.raises(ValueError, match="URL target"):
+        _nuclei_target(req)
+
+
+def test_exactly_allowlisted_url_target_is_passed_verbatim() -> None:
+    req = ScanRequest(target="http://127.0.0.1:8799", authorization=_authorization())
+    assert _nuclei_target(req) == "http://127.0.0.1:8799"
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "evil.com/x.lab.local",
+        "evil.com#.lab.local",
+        "evil.com?.lab.local",
+        "attacker@web.lab.local",
+        "web.lab.local:8080",
+        "evil com.lab.local",
+        "web..lab.local",
+        "web-.lab.local",
+    ],
+)
+def test_bare_target_must_be_an_ip_or_a_strict_hostname(target: str) -> None:
+    with pytest.raises(ValueError, match="not an IP address or a valid hostname"):
+        _nuclei_target(_wildcard_request(target))
+
+
+def test_strict_hostname_target_is_accepted() -> None:
+    req = _wildcard_request("web-1.lab.local", {"port": 8080, "scheme": "http"})
+    assert _nuclei_target(req) == "http://web-1.lab.local:8080"
+
+
+def test_only_a_parsed_ipv6_address_is_bracketed() -> None:
+    req = ScanRequest(target="fd00::10", authorization=_authorization("fd00::10"))
+    assert _nuclei_target(req) == "[fd00::10]"
+    req = ScanRequest(target="127.0.0.1", authorization=_authorization("127.0.0.1"))
+    assert _nuclei_target(req) == "127.0.0.1"
+
+
+@pytest.mark.parametrize("bad", [float("inf"), float("-inf"), float("nan"), 1e999, 30.5])
+def test_non_finite_or_fractional_timeout_rejected_as_value_error(bad: float) -> None:
+    """int(float('inf')) raises OverflowError, which is not in PERMANENT_ERRORS and so
+    would be retried as transient. Reject before the conversion."""
+    adapter = NucleiAdapter()
+    req = ScanRequest(
+        target="http://127.0.0.1:8799",
+        authorization=_authorization(),
+        options={"template": str(FIXTURE_TEMPLATE), "timeout": bad},
+    )
+    with pytest.raises(ValueError, match="timeout option must be"):
+        adapter.scan(req)
+
+
+def test_integral_float_timeout_is_accepted() -> None:
+    adapter = NucleiAdapter()
+    req = ScanRequest(
+        target="http://127.0.0.1:8799",
+        authorization=_authorization(),
+        options={"template": str(FIXTURE_TEMPLATE), "timeout": 30.0},
+    )
+    mock_res = MagicMock()
+    mock_res.stdout = MINIMAL_JSONL
+    with patch("subprocess.run", return_value=mock_res) as mock_run:
+        adapter.scan(req)
+        assert mock_run.call_args[1]["timeout"] == 30
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"tags": ["cve"]},
+        {"tags": 1},
+        {"tags": ""},
+        {"tags": " , "},
+        {"template": 123},
+        {"template": ""},
+        {"templates": ["a.yaml"]},
+        {"tags": "cve", "template": str(FIXTURE_TEMPLATE)},
+        {"tags": "cve", "templates": str(FIXTURE_TEMPLATE)},
+        {"template": str(FIXTURE_TEMPLATE), "templates": str(FIXTURE_TEMPLATE)},
+    ],
+)
+def test_malformed_or_conflicting_selection_options_fail_closed(
+    options: dict[str, object],
+) -> None:
+    """Ignoring a malformed selector would run nuclei with no -tags/-t, i.e. against
+    the full template set — the widest possible scan, from a request for a narrow one."""
+    adapter = NucleiAdapter()
+    req = ScanRequest(
+        target="http://127.0.0.1:8799",
+        authorization=_authorization(),
+        options=options,
+    )
+    with patch("subprocess.run") as mock_run, pytest.raises(ValueError):
+        adapter.scan(req)
+    mock_run.assert_not_called()

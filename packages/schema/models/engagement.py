@@ -9,20 +9,38 @@ pattern.
 from __future__ import annotations
 
 import ipaddress
+import re
 from datetime import UTC, datetime
-from fnmatch import fnmatchcase
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from packages.schema.models._time import require_aware
 
+_HOSTNAME_LABEL_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?", re.ASCII)
+_MAX_HOSTNAME_LEN = 253
+
+
+def is_valid_hostname(value: str) -> bool:
+    """Is `value` a syntactically valid DNS hostname (RFC 1123), and nothing more?
+
+    Letters, digits and hyphens only, in dot-separated labels of 1-63 characters that
+    neither start nor end with a hyphen, 253 characters in all. No trailing dot, no
+    port, no userinfo, no path — anything a URL parser could read a different host out
+    of is rejected.
+    """
+    if not value or len(value) > _MAX_HOSTNAME_LEN:
+        return False
+    return all(_HOSTNAME_LABEL_RE.fullmatch(label) for label in value.lower().split("."))
+
 
 def target_matches(target: str, pattern: str) -> bool:
     """Does `target` fall inside allowlist entry `pattern`?
 
     Patterns are either an IP address, a CIDR block, a hostname, or a
-    `*.domain` wildcard matching subdomains but not the apex.
+    `*.domain` wildcard matching subdomains but not the apex. A wildcard only ever
+    matches a target that is itself a valid DNS hostname: it is a suffix check, not a
+    glob, so `http://evil.com/.lab.local` does not "end in" `.lab.local`.
 
     The target is compared exactly as provided — no URL parsing, no DNS
     resolution. Until proper URL target support is added (see DECISIONS.md),
@@ -54,7 +72,12 @@ def target_matches(target: str, pattern: str) -> bool:
         return False
 
     if pattern.startswith("*."):
-        return fnmatchcase(target.lower(), pattern.lower())
+        suffix = pattern[2:].lower()
+        if not is_valid_hostname(suffix) or not is_valid_hostname(target):
+            return False
+        # A valid hostname has no empty labels, so this also requires at least one
+        # label in front of the suffix: the apex never matches.
+        return target.lower().endswith("." + suffix)
 
     return target.lower() == pattern.lower()
 

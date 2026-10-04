@@ -54,11 +54,11 @@ class ScannerUnavailableError(Exception):
 class ScannerTimeoutError(Exception):
     """Raised when the scanner process outlived its timeout and was killed.
 
-    Permanent by nature, and the reason is worth spelling out: when a subprocess is
-    killed on timeout its buffered stdout is discarded, so the findings it had already
-    produced are gone. A retry re-runs the same template set against the same target
+    Permanent by nature: a retry re-runs the same template set against the same target
     with the same budget and times out again, so callers must not re-attempt it —
-    raise the timeout or narrow the template selection instead.
+    raise the timeout or narrow the template selection instead. Whatever the process
+    had written before it was killed is not recorded as a result: a ScanResult cannot
+    represent a partial run, and presenting one as complete would overstate coverage.
     """
 
 

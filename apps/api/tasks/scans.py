@@ -44,20 +44,26 @@ from services.scanners.base import (
     ScannerUnavailableError,
 )
 from services.scanners.nmap_adapter import NmapAdapter
+from services.scanners.nmap_xml import NmapParseError
 from services.scanners.nuclei_adapter import NucleiAdapter
+from services.scanners.nuclei_json import NucleiParseError
 
 logger = logging.getLogger(__name__)
 
 # Failures that a retry cannot fix. An unsupported scanner name stays
 # unsupported, a missing binary stays missing, a scan that blew its timeout blows
 # it again with the same budget and template set, and an unauthorized target must
-# never be re-attempted at all. Retrying any of these costs a full rescan per
-# attempt for an outcome that cannot change.
+# never be re-attempted at all. A parse error is a deterministic function of the
+# tool's output, so a rescan only reproduces output the parser rejects again.
+# Retrying any of these costs a full rescan per attempt for an outcome that cannot
+# change.
 PERMANENT_ERRORS = (
     ValueError,
     ScannerUnavailableError,
     ScannerTimeoutError,
     AuthorizationError,
+    NmapParseError,
+    NucleiParseError,
 )
 
 
