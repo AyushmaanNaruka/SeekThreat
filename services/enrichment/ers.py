@@ -1,13 +1,12 @@
 """Exposure Risk Score (ERS) calculation engine.
 
-Non-negotiable rules from services/enrichment/README.md and DECISIONS.md D-008:
+Non-negotiable rules from services/enrichment/README.md and DECISIONS.md D-008 / D-027:
 1. NEVER multiply EPSS by CVSS:
-   "Components combine ADDITIVELY (D-008). Never multiply EPSS by CVSS: the product
-   is not probability times severity, and FIRST is explicit that it means nothing."
-2. Hand-tuned, additive weights (D-008). D-008 requires each weight to be
-   documented with reasoning and a sensitivity analysis; that rationale has NOT
-   been written yet, so the defaults below are provisional. KEV membership
-   provides an additive validation boost; it does not train the score.
+   Components combine ADDITIVELY (D-008). Never multiply EPSS by CVSS: the product
+   is not probability times severity, and FIRST is explicit that it means nothing.
+2. Hand-tuned, additive weights (D-008, rationale and sensitivity analysis in D-027).
+   Weights: CVSS=0.40, EPSS=0.35, KEV=0.25. KEV is an input component (not a
+   validator — D-027 resolves the circularity). Validation uses ExploitDB/Metasploit.
 3. Self-explaining breakdown:
    Every composite score renders its own ScoreComponent breakdown with non-empty
    explanations and valid Provenance. No opaque numbers, ever. Derived placeholder
@@ -23,11 +22,13 @@ from packages.schema.models.finding import EnrichmentValue
 from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 
-# Hand-tuned weights (D-008). Provisional: rationale and sensitivity analysis
-# still to be documented. Sum of weights strictly equals 1.00.
+# Hand-tuned weights. Rationale and sensitivity analysis documented in D-027.
+# CVSS dominates (technical severity); EPSS near-parity (exploitation probability);
+# KEV is an additive input for confirmed active exploitation — not a validator (D-027).
+# Sum of weights strictly equals 1.00.
 DEFAULT_WEIGHT_CVSS: float = 0.40  # Technical severity & potential impact
-DEFAULT_WEIGHT_EPSS: float = 0.35  # 30-day exploitation probability
-DEFAULT_WEIGHT_KEV: float = 0.25  # Confirmed active exploitation boost
+DEFAULT_WEIGHT_EPSS: float = 0.35  # 30-day exploitation probability (FIRST EPSS v4)
+DEFAULT_WEIGHT_KEV: float = 0.25  # Confirmed active exploitation (CISA KEV input)
 
 # Values used only when a field is entirely absent from the fused dict. Same
 # values as fusion.py's derived placeholders (CVSS 5.0, EPSS 0.001).

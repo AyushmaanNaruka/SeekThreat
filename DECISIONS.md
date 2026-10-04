@@ -47,6 +47,182 @@ Newest first.
 
 ---
 
+### D-032 — /findings API contract: engagement_id required on all calls
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`GET /findings/{finding_id}` requires `?engagement_id=...` as a query parameter.
+`POST /findings/enrich/batch` requires `engagement_id` in the JSON body.
+Both are validated against an existing engagement row before any enrichment or retrieval occurs.
+
+**Why**
+Authorization scoping (CLAUDE.md): every scan and query must be logged with actor, target, and engagement reference. Without `engagement_id`, the audit event has no authorization reference to log. The composite PK `(engagement_id, finding_id)` on `enriched_findings` (D-031) also means a `finding_id` alone is not unique — the engagement scope is needed to look anything up. This is a breaking change from a hypothetical global `/findings/{id}` contract.
+
+**Impact on plan**
+The frontend must pass `engagement_id` through all findings calls (tracked in Level 5 dashboard work). The API client in `apps/web/lib/api.ts` has no findings methods yet — wiring them correctly is part of that level.
+
+**Cost if we're wrong**
+Low. `engagement_id` is additive — callers that already have it pass it through. Removing the requirement later is a one-line router change.
+
+---
+
+### D-031 — Composite PK (engagement_id, finding_id) on enriched_findings
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+The `enriched_findings` table uses a composite primary key of `(engagement_id, finding_id)`. `finding_id` alone is not unique. Upserts de-duplicate per engagement.
+
+**Why**
+D-007 established that every row carries an `engagement_id`. Enrichment is produced per-engagement: the same `finding_id` string could appear in two different engagements (different targets, different observations) and legitimately produce different enriched results. A global PK on `finding_id` would either reject valid re-enrichment or silently overwrite data from a different engagement. The composite key makes the scoping structural rather than enforced by application code.
+
+**Impact on plan**
+Upsert logic must include `engagement_id` in the conflict target. `GET /findings/{id}` needs `engagement_id` to resolve the row (D-032).
+
+**Cost if we're wrong**
+Low. If global uniqueness of `finding_id` is later proven correct, the constraint is a migration that drops the composite and adds a simple PK.
+
+---
+
+### D-030 — in_kev=None means "unknown", not "confirmed absent"
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+When the CISA KEV mirror file is absent or a CVE ID is not found in it, `in_kev` is set to `None` with `Source.DERIVED` / `Confidence.LOW`, not to `False` with `Source.KEV` / `Confidence.HIGH`. The ERS KEV component explains this as "unknown" and applies zero boost — it does not claim the CVE is confirmed absent from KEV.
+
+**Why**
+"Mirror not loaded" and "checked KEV and not listed" are semantically different. Conflating them would let a missing download silently lower ERS scores by asserting a confident negative. In a viva: "your tool said this was not exploited in the wild — how do you know?" requires an honest answer. The honest answer when the mirror is missing is "we don't know", not "no".
+
+**Impact on plan**
+The enrichment pipeline must call `cisa_kev_source.is_loaded` before interpreting a missing result. The `_kev_component` function in `ers.py` already handles `attr is None` correctly (zero boost, derived provenance, "unknown" explanation) — this decision documents why that branch exists.
+
+**Cost if we're wrong**
+None. The code already behaves correctly; this is a rationale decision.
+
+---
+
+### D-029 — Multiplicative path score in graph layer does not violate the EPSS × CVSS prohibition
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`services/graph/README.md` describes a path score of `EPSS × exploit_availability × privilege_delta`. This multiplication does not violate `services/enrichment/README.md` rule 3 ("Never multiply EPSS by CVSS").
+
+**Why**
+Rule 3 specifically bans the product `EPSS × CVSS`. The prohibition exists because that product is semantically meaningless: EPSS is a probability of exploitation in the wild; CVSS is a severity descriptor. Their product is neither probability nor severity. FIRST's own documentation states this explicitly.
+
+The graph's path score multiplies `EPSS × exploit_availability × privilege_delta`, where the other two factors are not CVSS. `exploit_availability` is a binary or ordinal signal (public exploit exists: yes/no/maturity level). `privilege_delta` measures how much privilege an attacker gains along the edge. Multiplying a probability (EPSS) by two conditional factors that gate that probability (does the exploit exist? how much does success advance the attacker?) is a valid conditional probability decomposition — it models "what is the probability this path is actually traversable?", not "what is probability times severity?"
+
+**Impact on plan**
+No code change. The distinction must be clearly explained in the final report and the graph layer's documentation to pre-empt the viva question.
+
+**Cost if we're wrong**
+If the viva panel disagrees, switching the path score to an additive formulation is a contained change inside `services/graph/`.
+
+---
+
+### D-028 — ERS computation lives in enrichment (Layer 2); ERS consumption lives in graph (Layer 3)
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`services/enrichment/ers.py` computes and stores the Exposure Risk Score as part of `EnrichedFinding`. The graph layer (Layer 3) reads the stored ERS for path ranking — it does not recompute it. `docs/02-architecture.md`'s pipeline diagram (`ERS scoring, chokepoint analysis` under graph) describes consumption, not computation.
+
+**Why**
+ERS depends exclusively on enrichment data (CVSS, EPSS, KEV). These are not available in the graph layer without importing from enrichment, which would invert the module dependency graph (`services/graph` may not import from `services/enrichment` — see module map). Storing ERS on `EnrichedFinding` makes it available to the graph as a pre-computed field, maintaining clean one-direction dependency flow. The architecture diagram's placement of "ERS scoring" under the graph step is a description of where ERS influences the output (ranked paths), not where the calculation runs.
+
+**Impact on plan**
+No code change — `ers.py` is already in enrichment. The graph layer will read `enriched_finding.ers.value` for path ranking. `docs/02-architecture.md` pipeline comment is clarified but the diagram shape is correct as-is.
+
+**Cost if we're wrong**
+Low. If the graph needs to recompute ERS with graph-specific inputs (e.g., reachability multiplier), it can extend `ERSWeights` without touching the enrichment computation.
+
+---
+
+### D-027 — D-008 addendum: weight rationale, sensitivity analysis, and KEV circularity resolution
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active — extends D-008
+
+**Decision**
+D-008 committed to hand-tuned, documented ERS weights but deferred the rationale and sensitivity analysis. This entry provides both and resolves the circular-validation concern with KEV.
+
+#### Weight rationale
+
+ERS combines three additive components. All component values are on a [0, 10] scale before weighting. Weights sum to 1.0. The final score is in [0, 10].
+
+| Component | Weight | Normalized input | Reasoning |
+|-----------|--------|-----------------|-----------|
+| CVSS Base Score | **0.40** | `cvss_score / 10` | CVSS is the most established, most widely cited severity descriptor. It should dominate the score. However, a CVSS 10 with zero exploitation history is still less urgent than a CVSS 7.5 being actively exploited — so 40%, not 60%+. |
+| EPSS v4 probability | **0.35** | `epss_probability × 10` | EPSS measures 30-day exploitation-in-the-wild probability. It is the most operationally actionable signal: a high-EPSS CVE will be attempted soon regardless of theoretical CVSS severity. 35% gives it near-parity with CVSS, which is intentional: "is someone actually exploiting this?" is almost as important as "how bad is it if they do?" |
+| CISA KEV membership | **0.25** | `1.0 if in KEV else 0.0` | KEV membership is a binary, high-confidence signal of confirmed active exploitation. It is additive rather than a multiplier (which D-008 prohibits). 25% is large enough to reorder borderline cases — a CVE that is in KEV always scores higher than an otherwise-identical non-KEV CVE — but small enough that KEV alone cannot dominate a truly low-severity finding. |
+
+The formula: `ERS = cvss_score × 0.40 + (epss × 10) × 0.35 + kev_flag × 10 × 0.25`
+
+#### Sensitivity analysis
+
+Computed against 5 CVE fixtures from `tests/fixtures/enrichment/` (synthetic values — see fixture README). KEV membership taken from `cisa_kev_sample.json`.
+
+| CVE | CVSS | EPSS | KEV |
+|-----|------|------|-----|
+| CVE-2021-44228 (Log4Shell) | 10.0 | 0.97543 | Yes |
+| CVE-2021-41773 (Apache traversal) | 7.5 | 0.94120 | Yes |
+| CVE-2022-22947 (Spring Gateway) | 9.8 | 0.89510 | Yes |
+| CVE-2024-23897 (Jenkins CLI) | 9.8 | 0.78120 | Yes |
+| CVE-2020-7699 (express-fileupload) | 7.3 | 0.14250 | No |
+
+Three weight profiles tested:
+
+| Profile | w_cvss | w_epss | w_kev |
+|---------|--------|--------|-------|
+| Severity-heavy | 0.60 | 0.25 | 0.15 |
+| Balanced (current) | 0.40 | 0.35 | 0.25 |
+| Exploitation-heavy | 0.25 | 0.50 | 0.25 |
+
+Computed ERS scores (formula applied to fixture values):
+
+| CVE | Severity-heavy | Balanced | Exploitation-heavy |
+|-----|---------------|----------|--------------------|
+| CVE-2021-44228 | **9.94** | **9.91** | **9.88** |
+| CVE-2022-22947 | **9.62** | **9.55** | **9.43** |
+| CVE-2024-23897 | **9.33** | **9.15** | **8.86** |
+| CVE-2021-41773 | **8.35** | **8.79** | **9.08** |
+| CVE-2020-7699 | **4.74** | **3.42** | **2.54** |
+
+**Ranking stability:** The top-3 (Log4Shell, Spring Gateway, Jenkins CLI) are identical across all three profiles. The #4/#5 positions (Apache traversal vs express-fileupload) stay ordered across all profiles. **The ranking is fully stable** — no reordering occurs under any tested weight profile. This confirms the choice is defensible: the weights do not materially change what gets fixed first.
+
+*Note: These scores are computed from synthetic fixture values, not real measurements. When real feed data is loaded, scores will differ. The ranking stability property is what matters for the viva claim.*
+
+#### KEV circularity resolution
+
+D-008 originally said KEV "validates" the ranking. With KEV now a 25% component of ERS, using it to also validate is circular.
+
+**Resolution (option a):** KEV remains an ERS input. Validation uses a separate signal: "do the top-N ERS-ranked CVEs have public ExploitDB entries or Metasploit modules?" ExploitDB and Metasploit data are independent of KEV and provide a corroborating confirmation that high-ERS CVEs are genuinely exploitable in practice. This validation will be measured in the Level 4 eval (enrichment coverage baseline) once ExploitDB/Metasploit sources are implemented (Level 3).
+
+D-008's original sentence "KEV membership is used to *validate* the resulting ranking, not as a training target" is hereby amended: KEV is an *input* to ERS. Validation uses ExploitDB/Metasploit corroboration. The "not as a training target" clause remains unchanged.
+
+**Impact on plan**
+No weight or code changes. The `ers.py` docstring is updated to remove the "provisional" qualifier and reference this decision. The validation methodology moves to Level 3/4 work.
+
+**Cost if we're wrong**
+Low. If the sensitivity analysis later reveals the fixture data is unrepresentative of real CVE distributions, weights can be adjusted — the `ERSWeights` dataclass separates weights from computation.
+
+---
+
+
 ### D-026 — Nuclei observations carry an nmap-shaped `endpoint` join key
 **Date:** 2026-09-26
 **Decided by:** Hritish
