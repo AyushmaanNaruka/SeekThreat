@@ -1,0 +1,500 @@
+{
+  "_synthetic": true,
+  "_comment": "Curated test inputs for enrichment coverage evaluation per Level 4 specification. NOT measured results.",
+  "dataset_version": "1.0.0",
+  "description": "50 curated CVE IDs spanning five analytical cohorts to evaluate multi-source enrichment coverage against NVD baseline.",
+  "cohorts": [
+    "cohort_a_nvd_control",
+    "cohort_b_nvd_gap",
+    "cohort_c_cisa_kev",
+    "cohort_d_high_epss_no_nvd",
+    "cohort_e_weaponized_exploit"
+  ],
+  "items": [
+    {
+      "cve_id": "CVE-2021-44228",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Apache Log4j2 JNDI RCE (Log4Shell)",
+      "expected_sources": [
+        "nvd",
+        "cve_org",
+        "cisa_kev",
+        "first_epss",
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Historically complete NVD record; multi-source adds KEV, EPSS, ExploitDB, Metasploit."
+    },
+    {
+      "cve_id": "CVE-2021-41773",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Apache HTTP Server 2.4.49 Path Traversal & RCE",
+      "expected_sources": [
+        "nvd",
+        "cve_org",
+        "cisa_kev",
+        "first_epss",
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Complete NVD analysis present; multi-source provides exploit telemetry."
+    },
+    {
+      "cve_id": "CVE-2020-7699",
+      "cohort": "cohort_a_nvd_control",
+      "title": "express-fileupload Prototype Pollution",
+      "expected_sources": [
+        "nvd",
+        "cve_org"
+      ],
+      "notes": "Fully analyzed in NVD with CVSS and CWE."
+    },
+    {
+      "cve_id": "CVE-2020-15778",
+      "cohort": "cohort_a_nvd_control",
+      "title": "OpenSSH scp Command Injection",
+      "expected_sources": [
+        "nvd",
+        "cve_org"
+      ],
+      "notes": "Standard CVE with NVD base metrics."
+    },
+    {
+      "cve_id": "CVE-2017-0144",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Microsoft SMBv1 Server Remote Code Execution (EternalBlue)",
+      "expected_sources": [
+        "nvd"
+      ],
+      "notes": "Legacy high-profile CVE with complete NVD analysis."
+    },
+    {
+      "cve_id": "CVE-2019-0708",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Microsoft Remote Desktop Services RCE (BlueKeep)",
+      "expected_sources": [
+        "nvd"
+      ],
+      "notes": "Full NVD score and CWE assignment."
+    },
+    {
+      "cve_id": "CVE-2014-0160",
+      "cohort": "cohort_a_nvd_control",
+      "title": "OpenSSL TLS Heartbeat Information Disclosure (Heartbleed)",
+      "expected_sources": [
+        "nvd"
+      ],
+      "notes": "Canonical pre-slowdown NVD benchmark entry."
+    },
+    {
+      "cve_id": "CVE-2017-5638",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Apache Struts 2 Jakarta Multipart Parser RCE",
+      "expected_sources": [
+        "nvd"
+      ],
+      "notes": "Full NVD enrichment in baseline."
+    },
+    {
+      "cve_id": "CVE-2019-11510",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Pulse Secure Pulse Connect Secure Arbitrary File Read",
+      "expected_sources": [
+        "nvd"
+      ],
+      "notes": "Fully enriched baseline CVE."
+    },
+    {
+      "cve_id": "CVE-2018-13379",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Fortinet FortiOS SSL VPN Path Traversal",
+      "expected_sources": [
+        "nvd"
+      ],
+      "notes": "Fully enriched in baseline NVD."
+    },
+    {
+      "cve_id": "CVE-2024-23897",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Jenkins CLI Arbitrary File Read",
+      "expected_sources": [
+        "cve_org",
+        "cisa_kev",
+        "first_epss"
+      ],
+      "notes": "NVD delayed/not scheduled; CVE.org and CISA provide metrics."
+    },
+    {
+      "cve_id": "CVE-2025-0001",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Synthetic 2025 Enterprise Auth Bypass",
+      "expected_sources": [
+        "vulnrichment"
+      ],
+      "notes": "Zero NVD enrichment; CISA Vulnrichment fallback provides CVSS/CWE."
+    },
+    {
+      "cve_id": "CVE-2024-38077",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Windows Remote Desktop Licensing Service RCE (MadLicense)",
+      "expected_sources": [
+        "cve_org",
+        "first_epss"
+      ],
+      "notes": "NVD backlog entry enriched primarily by CNA."
+    },
+    {
+      "cve_id": "CVE-2024-21413",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Microsoft Outlook Moniker RCE (MonikerLink)",
+      "expected_sources": [
+        "cve_org"
+      ],
+      "notes": "CVE.org CNA provides immediate metrics during NVD delay."
+    },
+    {
+      "cve_id": "CVE-2024-3094",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "XZ Utils Backdoor Supply Chain Compromise",
+      "expected_sources": [
+        "cve_org"
+      ],
+      "notes": "Rapid CNA disclosure; NVD lagged behind initial reports."
+    },
+    {
+      "cve_id": "CVE-2024-27198",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "JetBrains TeamCity Authentication Bypass",
+      "expected_sources": [
+        "cve_org",
+        "vulnrichment"
+      ],
+      "notes": "Vulnrichment filled gap while NVD was Awaiting Analysis."
+    },
+    {
+      "cve_id": "CVE-2024-1709",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "ConnectWise ScreenConnect Authentication Bypass",
+      "expected_sources": [
+        "cve_org",
+        "vulnrichment"
+      ],
+      "notes": "Critical flaw enriched by CNA and Vulnrichment during NVD freeze."
+    },
+    {
+      "cve_id": "CVE-2024-21762",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Fortinet FortiOS Out-of-Bounds Write SSL-VPN",
+      "expected_sources": [
+        "cve_org",
+        "vulnrichment"
+      ],
+      "notes": "Enriched by CISA Vulnrichment."
+    },
+    {
+      "cve_id": "CVE-2024-3400",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Palo Alto Networks PAN-OS GlobalProtect Command Injection",
+      "expected_sources": [
+        "cve_org",
+        "vulnrichment"
+      ],
+      "notes": "Zero-day exploited in wild; Vulnrichment provides SSVC/CVSS."
+    },
+    {
+      "cve_id": "CVE-2024-4577",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "PHP CGI Windows Argument Injection RCE",
+      "expected_sources": [
+        "cve_org"
+      ],
+      "notes": "Fast-moving exploit where CNA provided canonical metrics."
+    },
+    {
+      "cve_id": "CVE-2022-22947",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Spring Cloud Gateway Code Injection",
+      "expected_sources": [
+        "cisa_kev",
+        "first_epss",
+        "exploitdb",
+        "metasploit",
+        "euvd"
+      ],
+      "notes": "Confirmed active exploitation in CISA KEV catalog."
+    },
+    {
+      "cve_id": "CVE-2023-34362",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Progress MOVEit Transfer SQL Injection",
+      "expected_sources": [
+        "cisa_kev",
+        "first_epss"
+      ],
+      "notes": "Widely weaponized in ransomware campaigns per KEV."
+    },
+    {
+      "cve_id": "CVE-2023-2868",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Barracuda Email Security Gateway Command Injection",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "Targeted espionage exploitation tracked in KEV."
+    },
+    {
+      "cve_id": "CVE-2023-22515",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Atlassian Confluence Broken Access Control",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "CISA KEV flag with ransomware association."
+    },
+    {
+      "cve_id": "CVE-2023-22518",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Atlassian Confluence Data Center Improper Authorization",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "Ransomware vector tracked by CISA."
+    },
+    {
+      "cve_id": "CVE-2023-46805",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Ivanti Connect Secure Authentication Bypass",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "Mass zero-day exploitation recorded in KEV."
+    },
+    {
+      "cve_id": "CVE-2024-21887",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Ivanti Connect Secure Command Injection",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "Paired with CVE-2023-46805 for full compromise."
+    },
+    {
+      "cve_id": "CVE-2023-20198",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Cisco IOS XE Web UI Privilege Escalation",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "Thousands of compromised network devices in KEV."
+    },
+    {
+      "cve_id": "CVE-2023-20273",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Cisco IOS XE Web UI Command Injection",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "Implant delivery vulnerability in KEV."
+    },
+    {
+      "cve_id": "CVE-2023-27997",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Fortinet FortiOS Heap Overflow (XORtigate)",
+      "expected_sources": [
+        "cisa_kev"
+      ],
+      "notes": "Confirmed in-the-wild exploitation on VPN appliances."
+    },
+    {
+      "cve_id": "CVE-2022-22965",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Spring Framework RCE (Spring4Shell)",
+      "expected_sources": [
+        "first_epss",
+        "cve_org"
+      ],
+      "notes": "Elevated EPSS exploitation probability (>0.9)."
+    },
+    {
+      "cve_id": "CVE-2025-0002",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Synthetic 2025 Cloud Storage Auth Bypass",
+      "expected_sources": [
+        "euvd"
+      ],
+      "notes": "Missing from NVD; EUVD provides European fallback scoring."
+    },
+    {
+      "cve_id": "CVE-2024-20656",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Microsoft Visual Studio Elevation of Privilege",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "High EPSS activity tracked by FIRST EPSS v4."
+    },
+    {
+      "cve_id": "CVE-2024-20931",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Oracle WebLogic Server T3/IIOP Deserialization",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "High likelihood of automated probe exploitation."
+    },
+    {
+      "cve_id": "CVE-2024-26229",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows Kernel Elevation of Privilege",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "Frequent post-exploitation target with high EPSS."
+    },
+    {
+      "cve_id": "CVE-2024-26169",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows Error Reporting Service Elevation of Privilege",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "Observed in ransomware tradecraft; high EPSS."
+    },
+    {
+      "cve_id": "CVE-2024-30078",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows Wi-Fi Driver Remote Code Execution",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "High-interest driver vulnerability with rising EPSS."
+    },
+    {
+      "cve_id": "CVE-2024-38112",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows MSHTML Platform Spoofing Vulnerability",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "Active zero-day weaponized via shortcut (.url) files."
+    },
+    {
+      "cve_id": "CVE-2024-38063",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows TCP/IP Remote Code Execution (IPv6)",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "Wormable critical flaw with top-percentile EPSS."
+    },
+    {
+      "cve_id": "CVE-2024-38200",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Microsoft Office Spoofing Vulnerability",
+      "expected_sources": [
+        "first_epss"
+      ],
+      "notes": "NTLM relay vector with high probability score."
+    },
+    {
+      "cve_id": "CVE-2020-1472",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Netlogon Elevation of Privilege (ZeroLogon)",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Fully weaponized in Metasploit and ExploitDB."
+    },
+    {
+      "cve_id": "CVE-2021-34527",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Windows Print Spooler RCE (PrintNightmare)",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Public weaponized exploits available across multiple platforms."
+    },
+    {
+      "cve_id": "CVE-2021-26855",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server SSRF (ProxyLogon)",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Public Metasploit exploit modules published."
+    },
+    {
+      "cve_id": "CVE-2021-34473",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server RCE (ProxyShell)",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Weaponized chained exploit in Metasploit."
+    },
+    {
+      "cve_id": "CVE-2022-26134",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Atlassian Confluence OGNL Injection",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "ExploitDB entry and active Metasploit module."
+    },
+    {
+      "cve_id": "CVE-2022-30190",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Windows MSDT Arbitrary Code Execution (Follina)",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Document weaponization module in Metasploit."
+    },
+    {
+      "cve_id": "CVE-2022-41040",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server SSRF (ProxyNotShell)",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Public exploit scripts cataloged in ExploitDB."
+    },
+    {
+      "cve_id": "CVE-2022-41082",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server Remote PowerShell RCE",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Chained RCE weaponized in Metasploit."
+    },
+    {
+      "cve_id": "CVE-2023-0669",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Fortra GoAnywhere MFT Deserialization RCE",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "ExploitDB and Metasploit weaponized modules."
+    },
+    {
+      "cve_id": "CVE-2023-27350",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "PaperCut MF/NG Improper Access Control",
+      "expected_sources": [
+        "exploitdb",
+        "metasploit"
+      ],
+      "notes": "Automated Metasploit module available."
+    }
+  ]
+}

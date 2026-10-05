@@ -24,7 +24,15 @@ from services.enrichment.sources.base import BaseSourceRecord
 from services.enrichment.sources.cisa_kev import CISAKevRecord, CISAKevSource
 from services.enrichment.sources.cve_org import CVEOrgSource
 from services.enrichment.sources.epss import FirstEPSSSource
-from services.enrichment.sources.secondary import EUVDSource, VulnrichmentSource
+from services.enrichment.sources.secondary import (
+    EUVDSource,
+    ExploitDBRecord,
+    ExploitDBSource,
+    MetasploitRecord,
+    MetasploitSource,
+    NVDSource,
+    VulnrichmentSource,
+)
 from services.enrichment.sources.sync import mirror_path
 
 # Derived placeholders used when no source has data. They are NOT measurements:
@@ -40,7 +48,7 @@ PLACEHOLDER_EPSS_PERCENTILE_NON_CVE: float = 0.01
 
 KEV_UNKNOWN_NOTE = "KEV mirror not loaded; KEV status unknown"
 
-_CHAIN_ORDER = (Source.CVE_ORG, Source.VULNRICHMENT, Source.EUVD)
+_CHAIN_ORDER = (Source.CVE_ORG, Source.VULNRICHMENT, Source.NVD, Source.EUVD)
 _CONFIDENCE_RANK = {Confidence.LOW: 0, Confidence.MEDIUM: 1, Confidence.HIGH: 2}
 
 
@@ -71,26 +79,31 @@ class FusionEngine:
         cisa_kev: CISAKevSource | None = None,
         first_epss: FirstEPSSSource | None = None,
         vulnrichment: VulnrichmentSource | None = None,
+        nvd: NVDSource | None = None,
         euvd: EUVDSource | None = None,
+        exploitdb: ExploitDBSource | None = None,
+        metasploit: MetasploitSource | None = None,
         cache_dir: Path | None = None,
     ) -> None:
         """Build the engine from explicit sources and/or a local mirror directory.
 
         Args:
-            cve_org, cisa_kev, first_epss, vulnrichment, euvd: Explicit source
-                instances. An explicit source always wins over ``cache_dir``.
+            cve_org, cisa_kev, first_epss, vulnrichment, euvd, exploitdb, metasploit:
+                Explicit source instances. An explicit source always wins over ``cache_dir``.
             cache_dir: Directory of local mirror files, laid out exactly as
                 ``SourceSynchronizer`` writes it (``sources.sync.MIRROR_FILENAMES``):
 
                 - ``cve_org.json``      -> CVEOrgSource
                 - ``cisa_kev.json``     -> CISAKevSource
                 - ``epss_v4.json``      -> FirstEPSSSource
-                - ``vulnrichment.json`` -> VulnrichmentSource (stub; loads nothing yet)
-                - ``euvd.json``         -> EUVDSource (stub; loads nothing yet)
+                - ``vulnrichment.json`` -> VulnrichmentSource
+                - ``euvd.json``         -> EUVDSource
+                - ``exploitdb.json``    -> ExploitDBSource
+                - ``metasploit.json``   -> MetasploitSource
 
                 A missing or empty file leaves that source unloaded. When
                 ``cache_dir`` is None, any source not passed explicitly is created
-                unloaded, and Vulnrichment/EUVD are left out of the chain.
+                unloaded, and secondary sources are left out of the chain.
         """
 
         def _path(source: Source) -> Path | None:
@@ -104,8 +117,21 @@ class FusionEngine:
             if cache_dir is not None
             else None
         )
+        self.nvd = nvd or (
+            NVDSource(cache_file=_path(Source.NVD)) if cache_dir is not None else None
+        )
         self.euvd = euvd or (
             EUVDSource(cache_file=_path(Source.EUVD)) if cache_dir is not None else None
+        )
+        self.exploitdb = exploitdb or (
+            ExploitDBSource(cache_file=_path(Source.EXPLOITDB))
+            if cache_dir is not None
+            else None
+        )
+        self.metasploit = metasploit or (
+            MetasploitSource(cache_file=_path(Source.METASPLOIT))
+            if cache_dir is not None
+            else None
         )
 
     def fuse(self, finding: Finding) -> dict[str, Attributed[EnrichmentValue]]:
@@ -263,10 +289,13 @@ class FusionEngine:
                 ),
             )
 
+        # 4. Exploit availability signals (ExploitDB & Metasploit)
+        fields.update(self._exploit_fields(cve_ids, now))
+
         return fields
 
     def _chain_records(self, cve_id: str) -> list[BaseSourceRecord]:
-        """Records for a CVE in fallback-chain order: CVE.org -> Vulnrichment -> EUVD."""
+        """Records for a CVE in fallback-chain order: CVE.org -> Vulnrichment -> NVD -> EUVD."""
         records: list[BaseSourceRecord] = []
         cve_record = self.cve_org.lookup(cve_id)
         if cve_record is not None:
@@ -275,6 +304,10 @@ class FusionEngine:
             vuln_record = self.vulnrichment.lookup(cve_id)
             if vuln_record is not None:
                 records.append(vuln_record)
+        if self.nvd is not None:
+            nvd_record = self.nvd.lookup(cve_id)
+            if nvd_record is not None:
+                records.append(nvd_record)
         if self.euvd is not None:
             euvd_record = self.euvd.lookup(cve_id)
             if euvd_record is not None:
@@ -288,6 +321,8 @@ class FusionEngine:
             return f"Canonical CVE.org CNA CVSS{f' v{version}' if version else ''}"
         if record.source == Source.VULNRICHMENT:
             return "CISA Vulnrichment fallback CVSS (CVE.org lacked metrics)"
+        if record.source == Source.NVD:
+            return "NVD 2.0 fallback CVSS"
         if record.source == Source.EUVD:
             return "ENISA EUVD fallback CVSS (CVE.org and Vulnrichment lacked metrics)"
         return f"CVSS from {record.source.value}"
@@ -388,11 +423,125 @@ class FusionEngine:
             )
         return out
 
+    def _exploit_fields(
+        self, cve_ids: list[str], now: datetime
+    ) -> dict[str, Attributed[EnrichmentValue]]:
+        """Exploit availability signals (Hard Rule 4: IDs/names only, no code)."""
+        out: dict[str, Attributed[EnrichmentValue]] = {}
+
+        # 1. ExploitDB metadata
+        if self.exploitdb is not None:
+            if not self.exploitdb.is_loaded:
+                out["has_public_exploit"] = Attributed[EnrichmentValue](
+                    value=None,
+                    provenance=Provenance(
+                        source=Source.DERIVED,
+                        confidence=Confidence.LOW,
+                        retrieved_at=now,
+                        note="ExploitDB mirror not loaded; public exploit status unknown",
+                    ),
+                )
+            else:
+                edb_ids: list[str] = []
+                edb_records: list[ExploitDBRecord] = []
+                for cve_id in cve_ids:
+                    rec = self.exploitdb.lookup(cve_id)
+                    if rec is not None and rec.has_public_exploit:
+                        edb_records.append(rec)
+                        for eid in rec.exploit_ids:
+                            if eid not in edb_ids:
+                                edb_ids.append(eid)
+                if edb_ids:
+                    retrieved = min(r.retrieved_at for r in edb_records)
+                    out["has_public_exploit"] = Attributed[EnrichmentValue](
+                        value=True,
+                        provenance=Provenance(
+                            source=Source.EXPLOITDB,
+                            confidence=Confidence.HIGH,
+                            retrieved_at=retrieved,
+                            note="Confirmed public exploit available in ExploitDB",
+                        ),
+                    )
+                    out["exploit_ids"] = Attributed[EnrichmentValue](
+                        value=sorted(edb_ids),
+                        provenance=Provenance(
+                            source=Source.EXPLOITDB,
+                            confidence=Confidence.HIGH,
+                            retrieved_at=retrieved,
+                            note=f"ExploitDB identifiers: {', '.join(sorted(edb_ids))}",
+                        ),
+                    )
+                else:
+                    out["has_public_exploit"] = Attributed[EnrichmentValue](
+                        value=False,
+                        provenance=Provenance(
+                            source=Source.EXPLOITDB,
+                            confidence=Confidence.HIGH,
+                            retrieved_at=now,
+                            note=f"None of {', '.join(cve_ids)} listed in loaded ExploitDB mirror",
+                        ),
+                    )
+
+        # 2. Metasploit module metadata
+        if self.metasploit is not None:
+            if not self.metasploit.is_loaded:
+                out["has_metasploit_module"] = Attributed[EnrichmentValue](
+                    value=None,
+                    provenance=Provenance(
+                        source=Source.DERIVED,
+                        confidence=Confidence.LOW,
+                        retrieved_at=now,
+                        note="Metasploit mirror not loaded; module status unknown",
+                    ),
+                )
+            else:
+                msf_modules: list[str] = []
+                msf_records: list[MetasploitRecord] = []
+                for cve_id in cve_ids:
+                    rec_msf = self.metasploit.lookup(cve_id)
+                    if rec_msf is not None and rec_msf.has_metasploit_module:
+                        msf_records.append(rec_msf)
+                        for mname in rec_msf.module_names:
+                            if mname not in msf_modules:
+                                msf_modules.append(mname)
+                if msf_modules:
+                    retrieved = min(r.retrieved_at for r in msf_records)
+                    out["has_metasploit_module"] = Attributed[EnrichmentValue](
+                        value=True,
+                        provenance=Provenance(
+                            source=Source.METASPLOIT,
+                            confidence=Confidence.HIGH,
+                            retrieved_at=retrieved,
+                            note="Confirmed Metasploit module available",
+                        ),
+                    )
+                    out["metasploit_modules"] = Attributed[EnrichmentValue](
+                        value=sorted(msf_modules),
+                        provenance=Provenance(
+                            source=Source.METASPLOIT,
+                            confidence=Confidence.HIGH,
+                            retrieved_at=retrieved,
+                            note=f"Metasploit modules: {', '.join(sorted(msf_modules))}",
+                        ),
+                    )
+                else:
+                    out["has_metasploit_module"] = Attributed[EnrichmentValue](
+                        value=False,
+                        provenance=Provenance(
+                            source=Source.METASPLOIT,
+                            confidence=Confidence.HIGH,
+                            retrieved_at=now,
+                            note=f"None of {', '.join(cve_ids)} listed in loaded Metasploit mirror",
+                        ),
+                    )
+
+        return out
+
     def _fuse_non_cve_finding(
         self, finding: Finding, now: datetime
     ) -> dict[str, Attributed[EnrichmentValue]]:
         """Synthesize derived attributes for non-CVE heuristic findings."""
-        return {
+        out: dict[str, Attributed[EnrichmentValue]] = {
             "cvss_score": Attributed[EnrichmentValue](
                 value=PLACEHOLDER_CVSS_NON_CVE,
                 provenance=Provenance(
@@ -451,6 +600,27 @@ class FusionEngine:
                 ),
             ),
         }
+        if self.exploitdb is not None:
+            out["has_public_exploit"] = Attributed[EnrichmentValue](
+                value=False,
+                provenance=Provenance(
+                    source=Source.DERIVED,
+                    confidence=Confidence.HIGH,
+                    retrieved_at=now,
+                    note="Finding has no CVE identifiers; ExploitDB tracks only CVEs",
+                ),
+            )
+        if self.metasploit is not None:
+            out["has_metasploit_module"] = Attributed[EnrichmentValue](
+                value=False,
+                provenance=Provenance(
+                    source=Source.DERIVED,
+                    confidence=Confidence.HIGH,
+                    retrieved_at=now,
+                    note="Finding has no CVE identifiers; Metasploit tracks only CVEs",
+                ),
+            )
+        return out
 
     def fuse_to_enriched_finding(
         self, finding: Finding, compute_ers: bool = True
@@ -474,6 +644,8 @@ def fuse_finding(
     first_epss: FirstEPSSSource | None = None,
     vulnrichment: VulnrichmentSource | None = None,
     euvd: EUVDSource | None = None,
+    exploitdb: ExploitDBSource | None = None,
+    metasploit: MetasploitSource | None = None,
     cache_dir: Path | None = None,
 ) -> dict[str, Attributed[EnrichmentValue]]:
     """Convenience helper to fuse a single finding with given sources."""
@@ -483,6 +655,8 @@ def fuse_finding(
         first_epss=first_epss,
         vulnrichment=vulnrichment,
         euvd=euvd,
+        exploitdb=exploitdb,
+        metasploit=metasploit,
         cache_dir=cache_dir,
     )
     return engine.fuse(finding)

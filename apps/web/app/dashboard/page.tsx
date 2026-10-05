@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import DashboardGlobe from "../../components/DashboardGlobe";
 import SidebarOrbit from "../../components/SidebarOrbit";
+import EnrichedFindingsView from "../../components/EnrichedFindingsView";
 import {
   api,
   EngagementItem,
@@ -501,7 +502,11 @@ export default function DashboardPage() {
               <span className="db-coming-soon">Active</span>
             </div>
 
-            <div className="db-nav-item">
+            <div
+              className={`db-nav-item ${activeNav === "Findings" ? "active" : ""}`}
+              onClick={() => setActiveNav("Findings")}
+              style={{ cursor: "pointer" }}
+            >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <circle cx="12" cy="12" r="3" />
@@ -509,7 +514,9 @@ export default function DashboardPage() {
                 </svg>
                 <span>Findings</span>
               </div>
-              <span className="db-coming-soon">Coming Soon</span>
+              <span className="db-coming-soon" style={{ background: "rgba(99, 102, 241, 0.2)", color: "#a5b4fc", border: "1px solid rgba(99, 102, 241, 0.4)" }}>
+                ERS
+              </span>
             </div>
 
             <div className="db-nav-item">
@@ -731,8 +738,16 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* BANNER: ACTIVE ENGAGEMENT SCOPE */}
-          <section className="db-banner">
+          {/* VIEW SWITCHER: FINDINGS VS OVERVIEW/ENGAGEMENTS/SCANS */}
+          {activeNav === "Findings" ? (
+            <EnrichedFindingsView
+              activeEngagement={activeEngagement}
+              onSelectEngagementPrompt={() => setShowCreateModal(true)}
+            />
+          ) : (
+            <>
+              {/* BANNER: ACTIVE ENGAGEMENT SCOPE */}
+              <section className="db-banner">
             <div className="db-banner-left">
               <div className="db-banner-badge-row">
                 <svg className="db-banner-shield-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1396,6 +1411,8 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+            </>
+          )}
         </div>
       </main>
 
