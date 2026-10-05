@@ -30,7 +30,16 @@ logging.basicConfig(
 )
 logger = logging.getLogger("seekthreat.sync_feeds")
 
-VALID_SOURCES = {"kev", "epss", "cve_org", "all"}
+VALID_SOURCES = {
+    "kev",
+    "epss",
+    "cve_org",
+    "vulnrichment",
+    "euvd",
+    "exploitdb",
+    "metasploit",
+    "all",
+}
 
 
 def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -85,13 +94,21 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     if args.source == "all":
-        results = syncer.sync_all()
+        results = syncer.sync_all(include_secondary=True)
     elif args.source == "kev":
         results = [syncer.sync_kev()]
     elif args.source == "epss":
         results = [syncer.sync_epss()]
     elif args.source == "cve_org":
         results = [syncer.sync_cve_org()]
+    elif args.source == "vulnrichment":
+        results = [syncer.sync_vulnrichment()]
+    elif args.source == "euvd":
+        results = [syncer.sync_euvd()]
+    elif args.source == "exploitdb":
+        results = [syncer.sync_exploitdb()]
+    elif args.source == "metasploit":
+        results = [syncer.sync_metasploit()]
     else:
         logger.error("Unknown source: %s", args.source)
         return 1

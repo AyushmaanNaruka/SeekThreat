@@ -174,67 +174,67 @@ Write `tests/unit/test_feed_sync.py` **before** implementing:
 
 ### 3.1 — Vulnrichment source (tests first)
 
-- [ ] Write `tests/unit/test_vulnrichment_source.py`:
+- [x] Write `tests/unit/test_vulnrichment_source.py`:
   - Test loading from a local mirror file.
   - Test `lookup(cve_id)` returns `VulnrichmentRecord` with SSVC decision, CVSS, CWE.
   - Test `is_loaded` property returns True after `load()`.
   - Test graceful handling of missing/malformed records (return `None`, no exception).
-- [ ] Create synthetic test fixture: `tests/fixtures/enrichment/vulnrichment_sample.json` (marked synthetic per fixture README).
-- [ ] Implement `VulnrichmentSource.load()` — parse local mirror JSON into in-memory lookup dict.
-- [ ] Implement `VulnrichmentSource.lookup(cve_id)` — return `VulnrichmentRecord | None`.
-- [ ] Wire into `FusionEngine` fallback chain: CVE.org → **Vulnrichment** → EUVD → derived.
+- [x] Create synthetic test fixture: `tests/fixtures/enrichment/vulnrichment_sample.json` (marked synthetic per fixture README).
+- [x] Implement `VulnrichmentSource.load()` — parse local mirror JSON into in-memory lookup dict.
+- [x] Implement `VulnrichmentSource.lookup(cve_id)` — return `VulnrichmentRecord | None`.
+- [x] Wire into `FusionEngine` fallback chain: CVE.org → **Vulnrichment** → EUVD → derived.
 
 ### 3.2 — EUVD source (tests first)
 
-- [ ] Write `tests/unit/test_euvd_source.py`:
+- [x] Write `tests/unit/test_euvd_source.py`:
   - Test loading from `euvd.json` mirror.
   - Test `lookup(cve_id)` returns `EUVDRecord` with CVSS, CWE.
   - Test graceful degradation for beta/incomplete data.
-- [ ] Create synthetic fixture: `tests/fixtures/enrichment/euvd_sample.json`.
-- [ ] Implement `EUVDSource.load()` and `EUVDSource.lookup(cve_id)`.
-- [ ] Wire into fallback chain as third fallback (after Vulnrichment).
+- [x] Create synthetic fixture: `tests/fixtures/enrichment/euvd_sample.json`.
+- [x] Implement `EUVDSource.load()` and `EUVDSource.lookup(cve_id)`.
+- [x] Wire into fallback chain as third fallback (after Vulnrichment).
 
 ### 3.3 — Fallback chain integration test
 
-- [ ] Update `tests/unit/test_enrichment_fallback.py`:
+- [x] Update `tests/unit/test_enrichment_fallback.py`:
   - Full chain: CVE.org has CVSS → use it. CVE.org missing → Vulnrichment has it → use it. Both missing → EUVD has it → use it. All missing → derived placeholder.
   - Confirm `Provenance.source` correctly reflects which source provided each field.
 
 ### 3.4 — ExploitDB metadata source (tests first)
 
-- [ ] Write `tests/unit/test_exploitdb_source.py`:
+- [x] Write `tests/unit/test_exploitdb_source.py`:
   - Test loading from local mirror file.
   - Test `lookup(cve_id)` returns exploit IDs only (e.g., `"EDB-12345"`) — **no exploit code**.
   - Test output shape: `{exploit_ids: ["EDB-12345"], has_public_exploit: True}`.
-- [ ] Create synthetic fixture: `tests/fixtures/enrichment/exploitdb_sample.json`.
-- [ ] Implement `ExploitDBSource` with real `load()` and `lookup()`.
-- [ ] If `exploit_ids` / `has_public_exploit` are new fields on `EnrichedFinding`, flag the schema change for review.
+- [x] Create synthetic fixture: `tests/fixtures/enrichment/exploitdb_sample.json`.
+- [x] Implement `ExploitDBSource` with real `load()` and `lookup()`.
+- [x] If `exploit_ids` / `has_public_exploit` are new fields on `EnrichedFinding`, flag the schema change for review.
 
 ### 3.5 — Metasploit metadata source (tests first)
 
-- [ ] Write `tests/unit/test_metasploit_source.py`:
+- [x] Write `tests/unit/test_metasploit_source.py`:
   - Test loading from local mirror file.
   - Test `lookup(cve_id)` returns module names only (e.g., `"exploit/multi/http/log4shell_header_injection"`) — **names only, hard rule 4**.
   - Test output shape: `{module_names: [...], has_metasploit_module: True}`.
-- [ ] Create synthetic fixture: `tests/fixtures/enrichment/metasploit_sample.json`.
-- [ ] Implement `MetasploitSource` with real `load()` and `lookup()`.
+- [x] Create synthetic fixture: `tests/fixtures/enrichment/metasploit_sample.json`.
+- [x] Implement `MetasploitSource` with real `load()` and `lookup()`.
 
 ### 3.6 — Feed sync for new sources
 
-- [ ] Add sync methods for Vulnrichment, EUVD, ExploitDB, Metasploit mirrors to `FeedSyncer`.
-- [ ] Document upstream URLs and data format for each source.
+- [x] Add sync methods for Vulnrichment, EUVD, ExploitDB, Metasploit mirrors to `FeedSyncer`.
+- [x] Document upstream URLs and data format for each source.
   - ExploitDB: `files_exploits.csv` from ExploitDB GitLab mirror — verify licence (confirm MIT/BSD; GPL would block this).
   - Metasploit: `modules_metadata_base.json` from Rapid7 GitHub — verify licence (BSD-3).
-- [ ] Add any new dependency to `THIRD_PARTY.md`.
+- [x] Add any new dependency to `THIRD_PARTY.md`.
 
 ### Level 3 checklist
 
-- [ ] Vulnrichment and EUVD are real, not stubs
-- [ ] Fallback chain tested end-to-end with per-field provenance check
-- [ ] ExploitDB/Metasploit return IDs/names only (hard rule 4 satisfied)
-- [ ] All new fixtures marked synthetic
-- [ ] New dependency licence-checked and in `THIRD_PARTY.md`
-- [ ] CI green
+- [x] Vulnrichment and EUVD are real, not stubs
+- [x] Fallback chain tested end-to-end with per-field provenance check
+- [x] ExploitDB/Metasploit return IDs/names only (hard rule 4 satisfied)
+- [x] All new fixtures marked synthetic
+- [x] New dependency licence-checked and in `THIRD_PARTY.md`
+- [x] CI green
 
 ---
 
@@ -254,43 +254,43 @@ Document in `evals/enrichment_coverage.md` (new file):
 - **Multi-source result:** enrich with full fusion chain. Count same.
 - **Coverage improvement** = `(multi_source_filled - nvd_only_filled) / total_fields_measured`.
 
-- [ ] Write metric definition in `evals/enrichment_coverage.md`.
+- [x] Write metric definition in `evals/enrichment_coverage.md`.
 
 ### 4.2 — Build the eval dataset
 
-- [ ] Curate ≥ 50 CVE IDs covering:
+- [x] Curate ≥ 50 CVE IDs covering:
   - CVEs with full NVD enrichment (control group — NVD baseline has them).
   - CVEs where NVD moved to "Not Scheduled" or "Awaiting Analysis" (the gap CVE.org fills).
   - CVEs in CISA KEV.
   - CVEs with high EPSS but no NVD CVSS.
   - CVEs with ExploitDB / Metasploit entries.
-- [ ] Store as `evals/golden/enrichment_baseline.json`.
-- [ ] Mark clearly as curated test inputs, not measured results.
+- [x] Store as `evals/golden/enrichment_baseline.json`.
+- [x] Mark clearly as curated test inputs, not measured results.
 
 ### 4.3 — Implement the eval harness
 
-- [ ] Create `evals/enrichment_coverage.py`:
+- [x] Create `evals/enrichment_coverage.py`:
   - Load eval dataset from `evals/golden/enrichment_baseline.json`.
   - Run NVD-only enrichment (restrict source chain to `NVDSource` only via config).
   - Run full multi-source enrichment (all sources loaded from local mirror files).
   - Compare field-by-field: count filled, placeholder, missing.
   - Output a summary table (plaintext + JSON).
-- [ ] Harness must run fully offline (uses local mirror files, not live APIs).
+- [x] Harness must run fully offline (uses local mirror files, not live APIs).
 
 ### 4.4 — Run and report
 
-- [ ] Execute harness. Record actual numbers.
-- [ ] Write results to `evals/results/enrichment_coverage_results.md`:
+- [x] Execute harness. Record actual numbers.
+- [x] Write results to `evals/results/enrichment_coverage_results.md`:
   - Date measured, dataset size, per-field coverage table, overall coverage improvement.
-- [ ] **No placeholder numbers.** Per `evals/README.md`: if a result cannot be measured yet (e.g., because a mirror file is not downloaded), say so explicitly. Do not fabricate.
+- [x] **No placeholder numbers.** Per `evals/README.md`: if a result cannot be measured yet (e.g., because a mirror file is not downloaded), say so explicitly. Do not fabricate.
 
 ### Level 4 checklist
 
-- [ ] Eval harness exists and runs offline
-- [ ] Results are real (actually run), not estimated
-- [ ] Results committed to `evals/results/`
-- [ ] Layer 2 "done when" criterion addressed
-- [ ] CI green
+- [x] Eval harness exists and runs offline
+- [x] Results are real (actually run), not estimated
+- [x] Results committed to `evals/results/`
+- [x] Layer 2 "done when" criterion addressed
+- [x] CI green
 
 ---
 
@@ -353,29 +353,29 @@ interface EnrichedFindingListResponse {
 }
 ```
 
-- [ ] Add API methods to `api` object:
+- [x] Add API methods to `api` object:
   - `getFinding(findingId: string, engagementId: string)` → `Promise<EnrichedFindingItem>` — calls `GET /findings/{id}?engagement_id=...`
   - `getFindings(engagementId: string, limit?: number, offset?: number)` → `Promise<EnrichedFindingListResponse>` — calls `GET /findings?engagement_id=...`
   - `enrichFindingsBatch(engagementId: string, findings: Finding[])` → batches up to 1000, sends `POST /findings/enrich/batch` with `engagement_id` in body.
 
 ### 5.2 — Enriched findings list
 
-- [ ] Add findings tab/section to the engagement detail view.
-- [ ] Display a table of enriched findings for the selected engagement:
+- [x] Add findings tab/section to the engagement detail view.
+- [x] Display a table of enriched findings for the selected engagement:
   - Columns: CVE ID, CVSS score, EPSS probability, KEV status, ERS score.
   - Default sort: ERS score descending (highest risk first).
   - Color-code ERS severity band: Critical (≥8) / High (≥6) / Medium (≥4) / Low (<4).
 
 ### 5.3 — ERS component breakdown
 
-- [ ] On finding click/expand:
+- [x] On finding click/expand:
   - Show ERS score with breakdown: each `ScoreComponent` as a bar or labeled row.
   - Show: component name, raw value, weight, weighted contribution, explanation text.
   - Visually flag `Source.DERIVED` components as estimates ("placeholder, not measured").
 
 ### 5.4 — Per-field provenance
 
-- [ ] For each enrichment field (CVSS, EPSS, KEV, CWE, description):
+- [x] For each enrichment field (CVSS, EPSS, KEV, CWE, description):
   - Show the value.
   - Show provenance badge: source name + confidence level.
   - Tooltip or expandable: `retrieved_at`, `note`.
@@ -383,18 +383,18 @@ interface EnrichedFindingListResponse {
 
 ### 5.5 — Handle `engagement_id` requirement
 
-- [ ] All findings API calls pass `engagement_id` as required parameter.
-- [ ] If no engagement selected, show prompt to select one first.
-- [ ] Error handling: engagement not found (404), no enriched findings yet (empty state with explanation).
+- [x] All findings API calls pass `engagement_id` as required parameter.
+- [x] If no engagement selected, show prompt to select one first.
+- [x] Error handling: engagement not found (404), no enriched findings yet (empty state with explanation).
 
 ### Level 5 checklist
 
-- [ ] TypeScript interfaces added and typed
-- [ ] Findings list functional
-- [ ] ERS component breakdown visible
-- [ ] Per-field provenance visible
-- [ ] `engagement_id` wired through all calls
-- [ ] CI green
+- [x] TypeScript interfaces added and typed
+- [x] Findings list functional
+- [x] ERS component breakdown visible
+- [x] Per-field provenance visible
+- [x] `engagement_id` wired through all calls
+- [x] CI green
 
 ---
 
@@ -404,9 +404,9 @@ interface EnrichedFindingListResponse {
 |-------|-------------|--------|----|
 | **1** | Decisions & ERS Analysis | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level1_of_level2_second_part.md) | D-027–D-032 in DECISIONS.md |
 | **2** | Feed Sync Job | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_of_level2_second_part.md) | D-033; FeedSyncer + Celery Beat + CLI |
-| **3** | Real Source Implementations | ⬜ Not started | — |
-| **4** | NVD-Only Baseline Eval | ⬜ Not started | — |
-| **5** | Dashboard: Enriched Findings UI | ⬜ Not started | — |
+| **3** | Real Source Implementations | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level3_of_level2_second_part.md) | D-034; VulnrichmentSource + EUVDSource + ExploitDBSource + MetasploitSource + FeedSyncer secondary sync |
+| **4** | NVD-Only Baseline Eval | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level4_of_level2_second_part.md) | D-035; metric spec + golden dataset + offline harness + results |
+| **5** | Dashboard: Enriched Findings UI | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level5_of_level2_second_part.md) | EnrichedFindingsView + api.ts + ERS breakdown + field provenance |
 
 ---
 

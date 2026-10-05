@@ -43,6 +43,10 @@ dependency manifests.
 | Nuclei Templates | MIT (ProjectDiscovery) | Vendored | Official vulnerability template archive pinned in container image | Mayank | 2026-09-25 |
 | Greenbone / OpenVAS | GPL | Service | Run as container, GMP API via python-gvm | | |
 | Foundation-Sec-8B-Reasoning | Open weights | Service | Local model serving | | |
+| CISA Vulnrichment | CC0 / Public Domain | Data | SSVC decision points, CWE, and CVSS fallback metrics | Mayank | 2026-10-05 |
+| ENISA EUVD | Open Data / EUPL | Data | European Vulnerability Database fallback metrics | Mayank | 2026-10-05 |
+| ExploitDB Metadata | Public Metadata | Data | CVE to EDB-ID mapping only (Hard Rule 4: never exploit code) | Mayank | 2026-10-05 |
+| Rapid7 Metasploit Framework | BSD-3-Clause | Data | Module metadata mapping CVE to module names only (Hard Rule 4: no code) | Mayank | 2026-10-05 |
 
 ---
 

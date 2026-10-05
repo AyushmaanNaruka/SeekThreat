@@ -468,3 +468,119 @@ class TestSyncFeedsCLI:
             exit_code = main(["--source", "cve_org", "--cache-dir", str(tmp_path)])
             assert exit_code == 0
             m_cve.assert_called_once()
+
+    def test_cli_secondary_sources_invoked(self, tmp_path: Path) -> None:
+        from services.enrichment.sync_feeds import main
+
+        for src_name, method_name, src_enum in [
+            ("vulnrichment", "sync_vulnrichment", Source.VULNRICHMENT),
+            ("euvd", "sync_euvd", Source.EUVD),
+            ("exploitdb", "sync_exploitdb", Source.EXPLOITDB),
+            ("metasploit", "sync_metasploit", Source.METASPLOIT),
+        ]:
+            mock_res = SyncResult(
+                source=src_enum,
+                target_path=tmp_path / f"{src_name}.json",
+                records_synced=1,
+                success=True,
+            )
+            with patch.object(FeedSyncer, method_name, return_value=mock_res) as m_sync:
+                exit_code = main(["--source", src_name, "--cache-dir", str(tmp_path)])
+                assert exit_code == 0
+                m_sync.assert_called_once()
+
+
+class TestSyncSecondaryFeeds:
+    """Tests for syncing secondary threat intelligence sources."""
+
+    def test_sync_vulnrichment(self, tmp_path: Path) -> None:
+        syncer = FeedSyncer(cache_dir=tmp_path)
+        payload = {"CVE-2025-0001": {"cveId": "CVE-2025-0001", "cvss_score": 8.1}}
+        with patch(
+            "services.enrichment.sources.sync.httpx.get",
+            return_value=_make_mock_response(payload),
+        ):
+            res = syncer.sync_vulnrichment()
+
+        assert res.success is True
+        assert res.source == Source.VULNRICHMENT
+        assert res.records_synced == 1
+        assert res.target_path.exists()
+
+    def test_sync_euvd(self, tmp_path: Path) -> None:
+        syncer = FeedSyncer(cache_dir=tmp_path)
+        payload = [{"cve_id": "CVE-2025-0002", "cvss_score": 6.5}]
+        with patch(
+            "services.enrichment.sources.sync.httpx.get",
+            return_value=_make_mock_response(payload),
+        ):
+            res = syncer.sync_euvd()
+
+        assert res.success is True
+        assert res.source == Source.EUVD
+        assert res.records_synced == 1
+        assert res.target_path.exists()
+
+    def test_sync_exploitdb_csv_parsing(self, tmp_path: Path) -> None:
+        syncer = FeedSyncer(cache_dir=tmp_path)
+        csv_text = (
+            "id,file,description,date_published,author,type,platform,"
+            "port,date_added,date_updated,verified,codes\n"
+            "50592,exploits/multiple/remote/50592.py,Log4j RCE,2021-12-15,author,"
+            "remote,all,0,2021-12-15,2021-12-16,1,CVE-2021-44228\n"
+        )
+        mock_resp = MagicMock()
+        mock_resp.text = csv_text
+        mock_resp.raise_for_status = MagicMock()
+
+        with patch("services.enrichment.sources.sync.httpx.get", return_value=mock_resp):
+            res = syncer.sync_exploitdb()
+
+        assert res.success is True
+        assert res.source == Source.EXPLOITDB
+        assert res.records_synced == 1
+        saved = json.loads(res.target_path.read_text())
+        assert "CVE-2021-44228" in saved
+        assert saved["CVE-2021-44228"]["exploit_ids"] == ["EDB-50592"]
+
+    def test_sync_metasploit_metadata_parsing(self, tmp_path: Path) -> None:
+        syncer = FeedSyncer(cache_dir=tmp_path)
+        payload = {
+            "exploit/multi/http/log4shell_header_injection": {
+                "name": "Log4Shell Header Injection",
+                "references": ["CVE-2021-44228"],
+            }
+        }
+        with patch(
+            "services.enrichment.sources.sync.httpx.get",
+            return_value=_make_mock_response(payload),
+        ):
+            res = syncer.sync_metasploit()
+
+        assert res.success is True
+        assert res.source == Source.METASPLOIT
+        assert res.records_synced == 1
+        saved = json.loads(res.target_path.read_text())
+        assert "CVE-2021-44228" in saved
+        assert saved["CVE-2021-44228"]["module_names"] == [
+            "exploit/multi/http/log4shell_header_injection"
+        ]
+
+    def test_sync_all_include_secondary_returns_seven_results(self, tmp_path: Path) -> None:
+        syncer = FeedSyncer(cache_dir=tmp_path)
+        with patch(
+            "services.enrichment.sources.sync.httpx.get",
+            return_value=_make_mock_response({"CVE-2021-44228": {}}),
+        ):
+            results = syncer.sync_all(include_secondary=True)
+
+        assert len(results) == 7
+        sources = {r.source for r in results}
+        assert Source.KEV in sources
+        assert Source.EPSS in sources
+        assert Source.CVE_ORG in sources
+        assert Source.VULNRICHMENT in sources
+        assert Source.EUVD in sources
+        assert Source.EXPLOITDB in sources
+        assert Source.METASPLOIT in sources
+

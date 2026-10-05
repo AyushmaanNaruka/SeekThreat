@@ -11,6 +11,9 @@ Two classes:
 
 from __future__ import annotations
 
+import csv
+import io
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -19,6 +22,8 @@ from typing import Any
 import httpx
 
 from packages.schema.models.provenance import Source
+
+CVE_PATTERN = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
 
 # Upstream canonical URLs (used by FeedSyncer)
 DEFAULT_CISA_KEV_URL = (
@@ -29,6 +34,17 @@ DEFAULT_FIRST_EPSS_URL = "https://api.first.org/data/v1/epss"
 # <https://github.com/CVEProject/cvelistV5>
 # We fetch the JSON index and a representative slice for the mirror.
 DEFAULT_CVE_ORG_URL = "https://cveawg.mitre.org/api/cve"
+# Secondary threat intelligence sources
+DEFAULT_VULNRICHMENT_URL = (
+    "https://raw.githubusercontent.com/cisagov/vulnrichment/develop/vulnrichment.json"
+)
+DEFAULT_EUVD_URL = "https://euvd.enisa.europa.eu/api/vulnerabilities"
+# ExploitDB files_exploits.csv (metadata mapping CVE -> EDB-ID, no exploit code)
+DEFAULT_EXPLOITDB_URL = (
+    "https://gitlab.com/exploit-database/exploitdb/-/raw/main/files_exploits.csv"
+)
+# Rapid7 Metasploit module metadata (module names to CVE references, no Ruby code)
+DEFAULT_METASPLOIT_URL = "https://raw.githubusercontent.com/rapid7/metasploit-framework/master/db/modules_metadata_base.json"
 
 
 @dataclass(frozen=True)
@@ -53,6 +69,8 @@ MIRROR_FILENAMES: dict[Source, str] = {
     Source.VULNRICHMENT: "vulnrichment.json",
     Source.NVD: "nvd.json",
     Source.EUVD: "euvd.json",
+    Source.EXPLOITDB: "exploitdb.json",
+    Source.METASPLOIT: "metasploit.json",
 }
 
 
@@ -136,6 +154,10 @@ class FeedSyncer:
         kev_url: str = DEFAULT_CISA_KEV_URL,
         epss_url: str = DEFAULT_FIRST_EPSS_URL,
         cve_org_url: str = DEFAULT_CVE_ORG_URL,
+        vulnrichment_url: str = DEFAULT_VULNRICHMENT_URL,
+        euvd_url: str = DEFAULT_EUVD_URL,
+        exploitdb_url: str = DEFAULT_EXPLOITDB_URL,
+        metasploit_url: str = DEFAULT_METASPLOIT_URL,
         timeout_seconds: float = 60.0,
     ) -> None:
         self.cache_dir = Path(cache_dir) if cache_dir else get_default_cache_dir()
@@ -144,6 +166,10 @@ class FeedSyncer:
         self._kev_url = kev_url
         self._epss_url = epss_url
         self._cve_org_url = cve_org_url
+        self._vulnrichment_url = vulnrichment_url
+        self._euvd_url = euvd_url
+        self._exploitdb_url = exploitdb_url
+        self._metasploit_url = metasploit_url
         self._timeout = timeout_seconds
 
     def sync_kev(self) -> SyncResult:
@@ -231,13 +257,177 @@ class FeedSyncer:
                 error=str(exc),
             )
 
-    def sync_all(self) -> list[SyncResult]:
-        """Sync all three primary feeds. Returns one SyncResult per source.
+    def sync_vulnrichment(self) -> SyncResult:
+        """Fetch CISA Vulnrichment enrichment data and write to mirror."""
+        target_path = mirror_path(self.cache_dir, Source.VULNRICHMENT)
+        try:
+            response = httpx.get(
+                self._vulnrichment_url, timeout=self._timeout, follow_redirects=True
+            )
+            response.raise_for_status()
+            payload = response.json()
+            count = len(payload) if isinstance(payload, (dict, list)) else 0
+            return self._synchronizer.sync_from_data(Source.VULNRICHMENT, payload, count)
+        except Exception as exc:
+            return SyncResult(
+                source=Source.VULNRICHMENT,
+                success=False,
+                records_synced=0,
+                target_path=target_path,
+                synced_at=datetime.now(UTC),
+                error=str(exc),
+            )
 
-        Best-effort: a failure in one source does not abort the others.
-        Order: KEV, EPSS, CVE.org (smallest to largest download).
+    def sync_euvd(self) -> SyncResult:
+        """Fetch ENISA European Vulnerability Database data and write to mirror."""
+        target_path = mirror_path(self.cache_dir, Source.EUVD)
+        try:
+            response = httpx.get(self._euvd_url, timeout=self._timeout, follow_redirects=True)
+            response.raise_for_status()
+            payload = response.json()
+            count = len(payload) if isinstance(payload, (dict, list)) else 0
+            return self._synchronizer.sync_from_data(Source.EUVD, payload, count)
+        except Exception as exc:
+            return SyncResult(
+                source=Source.EUVD,
+                success=False,
+                records_synced=0,
+                target_path=target_path,
+                synced_at=datetime.now(UTC),
+                error=str(exc),
+            )
+
+    def sync_exploitdb(self) -> SyncResult:
+        """Fetch ExploitDB files_exploits.csv and write normalized JSON mirror.
+
+        Hard Rule 4: Extracts ONLY exploit IDs mapped to CVE identifiers.
+        Never downloads or stores exploit payloads or executable code.
         """
+        target_path = mirror_path(self.cache_dir, Source.EXPLOITDB)
+        try:
+            response = httpx.get(
+                self._exploitdb_url, timeout=self._timeout, follow_redirects=True
+            )
+            response.raise_for_status()
+            text = response.text
+            records: dict[str, dict[str, Any]] = {}
+            if text.strip().startswith("{") or text.strip().startswith("["):
+                payload = response.json()
+                if isinstance(payload, dict):
+                    records = payload
+                count = len(records)
+                return self._synchronizer.sync_from_data(Source.EXPLOITDB, records, count)
+
+            reader = csv.DictReader(io.StringIO(text))
+            cve_map: dict[str, list[str]] = {}
+            for row in reader:
+                edb_id = row.get("id", "").strip()
+                if not edb_id:
+                    continue
+                formatted_id = f"EDB-{edb_id}"
+                codes = row.get("codes", "")
+                for match in CVE_PATTERN.finditer(codes):
+                    cve = match.group(0).upper()
+                    if cve not in cve_map:
+                        cve_map[cve] = []
+                    if formatted_id not in cve_map[cve]:
+                        cve_map[cve].append(formatted_id)
+
+            records = {
+                cve: {
+                    "cve_id": cve,
+                    "exploit_ids": ids,
+                    "has_public_exploit": True,
+                }
+                for cve, ids in cve_map.items()
+            }
+            count = len(records)
+            return self._synchronizer.sync_from_data(Source.EXPLOITDB, records, count)
+        except Exception as exc:
+            return SyncResult(
+                source=Source.EXPLOITDB,
+                success=False,
+                records_synced=0,
+                target_path=target_path,
+                synced_at=datetime.now(UTC),
+                error=str(exc),
+            )
+
+    def sync_metasploit(self) -> SyncResult:
+        """Fetch Metasploit modules_metadata_base.json and write normalized JSON mirror.
+
+        Hard Rule 4: Extracts ONLY module names mapped to CVE identifiers.
+        Never downloads or stores Ruby exploit source code.
+        """
+        target_path = mirror_path(self.cache_dir, Source.METASPLOIT)
+        try:
+            response = httpx.get(
+                self._metasploit_url, timeout=self._timeout, follow_redirects=True
+            )
+            response.raise_for_status()
+            data = response.json()
+            cve_map: dict[str, list[str]] = {}
+            if isinstance(data, dict):
+                for mod_name, mod_info in data.items():
+                    if mod_name.startswith("_") or not isinstance(mod_info, dict):
+                        continue
+                    refs = mod_info.get("references", [])
+                    if isinstance(refs, list):
+                        for ref in refs:
+                            if isinstance(ref, str):
+                                for match in CVE_PATTERN.finditer(ref):
+                                    cve = match.group(0).upper()
+                                    if cve not in cve_map:
+                                        cve_map[cve] = []
+                                    if mod_name not in cve_map[cve]:
+                                        cve_map[cve].append(mod_name)
+            records = {
+                cve: {
+                    "cve_id": cve,
+                    "module_names": mods,
+                    "has_metasploit_module": True,
+                }
+                for cve, mods in cve_map.items()
+            }
+            count = len(records)
+            return self._synchronizer.sync_from_data(Source.METASPLOIT, records, count)
+        except Exception as exc:
+            return SyncResult(
+                source=Source.METASPLOIT,
+                success=False,
+                records_synced=0,
+                target_path=target_path,
+                synced_at=datetime.now(UTC),
+                error=str(exc),
+            )
+
+    def sync_primary(self) -> list[SyncResult]:
+        """Sync the three primary feeds (KEV, EPSS, CVE.org)."""
         results: list[SyncResult] = []
         for sync_fn in (self.sync_kev, self.sync_epss, self.sync_cve_org):
             results.append(sync_fn())
+        return results
+
+    def sync_secondary(self) -> list[SyncResult]:
+        """Sync secondary threat feeds (Vulnrichment, EUVD, ExploitDB, Metasploit)."""
+        results: list[SyncResult] = []
+        for sync_fn in (
+            self.sync_vulnrichment,
+            self.sync_euvd,
+            self.sync_exploitdb,
+            self.sync_metasploit,
+        ):
+            results.append(sync_fn())
+        return results
+
+    def sync_all(self, include_secondary: bool = False) -> list[SyncResult]:
+        """Sync feeds. Returns one SyncResult per source.
+
+        Best-effort: a failure in one source does not abort the others.
+        By default syncs primary feeds (KEV, EPSS, CVE.org). Set
+        include_secondary=True to sync all 7 feeds.
+        """
+        results = self.sync_primary()
+        if include_secondary:
+            results.extend(self.sync_secondary())
         return results

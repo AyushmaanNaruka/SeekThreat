@@ -27,6 +27,8 @@ scan-output/
 *.nmap
 *.gnmap
 results/
+!evals/results/
+!evals/results/**
 loot/
 
 data/

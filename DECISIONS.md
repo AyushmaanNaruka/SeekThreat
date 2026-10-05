@@ -47,6 +47,52 @@ Newest first.
 
 ---
 
+### D-035 — Enrichment coverage eval methodology: offline NVD-only baseline comparison
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+Enrichment coverage is evaluated offline by comparing SeekThreat's multi-source fusion engine against an isolated NVD-only baseline across 50 curated CVEs in five cohorts. Evaluated across six intelligence dimensions (CVSS score, CWE taxonomy, description, EPSS probability, CISA KEV exploitation, and exploit presence in ExploitDB/Metasploit). All numbers reported in `evals/results/` are actual executed measurements; when evaluated against synthetic fixture files, reports are explicitly labeled as such per `evals/README.md`.
+
+**Why**
+Layer 2 "Done When" explicitly requires enrichment coverage to be measured against an NVD-only baseline. Prior to this, `evals/README.md` stated "No number in this project has been measured yet." Traditional scanners rely solely on NVD, which provides zero telemetry for EPSS, KEV, or weaponized exploits, and suffers from significant un-enriched backlogs since April 2026. Evaluating against an isolated baseline with synthetic fixture data enables 100% offline verification (Rule 5) without fabricating production claims.
+
+**Impact on plan**
+`evals/enrichment_coverage.md` defines the metric formulas. `evals/golden/enrichment_baseline.json` curates the 50 CVE inputs across 5 cohorts. `evals/enrichment_coverage.py` implements the offline harness. `NVDRecord` and `NVDSource` are integrated into `FusionEngine` so NVD fallback is supported in both baseline and full fusion modes.
+
+**Cost if we're wrong**
+None. The harness accepts `--cache-dir` and seamlessly runs against real production mirror directories whenever downloaded, producing real-world metrics using the exact same evaluation script.
+
+---
+
+### D-034 — Real local-mirror readers for secondary sources and exploit availability signals
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+Implement real local-mirror readers and synchronization for secondary intelligence sources:
+1. `VulnrichmentSource` (Priority 2): CISA Vulnrichment SSVC decision points, CWE, and fallback CVSS v3.1/v4.0.
+2. `EUVDSource` (Priority 6): ENISA European Vulnerability Database fallback metrics.
+3. `ExploitDBSource` (Priority 9) & `MetasploitSource` (Priority 10): Exploit availability signals for finding enrichment and Layer 3 attack path scoring.
+
+Strictly enforce CLAUDE.md Hard Rule 4: ExploitDB records contain ONLY exploit IDs (`EDB-XXXXX`); Metasploit records contain ONLY module names (`exploit/...`). No exploit bodies, Ruby scripts, payloads, or execution harnesses are ingested, stored, or executed anywhere in the codebase.
+
+**Why**
+In Layer 2 first part, secondary sources were stubs (`load()` merely set `_loaded = True`), meaning the fallback chain in `FusionEngine` could only jump straight from CVE.org to derived placeholders. Real implementations enable a complete 4-tier fallback: `CVE.org -> Vulnrichment -> EUVD -> Derived`.
+Furthermore, Layer 3 (Graph / Path Engine) requires an exploit availability signal (`EPSS × exploit availability × privilege delta`). Exposing `has_public_exploit` / `exploit_ids` and `has_metasploit_module` / `metasploit_modules` as attributed enrichment fields provides this data deterministically without violating Hard Rule 4.
+
+**Impact on plan**
+`services/enrichment/sources/secondary.py` is now fully operational with dedicated synthetic fixtures. `FeedSyncer` supports syncing all 7 feeds (`include_secondary=True` or `--source vulnrichment|euvd|exploitdb|metasploit`). Zero new third-party Python dependencies needed (standard library `csv`, `json`, `re` suffice).
+
+**Cost if we're wrong**
+Low. All sources inherit `BaseEnrichmentSource` contract and lazy loading. Empty or absent mirror files degrade gracefully to `Confidence.LOW` / `Source.DERIVED` without throwing runtime errors or creating false negatives.
+
+---
+
 ### D-033 — Off-request-path feed synchronization via FeedSyncer, Celery Beat, and CLI
 **Date:** 2026-10-05
 **Decided by:** Mayank

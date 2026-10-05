@@ -9,6 +9,10 @@ copies of real feeds and their values are **not real measurements**.
 | `cve_org_sample.json` | CVE Services 5.1 `CVE_RECORD` objects, keyed by CVE ID |
 | `cisa_kev_sample.json` | CISA Known Exploited Vulnerabilities catalog JSON |
 | `epss_v4_sample.json` | FIRST EPSS API v4 response (`data` array) |
+| `vulnrichment_sample.json` | CISA Vulnrichment enriched records (SSVC, CVSS, CWE) |
+| `euvd_sample.json` | ENISA European Vulnerability Database records |
+| `exploitdb_sample.json` | ExploitDB metadata (exploit IDs only, never exploit code) |
+| `metasploit_sample.json` | Metasploit module metadata (module names only, never exploit code) |
 
 - CVSS scores, EPSS probabilities/percentiles, KEV dates, catalog versions and ransomware flags
   are illustrative values chosen to drive test cases (high/moderate/low EPSS tiers, a non-KEV
