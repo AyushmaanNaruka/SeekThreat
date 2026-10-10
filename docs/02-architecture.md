@@ -69,7 +69,7 @@ Scanner adapters ------------------> RawArtifact   (tool output, verbatim, retai
         |  named YAML rules fire on fact patterns
         v
    AttackPath[]     <- every edge carries rule_name + evidence
-        |  ERS scoring, chokepoint analysis
+        |  ERS-based ranking (ERS read from EnrichedFinding), chokepoint analysis
         v
   RankedPath[] --------------------> Neo4j projection (read-only, disposable)
         |
@@ -115,8 +115,8 @@ Dependencies point downward. Nothing imports back up.
 | `apps/api/core/authorization` | The single scan gate | schema |
 | `services/scanners` | Tool invocation to `Observation`. No interpretation | schema, authorization |
 | `services/normalize` | Identity resolution, cross-scanner dedup | schema |
-| `services/enrichment` | Multi-source fusion, fallback chains, provenance | schema |
-| `services/graph` | Graph build, rules, paths, ERS, chokepoints | schema |
+| `services/enrichment` | Multi-source fusion, fallback chains, provenance, ERS computation (D-028) | schema |
+| `services/graph` | Graph build, rules, paths, ERS-based ranking (reads stored ERS), chokepoints | schema |
 | `services/assistant` | Retrieval, narration, citations | schema **only** |
 | `apps/api` | HTTP, Celery dispatch, structured logging | all of the above |
 
@@ -256,7 +256,7 @@ Full reasoning in `DECISIONS.md`.
 | D-005 | pgvector, not Qdrant |
 | D-006 | Ollama behind a `ModelClient` interface |
 | D-007 | Row-level `engagement_id` scoping, not schema-per-tenant |
-| D-008 | ERS weights hand-tuned and documented. KEV membership validates, it does not train |
+| D-008 | ERS weights hand-tuned and documented. KEV is an ERS input, not a validator or training target (amended by D-027) |
 | D-009 | Pydantic v2 replaces dataclasses in `packages/schema` |
 | D-010 | Keep str+Enum for schema enums; suppress ruff UP042 project-wide |
 | D-011 | `ScannerAdapter.scan()` returns a `ScanResult` (artifact + observations), not a bare list |

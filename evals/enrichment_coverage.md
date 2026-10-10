@@ -1,105 +1,122 @@
 # Enrichment Coverage Evaluation Metric Specification
 
+> **Status:** the harness exists; the metric has **not been measured**. The committed output in
+> `evals/results/` is a synthetic smoke test on hand-authored fixtures
+> (`tests/fixtures/enrichment/`, every file `_synthetic: true`). No real-world coverage number
+> exists yet.
+
 ## 1. Overview and Objective
 
-In April 2026, the National Vulnerability Database (NVD) scaled back its enrichment operations,
-leaving a substantial proportion of newly published CVEs in an "Awaiting Analysis" or "Not Scheduled"
-state without CVSS severity scores, CWE taxonomy classifications, or standardized descriptions.
-Furthermore, an NVD-only scanning strategy provides no signal for:
-- Exploitation probability (FIRST EPSS)
-- Active in-the-wild exploitation (CISA KEV)
-- Public exploit weaponization (ExploitDB, Metasploit)
+An NVD-only scanning strategy depends on NVD having analysed a CVE (CVSS, CWE, description).
+SeekThreat's fusion engine queries several mirrored sources with per-field provenance and a
+deterministic fallback chain. The chain order is whatever `services/enrichment/fusion.py`
+`_CHAIN_ORDER` says; at the time of writing:
 
-The **SeekThreat Multi-Source Fusion Engine** addresses this intelligence gap by querying canonical
-and secondary feeds with strict per-field provenance and deterministic fallback chains:
-`CVE.org -> CISA Vulnrichment -> NVD 2.0 -> ENISA EUVD -> Derived`.
+`CVE.org -> CISA Vulnrichment -> NVD 2.0 -> ENISA EUVD -> Derived`
 
-This specification formalizes the **Enrichment Coverage Metric**, which quantifies the measurable
-gain in vulnerability intelligence provided by SeekThreat's multi-source fusion over an NVD-only baseline.
+The harness records the chain it actually ran with in every report (`fusion_chain_order`).
+
+This specification defines the **Enrichment Coverage Metric**: how many CVEs get real (non-
+placeholder) intelligence under the multi-source engine versus an NVD-only baseline engine.
 
 ---
 
 ## 2. Core Metric Definitions
 
-### 2.1 Evaluated Fields
+### 2.1 Headline fields
 
-Enrichment coverage is evaluated across six (6) distinct intelligence dimensions:
+Headline coverage counts four intelligence fields:
 
-| Field Identifier | Intelligence Dimension | Meaning of "Filled" (Non-Placeholder) | Placeholder / Empty Definition |
-|---|---|---|---|
-| `cvss_score` | Vulnerability Severity | Attributed numeric CVSS score from an authoritative feed (`CVE_ORG`, `VULNRICHMENT`, `NVD`, `EUVD`). | `Source.DERIVED`, `Confidence.LOW`, placeholder score == 5.0. |
-| `cwe_ids` | Weakness Taxonomy | List of specific CWE identifiers (e.g. `["CWE-79"]`, `["CWE-502"]`). | `Source.DERIVED`, `Confidence.LOW`, `["CWE-Other"]` (fallback) or empty list. |
-| `summary` | Vulnerability Description | Authoritative natural-language description from an authoritative feed. | Absent, empty string, or derived generic placeholder. |
-| `epss_score` | Exploitation Probability | Numeric probability from FIRST EPSS v4 (`Source.EPSS`, `Confidence.HIGH`). | `Source.DERIVED`, `Confidence.LOW`, score == 0.001 (default placeholder). |
-| `in_kev` | Active Exploitation Status | Definite boolean (`True` or `False`) with `Source.KEV`, `Confidence.HIGH`. | `None`, `Source.DERIVED`, `Confidence.LOW` ("KEV status unknown"). |
-| `exploit_availability` | Weaponization & Exploit Presence | Definite boolean (`True` or `False`) with `Source.EXPLOITDB` or `Source.METASPLOIT`. | `None`, `Source.DERIVED`, `Confidence.LOW` (mirror not loaded / status unknown). |
+| Field | Dimension | "Filled" means |
+|---|---|---|
+| `cvss_score` | Severity | Present, and provenance is not `Source.DERIVED` and not `Confidence.LOW` |
+| `cwe_ids` | Weakness taxonomy | Same, and the list is non-empty |
+| `summary` | Description | Same, and the string is non-blank |
+| `epss_score` | Exploitation probability | Same |
 
-### 2.2 Finding-Level Field Assessment
+Placeholders are identified **by provenance only**, never by value. Fusion's placeholders are
+attributed `Source.DERIVED` / `Confidence.LOW`; a real CVSS of 5.0 or a real EPSS of 0.001 is
+data and counts as filled.
 
-For a finding i and field j in {1, ..., 6} under engine configuration M:
+### 2.2 Signal fields (reported separately, not in the headline)
 
-- `filled(i, j, M) = 1` if field j has an authoritative, non-placeholder value.
-- `filled(i, j, M) = 0` if field j is missing, None, or a DERIVED/LOW placeholder.
+| Field | Reported as |
+|---|---|
+| `in_kev` | Mirror loaded (yes/no) and positive-hit rate (`True` from `Source.KEV`) |
+| `exploit_availability` | Mirror loaded (yes/no) and positive-hit rate (`True` from `Source.EXPLOITDB` or `Source.METASPLOIT`) |
 
-### 2.3 Per-Field Coverage
+A loaded KEV/ExploitDB/Metasploit mirror answers every lookup with a definite `True` or
+`False`, so "has a definite value" only measures whether the mirror file exists. Counting a
+definite `False` as coverage would make these fields 100% whenever the file is present, so they
+are excluded from the headline.
 
-For a dataset of N findings, the coverage of field j under configuration M is:
+### 2.3 Formulas
 
-`Coverage_j(M) = (sum_{i=1}^{N} filled(i, j, M) / N) * 100%`
+For N CVEs, headline field j in {1..4}, engine M:
 
-### 2.4 Overall Enrichment Coverage
+- `filled(i, j, M)` is 1 if field j of CVE i is filled (2.1), else 0.
+- `Coverage_j(M) = sum_i filled(i, j, M) / N * 100%`
+- `Coverage(M) = sum_i sum_j filled(i, j, M) / (4 * N) * 100%`
+- `Delta = Coverage(M_multi) - Coverage(M_nvd)`, in percentage points (may be negative).
 
-Total evaluated field instances across N findings is 6 * N. Overall coverage is the proportion
-of all field instances containing non-placeholder intelligence:
-
-`Coverage(M) = (sum_{i=1}^{N} sum_{j=1}^{6} filled(i, j, M) / (6 * N)) * 100%`
-
-### 2.5 Coverage Improvement
-
-The coverage improvement of SeekThreat Multi-Source (M_multi) over the NVD-Only Baseline (M_nvd) is:
-
-`Delta_Coverage = Coverage(M_multi) - Coverage(M_nvd)`
-
-Expressed in percentage points.
+Signal fields: `positive_rate(M) = #positive / N * 100%`, reported only when the mirror is
+loaded in M; otherwise "not loaded".
 
 ---
 
 ## 3. Evaluation Configurations
 
-### 3.1 NVD-Only Baseline Configuration (M_nvd)
-- **Active Source:** `NVDSource` only.
-- **Secondary / Fallback Sources:** None.
-- **EPSS Feed:** None (unloaded -> returns `Source.DERIVED` placeholder).
-- **KEV Catalog:** None (unloaded -> returns `in_kev=None`, `Source.DERIVED`).
-- **Exploit Feeds:** None (unloaded -> returns `has_public_exploit=None`, `has_metasploit_module=None`).
+### 3.1 NVD-only baseline (M_nvd)
+- **Loaded:** `NVDSource` only.
+- **Not loaded / absent:** CVE.org, Vulnrichment, EUVD, EPSS, KEV, ExploitDB, Metasploit.
 
-### 3.2 Multi-Source Fusion Configuration (M_multi)
-- **Primary Source:** `CVEOrgSource` (CVE Services 5.1).
-- **Secondary Sources:** `VulnrichmentSource` (CISA, rank 2), `NVDSource` (NVD 2.0, rank 3), `EUVDSource` (ENISA, rank 4).
-- **EPSS Feed:** `FirstEPSSSource` (FIRST EPSS v4 probability & percentile).
-- **KEV Catalog:** `CISAKevSource` (CISA Known Exploited Vulnerabilities catalog).
-- **Exploit Intelligence:** `ExploitDBSource` & `MetasploitSource` (exploit existence and module identifiers; never exploit code).
+**Limitation.** The baseline engine parses only NVD CVSS, CWE and description. The real NVD
+API 2.0 also publishes CISA KEV fields (`cisaExploitAdd`, `cisaActionDue`,
+`cisaRequiredAction`, `cisaVulnerabilityName`), which `NVDSource` does not parse. The baseline's
+missing KEV signal is therefore a property of this harness, not of NVD, and is reported as
+"not loaded", not 0%. EPSS and exploit availability are likewise not loaded by construction.
+
+### 3.2 Multi-source fusion (M_multi)
+- **Chain sources:** `CVEOrgSource`, `VulnrichmentSource`, `NVDSource`, `EUVDSource`, in
+  `_CHAIN_ORDER` (positions 1-4 at the time of writing: CVE.org, Vulnrichment, NVD, EUVD).
+- **EPSS:** `FirstEPSSSource`.
+- **KEV:** `CISAKevSource`.
+- **Exploit metadata:** `ExploitDBSource`, `MetasploitSource` (IDs and module names only;
+  Hard Rule 4).
 
 ---
 
-## 4. Evaluation Dataset Cohorts
+## 4. Evaluation Dataset
 
-The evaluation dataset (`evals/golden/enrichment_baseline.json`) contains a minimum of 50 CVE IDs
-divided into five distinct analytical cohorts:
+`evals/golden/enrichment_baseline.json` lists 50 CVE IDs in five cohorts. The cohort labels
+are **unverified hypotheses** (`"verification": "unverified — ..."`); nobody has checked them
+against live NVD/CVE.org/KEV/EPSS data. The harness reads only `cve_id` and `cohort`.
 
-1. **Cohort A: Full NVD Control Group** ? Historic, widely documented CVEs where NVD provided complete CVSS, CWE, and description.
-2. **Cohort B: NVD Gap CVEs** ? CVEs where NVD moved to "Not Scheduled" or "Awaiting Analysis", but CVE.org / Vulnrichment / EUVD provide full severity and taxonomy data.
-3. **Cohort C: CISA KEV Exploited CVEs** ? Vulnerabilities with confirmed active exploitation in the wild listed in CISA KEV.
-4. **Cohort D: High EPSS / No NVD CVSS** ? Vulnerabilities with elevated exploitation probability where traditional CVSS scanners lack severity metrics.
-5. **Cohort E: Weaponized Exploit Entries** ? CVEs with public exploits in ExploitDB or automated modules in Metasploit.
+1. **Cohort A: NVD control** — hypothesised to have complete NVD analysis.
+2. **Cohort B: NVD gap** — hypothesised to lack NVD analysis while CVE.org / Vulnrichment / EUVD
+   carry data.
+3. **Cohort C: CISA KEV** — hypothesised KEV-listed CVEs.
+4. **Cohort D: High EPSS / no NVD CVSS** — hypothesised high-EPSS CVEs without NVD CVSS.
+5. **Cohort E: Weaponized exploit** — hypothesised CVEs with ExploitDB / Metasploit entries.
 
 ---
 
 ## 5. Execution and Reporting Rules
 
 Per `evals/README.md`:
-1. **Never fabricate metrics.** Numbers must be computed by executing `evals/enrichment_coverage.py`.
-2. **Provenance of evaluation data.** If run against synthetic offline fixtures, reports must explicitly declare:
-   *"Measured against synthetic fixture files (`tests/fixtures/enrichment/`)."*
-   When run against real mirrors, reports must state the mirror date and hash.
-3. **No network calls on request path.** Evaluation harness operates 100% offline using local cache directories.
+
+1. **Never fabricate metrics.** Every number comes from running
+   `python evals/enrichment_coverage.py` (see `--help` for `--cache-dir`, `--dataset`,
+   `--nvd-file`, `--output-md`, `--output-json`).
+2. **Synthetic detection is by content.** A run is synthetic when any loaded mirror file is a
+   JSON object with a truthy `_synthetic` key. Synthetic reports open with the banner
+   *"SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not
+   measurements of the platform; no real-world coverage number exists yet."*
+3. **Real-mirror provenance.** In non-synthetic mode the report records each mirror file's
+   sha256, mtime and `synced_at` (from a `<name>.meta.json` sidecar when present), plus a
+   `generated_at` timestamp.
+4. **Reproducibility.** Synthetic-mode output contains no wall-clock data and uses POSIX,
+   repo-relative paths; `tests/unit/test_enrichment_coverage_eval.py` checks that a fresh run
+   matches the committed results.
+5. **Offline.** The harness reads local mirror files only (enrichment README rule 5: mirror
+   sources locally, never call APIs on the request path).

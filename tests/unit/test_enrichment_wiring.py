@@ -77,9 +77,53 @@ def test_worker_module_docstring_names_every_routed_queue() -> None:
     assert routed <= documented
 
 
-def test_enrichment_cache_dir_defaults_to_none(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_enrichment_cache_dir_defaults_to_feed_syncer_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Readers (API/worker) and the writer (FeedSyncer) must resolve the same directory."""
+    from services.enrichment.sources.sync import FeedSyncer, get_default_cache_dir
+
     monkeypatch.delenv("ENRICHMENT_CACHE_DIR", raising=False)
-    assert Settings(_env_file=None).enrichment_cache_dir is None  # type: ignore[call-arg]
+    default = Settings(_env_file=None).enrichment_cache_dir  # type: ignore[call-arg]
+    assert default == get_default_cache_dir()
+    assert FeedSyncer(cache_dir=None).cache_dir == default
+
+
+def _service_block(name: str) -> list[str]:
+    """Lines of one top-level compose service (two-space indent convention)."""
+    lines = COMPOSE_FILE.read_text(encoding="utf-8").splitlines()
+    block: list[str] = []
+    inside = False
+    for line in lines:
+        if re.match(r"^  [A-Za-z0-9_-]+:\s*$", line) or re.match(r"^\S", line):
+            inside = line.strip() == f"{name}:"
+            continue
+        if inside:
+            block.append(line)
+    return block
+
+
+def test_compose_runs_celery_beat() -> None:
+    block = "\n".join(_service_block("beat"))
+    assert block, "docker-compose has no beat service; the daily feed sync never fires"
+    assert "celery -A apps.api.worker" in block and " beat" in block
+
+
+def test_compose_shares_one_enrichment_cache_volume() -> None:
+    for service in ("api", "worker", "beat"):
+        block = "\n".join(_service_block(service))
+        assert "ENRICHMENT_CACHE_DIR: /data/enrichment_cache" in block, service
+        assert "enrichmentcache:/data/enrichment_cache" in block, service
+    top_level = COMPOSE_FILE.read_text(encoding="utf-8")
+    assert re.search(r"^volumes:(?:\n  .*)*\n  enrichmentcache:", top_level, re.MULTILINE)
+
+
+def test_beat_schedule_is_daily_at_0200_utc() -> None:
+    from celery.schedules import crontab
+
+    entry = celery_app.conf.beat_schedule["sync-enrichment-feeds-daily"]
+    assert entry["schedule"] == crontab(hour=2, minute=0)
+    assert celery_app.conf.timezone == "UTC"
 
 
 def test_enrichment_cache_dir_reads_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

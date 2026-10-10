@@ -28,7 +28,7 @@ Missing numbers in month six are fatal.
 | Answer relevancy | >= 0.85 |
 | Citation accuracy | >= 0.95 |
 | Attack path validity | >= 0.90 (manual, N=50) |
-| Enrichment coverage vs NVD-only | our strongest single number |
+| Enrichment coverage vs NVD-only | Not yet measured. `evals/enrichment_coverage.py` exists; its committed output is a synthetic smoke test on hand-authored fixtures, not a result |
 | Dedup precision/recall | vs DefectDojo on identical input |
 
 Report both. Explain why Track B matters more. Questioning the metric is itself a

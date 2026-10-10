@@ -18,7 +18,12 @@ from services.enrichment.sources.secondary import (
     VulnrichmentRecord,
     VulnrichmentSource,
 )
-from services.enrichment.sources.sync import SourceSynchronizer, SyncResult
+from services.enrichment.sources.sync import (
+    FeedSyncer,
+    SourceSynchronizer,
+    SyncReport,
+    SyncResult,
+)
 
 __all__ = [
     "BaseEnrichmentSource",
@@ -41,6 +46,8 @@ __all__ = [
     "ExploitDBSource",
     "MetasploitRecord",
     "MetasploitSource",
+    "FeedSyncer",
     "SourceSynchronizer",
+    "SyncReport",
     "SyncResult",
 ]

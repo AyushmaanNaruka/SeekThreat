@@ -158,7 +158,7 @@ def _kev_component(
         date_str = f" on {attr_date.value}" if attr_date and attr_date.value else ""
         explanation = (
             f"Confirmed active exploitation in the wild (added to CISA KEV{date_str}); "
-            f"provides full additive validation boost (+{weight * 10.0:.1f} ERS points)."
+            f"additive boost (+{weight * 10.0:.1f} ERS points)."
         )
     elif attr is not None and attr.value is False:
         value = 0.0

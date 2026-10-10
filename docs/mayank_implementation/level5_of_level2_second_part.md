@@ -25,13 +25,13 @@ Key capabilities delivered:
 2. **Enriched Findings Component (`apps/web/components/EnrichedFindingsView.tsx`)**:
    - **Interactive Table & Sorting**: Displays CVE ID, CVSS score, EPSS probability (with visual percentage bar), CISA KEV exploitation pill badge, and ERS composite score.
    - **Default ERS Sort**: Automatically orders findings descending by Exposure Risk Score so critical exposure is front and center.
-   - **Severity Banding**: Color-coded severity badges and borders:
+   - **Severity Banding**: Color-coded severity badges and borders. The 8 / 6 / 4 thresholds are a UI display convention chosen for the dashboard, not a calibrated or measured risk boundary:
      - **Critical** (ERS ≥ 8.0) — Red (`#FF3838`)
      - **High** (ERS ≥ 6.0) — Orange (`#FF7A00`)
      - **Medium** (ERS ≥ 4.0) — Yellow (`#FFC312`)
      - **Low** (ERS < 4.0) — Green (`#20D6A3`)
    - **Search & Filter Controls**: Real-time filtering by CVE ID, title, description, CWE taxonomy, or finding UUID, alongside quick-filter severity pills.
-   - **On-Demand Demo Enrichment**: Integrated action allowing users to enrich a sample batch of real-world CVEs (Log4Shell, Apache Path Traversal, Spring Cloud Gateway, Jenkins CLI) to immediately preview enriched data and risk metrics.
+   - **Sample-enrich button (removed)**: the first version had a demo action that enriched a hard-coded batch of CVEs (Log4Shell, Apache Path Traversal, Spring Cloud Gateway, Jenkins CLI). It was removed from the UI in PR #18 review. The view shows only findings that the backend returns for the selected engagement.
 
 3. **ERS Component Breakdown (Section 5.3)**:
    - Expanding any finding row opens an accordion drawer displaying the deterministic composite formula: `ERS = Σ(w_i × c_i)`.
@@ -76,6 +76,8 @@ Key capabilities delivered:
 
 ## Architecture & Data Flow
 
+Illustrative layout only. `<...>` marks values the UI fills in from the API; this is not real output. ERS has exactly three components, weighted 40 / 35 / 25 (`services/enrichment/ers.py`, D-027).
+
 ```
                       FastAPI Backend
            (/findings?engagement_id=... /findings/enrich/batch)
@@ -97,14 +99,14 @@ Key capabilities delivered:
       ├─────────────────────────────────────────────────────────┤
       │  Enriched Findings Table (Sorted by ERS Descending)     │
       │  CVE ID        CVSS    EPSS        KEV     ERS Score   │
-      │  CVE-2021-44228 10.0   97.5% [███] [Active] 9.85 [CRIT] │
+      │  CVE-2021-44228 <cvss> <epss%> [bar] [KEV] <ers> [band] │
       ├─────────────────────────────────────────────────────────┤
       │  Accordion Drawer (Row Expand)                          │
       │  ├── Section 5.3: ERS Component Breakdown               │
-      │  │   - CVSS Factor: 10.0 × 40% = 4.00 (cve_org)         │
-      │  │   - EPSS Factor:  9.7 × 30% = 2.91 (epss)            │
-      │  │   - KEV Boost:   10.0 × 30% = 3.00 (cisa_kev)        │
-      │  │   - Heuristic:    5.0 × 10% = 0.50 [⚠️ Estimate]    │
+      │  │   - CVSS:  <value> × 40% = <contribution> (source)   │
+      │  │   - EPSS:  <value> × 35% = <contribution> (source)   │
+      │  │   - KEV:   <value> × 25% = <contribution> (source)   │
+      │  │   - [Estimate] badge on any Source.DERIVED input     │
       │  └── Section 5.4: Multi-Source Provenance & Lineage     │
       │      - [CVSS Score Card]   Source: cve_org (100% conf)  │
       │      - [EPSS Likelihood]   Source: epss (99% conf)      │
@@ -175,9 +177,9 @@ tests/unit/test_finding.py ........                                      [100%]
 
 ## Conclusion & Next Steps
 
-Level 5 successfully completes the full Layer 2 Second Part implementation roadmap! All 5 levels are fully implemented, verified, and documented:
-- **Level 1**: Decisions D-027 through D-032 & ERS analysis.
+Level 5 completes the planned Layer 2 Second Part levels. Status per level after PR #18 review:
+- **Level 1**: Decisions D-027 through D-032 & ERS analysis. D-027's stability claim was corrected: the ranking is not fully stable across weight profiles (`evals/ers_sensitivity.py`).
 - **Level 2**: Feed synchronization worker (`FeedSyncer`), Celery Beat task, and CLI commands.
 - **Level 3**: Secondary mirror sources (`VulnrichmentSource`, `EUVDSource`, `ExploitDBSource`, `MetasploitSource`).
-- **Level 4**: Offline evaluation harness measuring multi-source coverage against the NVD baseline (+40.7 pp gain).
+- **Level 4**: Offline evaluation harness for multi-source coverage vs an NVD-only baseline. Coverage is **not yet measured**: the only run is a synthetic smoke test on hand-authored fixtures.
 - **Level 5**: Comprehensive Enriched Findings dashboard UI with ERS breakdown and field-level multi-source provenance.

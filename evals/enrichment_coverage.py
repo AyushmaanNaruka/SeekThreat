@@ -1,13 +1,44 @@
 """Enrichment coverage evaluation harness.
 
-Measures enrichment coverage of SeekThreat multi-source fusion against an NVD-only baseline.
-Complies with evals/README.md rules: no network calls, no fabricated numbers.
+Compares SeekThreat multi-source fusion against an NVD-only baseline engine over the
+CVE list in ``evals/golden/enrichment_baseline.json``. Complies with evals/README.md:
+no network calls, and no number is written unless this script computed it.
+
+What is measured
+----------------
+* **Headline coverage** counts only the intelligence fields ``cvss_score``, ``cwe_ids``,
+  ``summary`` and ``epss_score``. A field is "filled" when it is present, non-empty and
+  not a placeholder. Placeholders are identified by provenance alone
+  (``Source.DERIVED`` or ``Confidence.LOW``), never by value: a real CVSS of 5.0 or a
+  real EPSS of 0.001 exist and must count.
+* **Signal fields** ``in_kev`` and ``exploit_availability`` are NOT in the headline. A
+  loaded mirror answers every lookup with a definite True/False, so "has a definite
+  value" just means "the mirror file exists". They are reported separately as
+  "mirror loaded" plus the positive-hit rate.
+
+Known limitation of the baseline
+--------------------------------
+The baseline engine parses only NVD CVSS, CWE and description (``NVDSource``). The real
+NVD API 2.0 also carries CISA KEV fields (``cisaExploitAdd``, ``cisaActionDue``, ...)
+which ``NVDSource`` does not parse, so the baseline's missing KEV signal is a property of
+this harness, not of NVD. EPSS, KEV and exploit sources are simply not loaded in the
+baseline; their absence there is definitional and is reported as "not loaded", not as 0%.
+
+Synthetic vs real mirrors
+-------------------------
+The run is "synthetic" when any loaded mirror file is a JSON object with a truthy
+``_synthetic`` key (the fixtures in ``tests/fixtures/enrichment/`` all are). In
+non-synthetic mode each mirror's sha256, mtime and ``synced_at`` (from a
+``<name>.meta.json`` sidecar, if present) are recorded, plus a generation timestamp.
+Synthetic-mode output carries no wall-clock data so the committed results reproduce
+byte-for-byte.
 """
 
 from __future__ import annotations
 
 # ruff: noqa: E402
 import argparse
+import hashlib
 import json
 import sys
 from datetime import UTC, datetime
@@ -21,7 +52,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from packages.schema.models.finding import Finding
 from packages.schema.models.provenance import Attributed, Confidence, Source
-from services.enrichment.fusion import FusionEngine
+from services.enrichment.fusion import _CHAIN_ORDER, FusionEngine
 from services.enrichment.sources.cisa_kev import CISAKevSource
 from services.enrichment.sources.cve_org import CVEOrgSource
 from services.enrichment.sources.epss import FirstEPSSSource
@@ -33,45 +64,86 @@ from services.enrichment.sources.secondary import (
     VulnrichmentSource,
 )
 
-EVAL_FIELDS = (
-    "cvss_score",
-    "cwe_ids",
-    "summary",
-    "epss_score",
-    "in_kev",
-    "exploit_availability",
+HEADLINE_FIELDS = ("cvss_score", "cwe_ids", "summary", "epss_score")
+SIGNAL_FIELDS = ("in_kev", "exploit_availability")
+
+SYNTHETIC_BANNER = (
+    "SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not "
+    "measurements of the platform; no real-world coverage number exists yet."
 )
+
+# Mirror base names searched in the cache dir, in report order.
+MIRROR_NAMES = (
+    "nvd",
+    "cve_org",
+    "vulnrichment",
+    "euvd",
+    "epss_v4",
+    "cisa_kev",
+    "exploitdb",
+    "metasploit",
+)
+
+_DEFAULT_DATASET = Path("evals/golden/enrichment_baseline.json")
+_DEFAULT_CACHE_DIR = Path("tests/fixtures/enrichment")
+_DEFAULT_OUTPUT_MD = Path("evals/results/enrichment_coverage_results.md")
+_DEFAULT_OUTPUT_JSON = Path("evals/results/enrichment_coverage_results.json")
+
+# Fixed timestamp for the synthetic findings the harness fuses. Fusion output used here
+# does not depend on it; fixing it keeps the run free of wall-clock input.
+_EVAL_DETECTED_AT = datetime(2026, 1, 1, tzinfo=UTC)
+
+
+def _is_placeholder(attr: Attributed[Any]) -> bool:
+    """A value is a placeholder when its provenance says so: DERIVED source or LOW confidence."""
+    return attr.provenance.source == Source.DERIVED or attr.provenance.confidence == Confidence.LOW
 
 
 def _is_filled(field_name: str, fields: dict[str, Attributed[Any]]) -> bool:
-    """Determine whether a field contains an authoritative, non-placeholder value."""
-    if field_name == "exploit_availability":
-        edb = fields.get("has_public_exploit")
-        msf = fields.get("has_metasploit_module")
-        edb_ok = bool(edb and edb.provenance.source == Source.EXPLOITDB and edb.value is not None)
-        msf_ok = bool(
-            msf and msf.provenance.source == Source.METASPLOIT and msf.value is not None
-        )
-        return edb_ok or msf_ok
-
+    """True when a headline field holds a present, non-empty, non-placeholder value."""
+    if field_name not in HEADLINE_FIELDS:
+        raise ValueError(f"{field_name!r} is not a headline coverage field")
     attr = fields.get(field_name)
-    if attr is None:
+    if attr is None or attr.value is None or _is_placeholder(attr):
         return False
+    if isinstance(attr.value, list):
+        return len(attr.value) > 0
+    if isinstance(attr.value, str):
+        return bool(attr.value.strip())
+    return True
 
-    # Check for derived low-confidence placeholder
-    if attr.provenance.source == Source.DERIVED or attr.provenance.confidence == Confidence.LOW:
-        return False
 
-    # Value-specific placeholder checks
-    if field_name == "cvss_score" and attr.value == 5.0:
-        return False
-    if field_name == "cwe_ids" and (not attr.value or attr.value == ["CWE-Other"]):
-        return False
-    if field_name == "summary" and not str(attr.value).strip():
-        return False
-    if field_name == "epss_score" and attr.value == 0.001:
-        return False
-    return not (field_name == "in_kev" and attr.value is None)
+def _definite_bool(attr: Attributed[Any] | None, source: Source) -> bool | None:
+    """The attributed boolean if it is a definite answer from ``source``, else None."""
+    if attr is None or attr.provenance.source != source or _is_placeholder(attr):
+        return None
+    return attr.value if isinstance(attr.value, bool) else None
+
+
+def _signal_state(field_name: str, fields: dict[str, Attributed[Any]]) -> str:
+    """Classify a signal field as ``positive``, ``negative`` or ``unknown``."""
+    if field_name == "in_kev":
+        values = [_definite_bool(fields.get("in_kev"), Source.KEV)]
+    elif field_name == "exploit_availability":
+        values = [
+            _definite_bool(fields.get("has_public_exploit"), Source.EXPLOITDB),
+            _definite_bool(fields.get("has_metasploit_module"), Source.METASPLOIT),
+        ]
+    else:
+        raise ValueError(f"{field_name!r} is not a signal field")
+    if any(v is True for v in values):
+        return "positive"
+    if any(v is False for v in values):
+        return "negative"
+    return "unknown"
+
+
+def _signal_mirror_loaded(field_name: str, engine: FusionEngine) -> bool:
+    if field_name == "in_kev":
+        return engine.cisa_kev.is_loaded
+    edb = engine.exploitdb is not None and engine.exploitdb.is_loaded
+    msf = engine.metasploit is not None and engine.metasploit.is_loaded
+    return edb or msf
 
 
 def _find_fixture_or_mirror(directory: Path, base_name: str) -> Path | None:
@@ -85,45 +157,130 @@ def _find_fixture_or_mirror(directory: Path, base_name: str) -> Path | None:
     return None
 
 
+def _is_synthetic_file(path: Path) -> bool:
+    """True when the file is a JSON object carrying a truthy ``_synthetic`` key."""
+    if path.suffix.lower() != ".json":
+        return False
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and bool(data.get("_synthetic"))
+
+
+def _sidecar_synced_at(path: Path) -> str | None:
+    """``synced_at`` from a ``<name>.meta.json`` sidecar next to the mirror, if present."""
+    for candidate in (path.with_name(f"{path.stem}.meta.json"), Path(f"{path}.meta.json")):
+        if candidate.exists():
+            try:
+                meta = json.loads(candidate.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                return None
+            value = meta.get("synced_at") if isinstance(meta, dict) else None
+            return str(value) if value is not None else None
+    return None
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _rel_posix(path: Path) -> str:
+    """Repo-relative POSIX path when possible, so reports are identical across OSes."""
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(_REPO_ROOT).as_posix()
+    except ValueError:
+        return resolved.as_posix()
+
+
+def _mirror_paths(cache_dir: Path, nvd_override: Path | None) -> dict[str, Path | None]:
+    paths = {name: _find_fixture_or_mirror(cache_dir, name) for name in MIRROR_NAMES}
+    if nvd_override is not None:
+        paths["nvd"] = nvd_override
+    return paths
+
+
+def describe_mirrors(paths: dict[str, Path | None]) -> tuple[bool, list[dict[str, Any]]]:
+    """Return (synthetic, per-mirror descriptions) for the mirror files found."""
+    present = {name: p for name, p in paths.items() if p is not None and p.exists()}
+    flags = {name: _is_synthetic_file(p) for name, p in present.items()}
+    synthetic = any(flags.values())
+
+    described: list[dict[str, Any]] = []
+    for name in MIRROR_NAMES:
+        path = present.get(name)
+        if path is None:
+            described.append({"name": name, "path": None, "present": False})
+            continue
+        entry: dict[str, Any] = {
+            "name": name,
+            "path": _rel_posix(path),
+            "present": True,
+            "synthetic": flags[name],
+        }
+        if not synthetic:
+            entry["sha256"] = _sha256(path)
+            entry["mtime"] = datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat()
+            entry["synced_at"] = _sidecar_synced_at(path)
+        described.append(entry)
+    return synthetic, described
+
+
 def build_engines(
     cache_dir: Path, nvd_override: Path | None = None
 ) -> tuple[FusionEngine, FusionEngine]:
-    """Build NVD-only baseline engine and multi-source fusion engine."""
-    # 1. NVD-Only Baseline Engine
-    nvd_path = nvd_override or _find_fixture_or_mirror(cache_dir, "nvd")
-    nvd_source = NVDSource(cache_file=nvd_path) if nvd_path else NVDSource(cache_file=None)
+    """Build the NVD-only baseline engine and the multi-source fusion engine."""
+    paths = _mirror_paths(cache_dir, nvd_override)
+    nvd_path = paths["nvd"]
+
+    # Baseline: NVD only. Every other source is either unloaded or absent.
     baseline_engine = FusionEngine(
         cve_org=CVEOrgSource(cache_file=None),
         cisa_kev=CISAKevSource(cache_file=None),
         first_epss=FirstEPSSSource(cache_file=None),
         vulnrichment=None,
-        nvd=nvd_source,
+        nvd=NVDSource(cache_file=nvd_path),
         euvd=None,
         exploitdb=None,
         metasploit=None,
     )
 
-    # 2. Multi-Source Fusion Engine
-    cve_path = _find_fixture_or_mirror(cache_dir, "cve_org")
-    kev_path = _find_fixture_or_mirror(cache_dir, "cisa_kev")
-    epss_path = _find_fixture_or_mirror(cache_dir, "epss_v4")
-    vuln_path = _find_fixture_or_mirror(cache_dir, "vulnrichment")
-    euvd_path = _find_fixture_or_mirror(cache_dir, "euvd")
-    edb_path = _find_fixture_or_mirror(cache_dir, "exploitdb")
-    msf_path = _find_fixture_or_mirror(cache_dir, "metasploit")
-
     multi_engine = FusionEngine(
-        cve_org=CVEOrgSource(cache_file=cve_path),
-        cisa_kev=CISAKevSource(cache_file=kev_path),
-        first_epss=FirstEPSSSource(cache_file=epss_path),
-        vulnrichment=VulnrichmentSource(cache_file=vuln_path),
+        cve_org=CVEOrgSource(cache_file=paths["cve_org"]),
+        cisa_kev=CISAKevSource(cache_file=paths["cisa_kev"]),
+        first_epss=FirstEPSSSource(cache_file=paths["epss_v4"]),
+        vulnrichment=VulnrichmentSource(cache_file=paths["vulnrichment"]),
         nvd=NVDSource(cache_file=nvd_path),
-        euvd=EUVDSource(cache_file=euvd_path),
-        exploitdb=ExploitDBSource(cache_file=edb_path),
-        metasploit=MetasploitSource(cache_file=msf_path),
+        euvd=EUVDSource(cache_file=paths["euvd"]),
+        exploitdb=ExploitDBSource(cache_file=paths["exploitdb"]),
+        metasploit=MetasploitSource(cache_file=paths["metasploit"]),
     )
 
     return baseline_engine, multi_engine
+
+
+def _pct(count: int, total: int) -> float:
+    return round(count / total * 100.0, 1) if total else 0.0
+
+
+def _signal_summary(field_name: str, engine: FusionEngine, states: list[str]) -> dict[str, Any]:
+    n = len(states)
+    positives = states.count("positive")
+    negatives = states.count("negative")
+    loaded = _signal_mirror_loaded(field_name, engine)
+    return {
+        "mirror_loaded": loaded,
+        "positive_count": positives,
+        "negative_count": negatives,
+        "unknown_count": states.count("unknown"),
+        "positive_rate_pct": _pct(positives, n) if loaded else None,
+    }
 
 
 def run_evaluation(
@@ -131,7 +288,7 @@ def run_evaluation(
     cache_dir: Path,
     nvd_override: Path | None = None,
 ) -> dict[str, Any]:
-    """Run evaluation over dataset and calculate coverage statistics."""
+    """Run the evaluation over the dataset and compute coverage statistics."""
     with open(dataset_path, encoding="utf-8") as f:
         raw_dataset = json.load(f)
 
@@ -139,26 +296,23 @@ def run_evaluation(
     if not items:
         raise ValueError(f"No items found in dataset at {dataset_path}")
 
+    synthetic, mirrors = describe_mirrors(_mirror_paths(cache_dir, nvd_override))
     baseline_engine, multi_engine = build_engines(cache_dir, nvd_override)
+    engines = {"baseline": baseline_engine, "multi_source": multi_engine}
 
     n_items = len(items)
-    baseline_field_filled = {field: 0 for field in EVAL_FIELDS}
-    multi_field_filled = {field: 0 for field in EVAL_FIELDS}
-
-    cohort_stats: dict[str, dict[str, Any]] = {}
+    filled = {e: {f: 0 for f in HEADLINE_FIELDS} for e in engines}
+    signal_states: dict[str, dict[str, list[str]]] = {
+        e: {f: [] for f in SIGNAL_FIELDS} for e in engines
+    }
+    cohort_counts: dict[str, dict[str, int]] = {}
     item_results: list[dict[str, Any]] = []
 
     for item in items:
         cve_id = item["cve_id"]
         cohort = item.get("cohort", "unclassified")
-
-        if cohort not in cohort_stats:
-            cohort_stats[cohort] = {
-                "count": 0,
-                "baseline_filled": 0,
-                "multi_filled": 0,
-            }
-        cohort_stats[cohort]["count"] += 1
+        cstats = cohort_counts.setdefault(cohort, {"count": 0, "baseline": 0, "multi_source": 0})
+        cstats["count"] += 1
 
         finding = Finding(
             finding_id=f"eval-{cve_id}",
@@ -166,215 +320,260 @@ def run_evaluation(
             asset_id="asset-eval-target",
             scanner="eval_harness",
             title=f"Evaluation finding for {cve_id}",
-            description="Synthetic evaluation finding for enrichment coverage benchmark",
+            description="Synthetic evaluation finding for enrichment coverage harness",
             observation_ids=[f"obs-{cve_id}"],
-            detected_at=datetime.now(UTC),
+            detected_at=_EVAL_DETECTED_AT,
             cve_ids=[cve_id],
         )
 
-        base_fields = baseline_engine.fuse(finding)
-        mult_fields = multi_engine.fuse(finding)
-
-        item_eval = {
-            "cve_id": cve_id,
-            "cohort": cohort,
-            "baseline": {},
-            "multi_source": {},
-        }
-
-        for field in EVAL_FIELDS:
-            b_filled = _is_filled(field, base_fields)
-            m_filled = _is_filled(field, mult_fields)
-
-            if b_filled:
-                baseline_field_filled[field] += 1
-                cohort_stats[cohort]["baseline_filled"] += 1
-            if m_filled:
-                multi_field_filled[field] += 1
-                cohort_stats[cohort]["multi_filled"] += 1
-
-            item_eval["baseline"][field] = b_filled
-            item_eval["multi_source"][field] = m_filled
-
+        item_eval: dict[str, Any] = {"cve_id": cve_id, "cohort": cohort}
+        for ename, engine in engines.items():
+            fields = engine.fuse(finding)
+            per_field: dict[str, Any] = {}
+            for field in HEADLINE_FIELDS:
+                is_filled = _is_filled(field, fields)
+                per_field[field] = is_filled
+                if is_filled:
+                    filled[ename][field] += 1
+                    cstats[ename] += 1
+            for field in SIGNAL_FIELDS:
+                state = _signal_state(field, fields)
+                per_field[field] = state
+                signal_states[ename][field].append(state)
+            item_eval[ename] = per_field
         item_results.append(item_eval)
 
-    total_instances = n_items * len(EVAL_FIELDS)
-    base_total_filled = sum(baseline_field_filled.values())
-    multi_total_filled = sum(multi_field_filled.values())
+    total_instances = n_items * len(HEADLINE_FIELDS)
+    base_total = sum(filled["baseline"].values())
+    multi_total = sum(filled["multi_source"].values())
+    base_pct = _pct(base_total, total_instances)
+    multi_pct = _pct(multi_total, total_instances)
 
-    base_overall_cov = (base_total_filled / total_instances) * 100.0
-    multi_overall_cov = (multi_total_filled / total_instances) * 100.0
-    improvement_pp = multi_overall_cov - base_overall_cov
-
-    per_field: dict[str, dict[str, Any]] = {}
-    for field in EVAL_FIELDS:
-        b_cnt = baseline_field_filled[field]
-        m_cnt = multi_field_filled[field]
-        b_pct = (b_cnt / n_items) * 100.0
-        m_pct = (m_cnt / n_items) * 100.0
-        per_field[field] = {
+    per_field_out: dict[str, dict[str, Any]] = {}
+    for field in HEADLINE_FIELDS:
+        b_cnt = filled["baseline"][field]
+        m_cnt = filled["multi_source"][field]
+        per_field_out[field] = {
             "baseline_count": b_cnt,
-            "baseline_pct": round(b_pct, 1),
+            "baseline_pct": _pct(b_cnt, n_items),
             "multi_count": m_cnt,
-            "multi_pct": round(m_pct, 1),
-            "improvement_pp": round(m_pct - b_pct, 1),
+            "multi_pct": _pct(m_cnt, n_items),
+            "improvement_pp": round(_pct(m_cnt, n_items) - _pct(b_cnt, n_items), 1),
         }
+
+    signals_out = {
+        field: {
+            ename: _signal_summary(field, engine, signal_states[ename][field])
+            for ename, engine in engines.items()
+        }
+        for field in SIGNAL_FIELDS
+    }
 
     cohort_summary: dict[str, dict[str, Any]] = {}
-    for cname, cdata in cohort_stats.items():
-        c_n = cdata["count"]
-        c_inst = c_n * len(EVAL_FIELDS)
-        c_b_pct = (cdata["baseline_filled"] / c_inst) * 100.0 if c_inst else 0.0
-        c_m_pct = (cdata["multi_filled"] / c_inst) * 100.0 if c_inst else 0.0
+    for cname, cdata in cohort_counts.items():
+        c_inst = cdata["count"] * len(HEADLINE_FIELDS)
+        c_b = _pct(cdata["baseline"], c_inst)
+        c_m = _pct(cdata["multi_source"], c_inst)
         cohort_summary[cname] = {
-            "count": c_n,
-            "baseline_coverage_pct": round(c_b_pct, 1),
-            "multi_coverage_pct": round(c_m_pct, 1),
-            "improvement_pp": round(c_m_pct - c_b_pct, 1),
+            "count": cdata["count"],
+            "baseline_filled": cdata["baseline"],
+            "multi_filled": cdata["multi_source"],
+            "baseline_coverage_pct": c_b,
+            "multi_coverage_pct": c_m,
+            "improvement_pp": round(c_m - c_b, 1),
         }
 
+    metadata: dict[str, Any] = {
+        "banner": SYNTHETIC_BANNER if synthetic else None,
+        "sample_mode": "synthetic_fixtures" if synthetic else "real_mirrors",
+        "dataset_path": _rel_posix(dataset_path),
+        "dataset_verification": raw_dataset.get("verification"),
+        "cache_dir": _rel_posix(cache_dir),
+        "fusion_chain_order": [s.value for s in _CHAIN_ORDER],
+        "headline_fields": list(HEADLINE_FIELDS),
+        "signal_fields": list(SIGNAL_FIELDS),
+        "baseline_limitation": (
+            "Baseline engine parses only NVD CVSS, CWE and description via NVDSource. "
+            "NVD API 2.0 KEV fields (cisaExploitAdd etc.) are not parsed; EPSS, KEV and "
+            "exploit sources are not loaded in the baseline."
+        ),
+        "mirrors": mirrors,
+        "total_cves": n_items,
+        "total_headline_instances": total_instances,
+    }
+    if not synthetic:
+        metadata["generated_at"] = datetime.now(UTC).isoformat()
+
     return {
-        "metadata": {
-            "measured_at": datetime.now(UTC).isoformat(),
-            "dataset_path": str(dataset_path),
-            "cache_dir": str(cache_dir),
-            "sample_mode": "synthetic_fixtures"
-            if "sample" in str(cache_dir).lower() or "fixture" in str(cache_dir).lower()
-            else "production_mirrors",
-            "total_cves": n_items,
-            "total_evaluated_instances": total_instances,
-        },
+        "metadata": metadata,
         "summary": {
-            "baseline_overall_coverage_pct": round(base_overall_cov, 1),
-            "multi_overall_coverage_pct": round(multi_overall_cov, 1),
-            "coverage_improvement_pp": round(improvement_pp, 1),
+            "baseline_filled": base_total,
+            "multi_filled": multi_total,
+            "baseline_overall_coverage_pct": base_pct,
+            "multi_overall_coverage_pct": multi_pct,
+            "coverage_improvement_pp": round(multi_pct - base_pct, 1),
         },
-        "per_field": per_field,
+        "per_field": per_field_out,
+        "signals": signals_out,
         "cohorts": cohort_summary,
         "items": item_results,
     }
+
+
+def _signed_pp(value: float) -> str:
+    """Format a percentage-point delta with exactly one sign."""
+    return f"+{value} pp" if value >= 0 else f"{value} pp"
+
+
+def _signal_cell(summary: dict[str, Any], n: int) -> str:
+    if not summary["mirror_loaded"]:
+        return "not loaded"
+    return f"loaded; positive {summary['positive_rate_pct']}% ({summary['positive_count']}/{n})"
 
 
 def generate_markdown_report(results: dict[str, Any]) -> str:
     """Generate a human-readable Markdown report from evaluation results."""
     meta = results["metadata"]
     summary = results["summary"]
-    fields = results["per_field"]
-    cohorts = results["cohorts"]
-
-    date_str = meta["measured_at"][:10]
+    n = meta["total_cves"]
     is_synthetic = meta["sample_mode"] == "synthetic_fixtures"
-    mode_str = "Synthetic Test Fixtures (Offline)" if is_synthetic else "Production Mirrors"
 
-    md = [
-        "# Enrichment Coverage Evaluation Results",
-        "",
-        f"**Date Measured:** {date_str}  ",
-        f"**Evaluation Mode:** {mode_str}  ",
-        f"**Dataset:** `{meta['dataset_path']}` ({meta['total_cves']} CVEs evaluated)  ",
-        f"**Source Cache:** `{meta['cache_dir']}`  ",
-        "",
-        "> [!IMPORTANT]",
-        "> **Provenance Notice (evals/README.md compliance):**",
-    ]
+    md: list[str] = ["# Enrichment Coverage Evaluation Results", ""]
+    if is_synthetic:
+        md.extend([f"> **{meta['banner']}**", ""])
 
+    md.extend(
+        [
+            f"**Mode:** {'Synthetic fixtures' if is_synthetic else 'Real mirrors'}  ",
+            f"**Dataset:** `{meta['dataset_path']}` ({n} CVEs)  ",
+        ]
+    )
+    if meta.get("dataset_verification"):
+        md.append(f"**Dataset verification:** {meta['dataset_verification']}  ")
+    md.append(f"**Source cache:** `{meta['cache_dir']}`  ")
+    md.append(f"**Fusion chain order:** {' -> '.join(meta['fusion_chain_order'])} -> derived  ")
+    if meta.get("generated_at"):
+        md.append(f"**Generated at:** {meta['generated_at']}  ")
+
+    md.extend(["", "## Mirror files", "", "| Mirror | Path | Synthetic |"])
+    if not is_synthetic:
+        md[-1] += " sha256 | mtime | synced_at |"
+        md.append("|---|---|---|---|---|---|")
+    else:
+        md.append("|---|---|---|")
+    for m in meta["mirrors"]:
+        if not m["present"]:
+            row = f"| `{m['name']}` | not present | - |"
+            if not is_synthetic:
+                row += " - | - | - |"
+        else:
+            row = f"| `{m['name']}` | `{m['path']}` | {'yes' if m['synthetic'] else 'no'} |"
+            if not is_synthetic:
+                row += f" `{m['sha256']}` | {m['mtime']} | {m['synced_at'] or '-'} |"
+        md.append(row)
+
+    md.extend(
+        [
+            "",
+            "## Headline coverage (cvss_score, cwe_ids, summary, epss_score)",
+            "",
+            "| Metric | NVD-only baseline | Multi-source | Difference |",
+            "|---|---|---|---|",
+            f"| Overall | {summary['baseline_overall_coverage_pct']}% "
+            f"({summary['baseline_filled']}/{meta['total_headline_instances']}) | "
+            f"{summary['multi_overall_coverage_pct']}% "
+            f"({summary['multi_filled']}/{meta['total_headline_instances']}) | "
+            f"{_signed_pp(summary['coverage_improvement_pp'])} |",
+            "",
+            "| Field | NVD-only baseline | Multi-source | Difference |",
+            "|---|---|---|---|",
+        ]
+    )
+    for f_id, data in results["per_field"].items():
+        md.append(
+            f"| `{f_id}` | {data['baseline_pct']}% ({data['baseline_count']}/{n}) | "
+            f"{data['multi_pct']}% ({data['multi_count']}/{n}) | "
+            f"{_signed_pp(data['improvement_pp'])} |"
+        )
+
+    md.extend(
+        [
+            "",
+            "## Signal fields (not in the headline)",
+            "",
+            "A loaded mirror answers every lookup with a definite True/False, so these are "
+            "reported as whether the mirror was loaded and how many CVEs hit positive.",
+            "",
+            "| Field | NVD-only baseline | Multi-source |",
+            "|---|---|---|",
+        ]
+    )
+    for f_id, per_engine in results["signals"].items():
+        md.append(
+            f"| `{f_id}` | {_signal_cell(per_engine['baseline'], n)} | "
+            f"{_signal_cell(per_engine['multi_source'], n)} |"
+        )
+
+    md.extend(
+        [
+            "",
+            "## Cohorts (headline fields)",
+            "",
+            "| Cohort | CVEs | NVD-only baseline | Multi-source | Difference |",
+            "|---|---|---|---|---|",
+        ]
+    )
+    for c_id, c in results["cohorts"].items():
+        md.append(
+            f"| `{c_id}` | {c['count']} | {c['baseline_coverage_pct']}% | "
+            f"{c['multi_coverage_pct']}% | {_signed_pp(c['improvement_pp'])} |"
+        )
+
+    md.extend(
+        [
+            "",
+            "## Limitations",
+            "",
+            f"- {meta['baseline_limitation']}",
+            "- Cohort labels come from the dataset and are unverified hypotheses; see "
+            "`evals/golden/README.md`.",
+        ]
+    )
     if is_synthetic:
         md.append(
-            "> The metrics in this report were measured against **synthetic fixture files** "
-            "(`tests/fixtures/enrichment/`). They verify the deterministic fusion engine, "
-            "fallback chains, and provenance attributions offline without live network calls. "
-            "They do not claim to reflect live production feed numbers."
+            "- Every mirror marked synthetic above is a hand-authored fixture covering a "
+            "handful of CVEs. Coverage here reflects which CVEs the fixtures happen to "
+            "contain, not the platform."
         )
-    else:
-        md.append(
-            "> The metrics in this report were measured against production feed mirrors."
-        )
-
-    md.extend([
-        "",
-        "## 1. Executive Summary",
-        "",
-        "| Metric | NVD-Only Baseline | SeekThreat Multi-Source | Improvement |",
-        "|---|---|---|---|",
-        f"| **Overall Coverage** | **{summary['baseline_overall_coverage_pct']}%** | "
-        f"**{summary['multi_overall_coverage_pct']}%** | "
-        f"**+{summary['coverage_improvement_pp']} pp** |",
-        "",
-        f"Overall enrichment coverage increased by **+{summary['coverage_improvement_pp']} "
-        f"percentage points** across all {meta['total_evaluated_instances']} evaluated field "
-        "instances.",
-        "",
-        "## 2. Per-Field Intelligence Coverage",
-        "",
-        "| Field Identifier | Intelligence Dimension | NVD Baseline | Multi-Source | Gain |",
-        "|---|---|---|---|---|",
-    ])
-
-    field_labels = {
-        "cvss_score": "Severity (CVSS)",
-        "cwe_ids": "Weakness Taxonomy (CWE)",
-        "summary": "Description",
-        "epss_score": "Exploit Probability (EPSS)",
-        "in_kev": "Active Exploitation (KEV)",
-        "exploit_availability": "Exploit Presence (EDB/MSF)",
-    }
-
-    for f_id, data in fields.items():
-        label = field_labels.get(f_id, f_id)
-        b_str = f"{data['baseline_pct']}% ({data['baseline_count']}/{meta['total_cves']})"
-        m_str = f"{data['multi_pct']}% ({data['multi_count']}/{meta['total_cves']})"
-        gain_val = data["improvement_pp"]
-        gain_str = f"+{gain_val} pp" if gain_val >= 0 else f"{gain_val} pp"
-        md.append(f"| `{f_id}` | {label} | {b_str} | {m_str} | **{gain_str}** |")
-
-    md.extend([
-        "",
-        "## 3. Cohort Analysis",
-        "",
-        "| Cohort Identifier | CVE Count | NVD Baseline | Multi-Source | Coverage Gain |",
-        "|---|---|---|---|---|",
-    ])
-
-    for c_id, c_data in cohorts.items():
-        md.append(
-            f"| `{c_id}` | {c_data['count']} | {c_data['baseline_coverage_pct']}% | "
-            f"{c_data['multi_coverage_pct']}% | **+{c_data['improvement_pp']} pp** |"
-        )
-
-    md.extend([
-        "",
-        "## 4. Key Findings & Architecture Verification",
-        "",
-        "1. **Exploitation Telemetry Gap:** The NVD-only baseline provides 0.0% coverage for EPSS, "
-        "KEV, and exploit availability, as the NVD does not compute or curate these signals.",
-        "2. **Fallback Chain Efficacy:** In Cohort B (NVD gap CVEs), CVE.org, Vulnrichment, "
-        "and EUVD successfully recover CVSS scores and CWE classifications where NVD is absent.",
-        "3. **Zero Network Calls:** The entire evaluation suite executed 100% offline using local "
-        "cache mirrors, satisfying Layer 2 non-negotiable Rule 5.",
-        "",
-        "---",
-        f"_Generated by `evals/enrichment_coverage.py` on {date_str}_",
-        "",
-    ])
-
+    md.extend(["", "---", "_Generated by `evals/enrichment_coverage.py`._", ""])
     return "\n".join(md)
 
 
-def main() -> int:
+def write_outputs(results: dict[str, Any], output_json: Path, output_md: Path) -> None:
+    """Write JSON and Markdown results with LF line endings."""
+    output_json.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_json, "w", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(results, indent=2, ensure_ascii=False) + "\n")
+    output_md.parent.mkdir(parents=True, exist_ok=True)
+    with open(output_md, "w", encoding="utf-8", newline="\n") as f:
+        f.write(generate_markdown_report(results))
+
+
+def main(argv: list[str] | None = None) -> int:
     """CLI entry point for enrichment coverage eval."""
     parser = argparse.ArgumentParser(
-        description="Measure SeekThreat enrichment coverage vs NVD-only baseline."
+        description="Measure SeekThreat enrichment coverage vs an NVD-only baseline."
     )
     parser.add_argument(
         "--dataset",
         type=Path,
-        default=Path("evals/golden/enrichment_baseline.json"),
+        default=_DEFAULT_DATASET,
         help="Path to golden evaluation dataset JSON",
     )
     parser.add_argument(
         "--cache-dir",
         type=Path,
-        default=Path("tests/fixtures/enrichment"),
+        default=_DEFAULT_CACHE_DIR,
         help="Path to local source mirror directory",
     )
     parser.add_argument(
@@ -386,27 +585,24 @@ def main() -> int:
     parser.add_argument(
         "--output-md",
         type=Path,
-        default=Path("evals/results/enrichment_coverage_results.md"),
+        default=_DEFAULT_OUTPUT_MD,
         help="Path to output Markdown results report",
     )
     parser.add_argument(
         "--output-json",
         type=Path,
-        default=Path("evals/results/enrichment_coverage_results.json"),
+        default=_DEFAULT_OUTPUT_JSON,
         help="Path to output JSON results",
     )
-    parser.add_argument(
-        "--quiet",
-        action="store_true",
-        help="Suppress stdout summary output",
-    )
-
-    args = parser.parse_args()
+    parser.add_argument("--quiet", action="store_true", help="Suppress stdout summary output")
+    args = parser.parse_args(argv)
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(errors="replace")
 
     if not args.dataset.exists():
         sys.stderr.write(f"Error: Dataset not found at {args.dataset}\n")
         return 1
-
     if not args.cache_dir.exists():
         sys.stderr.write(f"Error: Cache directory not found at {args.cache_dir}\n")
         return 1
@@ -416,38 +612,35 @@ def main() -> int:
         cache_dir=args.cache_dir,
         nvd_override=args.nvd_file,
     )
-
-    # Save outputs
-    if args.output_json:
-        args.output_json.parent.mkdir(parents=True, exist_ok=True)
-        args.output_json.write_text(json.dumps(results, indent=2), encoding="utf-8")
-
-    if args.output_md:
-        args.output_md.parent.mkdir(parents=True, exist_ok=True)
-        md_content = generate_markdown_report(results)
-        args.output_md.write_text(md_content, encoding="utf-8")
+    write_outputs(results, args.output_json, args.output_md)
 
     if not args.quiet:
+        meta = results["metadata"]
         summary = results["summary"]
-        print("=" * 60)
-        print("SEEKTHREAT ENRICHMENT COVERAGE EVALUATION")
-        print("=" * 60)
-        print(f"Evaluated CVEs:            {results['metadata']['total_cves']}")
-        print(f"NVD-Only Baseline:         {summary['baseline_overall_coverage_pct']}%")
-        print(f"SeekThreat Multi-Source:   {summary['multi_overall_coverage_pct']}%")
-        print(f"Coverage Gain:             +{summary['coverage_improvement_pp']} pp")
-        print("-" * 60)
-        print("Per-Field Improvement:")
-        for fid, fstats in results["per_field"].items():
+        n = meta["total_cves"]
+        print("=" * 72)
+        if meta["banner"]:
+            print(meta["banner"])
+            print("-" * 72)
+        print(f"Evaluated CVEs:          {n}")
+        print(f"Headline (NVD-only):     {summary['baseline_overall_coverage_pct']}%")
+        print(f"Headline (multi-source): {summary['multi_overall_coverage_pct']}%")
+        print(f"Difference:              {_signed_pp(summary['coverage_improvement_pp'])}")
+        print("-" * 72)
+        for fid, fs in results["per_field"].items():
             print(
-                f"  {fid:<22} Baseline: {fstats['baseline_pct']:>5.1f}%  ->  "
-                f"Multi: {fstats['multi_pct']:>5.1f}%  (+{fstats['improvement_pp']:>4.1f} pp)"
+                f"  {fid:<22} {fs['baseline_pct']:>5.1f}% -> {fs['multi_pct']:>5.1f}%  "
+                f"({_signed_pp(fs['improvement_pp'])})"
             )
-        print("=" * 60)
-        if args.output_md:
-            print(f"Markdown report written to: {args.output_md}")
-        if args.output_json:
-            print(f"JSON results written to:     {args.output_json}")
+        print("Signals (not in headline):")
+        for fid, per_engine in results["signals"].items():
+            print(
+                f"  {fid:<22} baseline: {_signal_cell(per_engine['baseline'], n)}; "
+                f"multi: {_signal_cell(per_engine['multi_source'], n)}"
+            )
+        print("=" * 72)
+        print(f"Markdown report written to: {args.output_md}")
+        print(f"JSON results written to:    {args.output_json}")
 
     return 0
 

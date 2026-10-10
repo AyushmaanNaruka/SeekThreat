@@ -42,9 +42,11 @@ class EnrichmentService:
             cache_dir: Local mirror directory; builds ``FusionEngine(cache_dir=...)``.
                 File names follow ``sources.sync.MIRROR_FILENAMES`` (``cve_org.json``,
                 ``cisa_kev.json``, ``epss_v4.json``, ``vulnrichment.json``,
-                ``euvd.json``). When None and no engine is given, sources are
-                unloaded: CVSS/EPSS fall back to labelled placeholders and KEV
-                status is reported as unknown.
+                ``nvd.json``, ``euvd.json``, ``exploitdb.json``, ``metasploit.json``).
+                The API and worker pass ``settings.enrichment_cache_dir``, the same
+                directory the feed sync job writes. When None and no engine is given,
+                sources are unloaded: CVSS/EPSS fall back to labelled placeholders and
+                KEV status is reported as unknown.
         """
         if fusion_engine is not None and cache_dir is not None:
             raise ValueError(

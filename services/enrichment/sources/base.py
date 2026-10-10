@@ -8,6 +8,7 @@ Non-negotiable invariants:
 
 from __future__ import annotations
 
+import json
 from abc import ABC, abstractmethod
 from datetime import UTC, datetime
 from pathlib import Path
@@ -37,6 +38,27 @@ def parse_feed_date(value: object) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def meta_path(mirror_file: Path | str) -> Path:
+    """Sidecar metadata path for a mirror file: ``cisa_kev.json`` -> ``cisa_kev.meta.json``."""
+    mirror_file = Path(mirror_file)
+    return mirror_file.with_name(f"{mirror_file.stem}.meta.json")
+
+
+def read_mirror_meta(mirror_file: Path | str) -> dict[str, Any] | None:
+    """Read the ``.meta.json`` sidecar written by ``SourceSynchronizer``, or None.
+
+    The sidecar records ``synced_at``, ``source_url``, ``record_count`` and the
+    ``sha256`` of the mirror file as written. A missing or unreadable sidecar is
+    not an error: mirrors placed by hand (or by tests) have none.
+    """
+    try:
+        with open(meta_path(mirror_file), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 class BaseSourceRecord(BaseModel):
@@ -81,6 +103,8 @@ class BaseEnrichmentSource(ABC, Generic[RecordT]):
         self.cache_file = Path(cache_file) if cache_file else None
         self._cache: dict[str, RecordT] = {}
         self._loaded: bool = False
+        self._synced_at: datetime | None = None
+        self._synced_at_read = False
         if self.cache_file and self.cache_file.exists():
             self.load()
 
@@ -89,9 +113,26 @@ class BaseEnrichmentSource(ABC, Generic[RecordT]):
         """Load data from local cache storage into memory."""
         ...
 
+    def mirror_synced_at(self) -> datetime | None:
+        """When the sync job last wrote this mirror (from its sidecar), if known."""
+        if not self._synced_at_read:
+            meta = read_mirror_meta(self.cache_file) if self.cache_file else None
+            self._synced_at = parse_feed_date(meta.get("synced_at")) if meta else None
+            self._synced_at_read = True
+        return self._synced_at
+
+    def default_retrieved_at(self) -> datetime:
+        """``retrieved_at`` for a record that carries no date of its own.
+
+        The mirror's ``synced_at`` is when the data was actually retrieved from
+        upstream; fusion time is used only when no sidecar exists.
+        """
+        return self.mirror_synced_at() or datetime.now(UTC)
+
     def _ensure_loaded(self) -> None:
         """Lazily load the mirror file if it exists and has not been loaded yet."""
         if not self._loaded and self.cache_file and self.cache_file.exists():
+            self._synced_at_read = False
             self.load()
 
     @property
@@ -128,3 +169,4 @@ class BaseEnrichmentSource(ABC, Generic[RecordT]):
         """Clear the in-memory index."""
         self._cache.clear()
         self._loaded = False
+        self._synced_at_read = False

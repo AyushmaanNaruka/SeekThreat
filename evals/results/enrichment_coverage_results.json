@@ -1,16 +1,86 @@
 {
   "metadata": {
-    "measured_at": "2026-10-05T07:26:32.152560+00:00",
-    "dataset_path": "evals\\golden\\enrichment_baseline.json",
-    "cache_dir": "tests\\fixtures\\enrichment",
+    "banner": "SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not measurements of the platform; no real-world coverage number exists yet.",
     "sample_mode": "synthetic_fixtures",
+    "dataset_path": "evals/golden/enrichment_baseline.json",
+    "dataset_verification": "unverified — cohort assignments are hypotheses, not checked against live NVD",
+    "cache_dir": "tests/fixtures/enrichment",
+    "fusion_chain_order": [
+      "cve.org",
+      "cisa.vulnrichment",
+      "nvd",
+      "enisa.euvd"
+    ],
+    "headline_fields": [
+      "cvss_score",
+      "cwe_ids",
+      "summary",
+      "epss_score"
+    ],
+    "signal_fields": [
+      "in_kev",
+      "exploit_availability"
+    ],
+    "baseline_limitation": "Baseline engine parses only NVD CVSS, CWE and description via NVDSource. NVD API 2.0 KEV fields (cisaExploitAdd etc.) are not parsed; EPSS, KEV and exploit sources are not loaded in the baseline.",
+    "mirrors": [
+      {
+        "name": "nvd",
+        "path": "tests/fixtures/enrichment/nvd_sample.json",
+        "present": true,
+        "synthetic": true
+      },
+      {
+        "name": "cve_org",
+        "path": "tests/fixtures/enrichment/cve_org_sample.json",
+        "present": true,
+        "synthetic": true
+      },
+      {
+        "name": "vulnrichment",
+        "path": "tests/fixtures/enrichment/vulnrichment_sample.json",
+        "present": true,
+        "synthetic": true
+      },
+      {
+        "name": "euvd",
+        "path": "tests/fixtures/enrichment/euvd_sample.json",
+        "present": true,
+        "synthetic": true
+      },
+      {
+        "name": "epss_v4",
+        "path": "tests/fixtures/enrichment/epss_v4_sample.json",
+        "present": true,
+        "synthetic": true
+      },
+      {
+        "name": "cisa_kev",
+        "path": "tests/fixtures/enrichment/cisa_kev_sample.json",
+        "present": true,
+        "synthetic": true
+      },
+      {
+        "name": "exploitdb",
+        "path": "tests/fixtures/enrichment/exploitdb_sample.json",
+        "present": true,
+        "synthetic": true
+      },
+      {
+        "name": "metasploit",
+        "path": "tests/fixtures/enrichment/metasploit_sample.json",
+        "present": true,
+        "synthetic": true
+      }
+    ],
     "total_cves": 50,
-    "total_evaluated_instances": 300
+    "total_headline_instances": 200
   },
   "summary": {
-    "baseline_overall_coverage_pct": 4.0,
-    "multi_overall_coverage_pct": 44.7,
-    "coverage_improvement_pp": 40.7
+    "baseline_filled": 12,
+    "multi_filled": 34,
+    "baseline_overall_coverage_pct": 6.0,
+    "multi_overall_coverage_pct": 17.0,
+    "coverage_improvement_pp": 11.0
   },
   "per_field": {
     "cvss_score": {
@@ -40,52 +110,82 @@
       "multi_count": 7,
       "multi_pct": 14.0,
       "improvement_pp": 14.0
-    },
+    }
+  },
+  "signals": {
     "in_kev": {
-      "baseline_count": 0,
-      "baseline_pct": 0.0,
-      "multi_count": 50,
-      "multi_pct": 100.0,
-      "improvement_pp": 100.0
+      "baseline": {
+        "mirror_loaded": false,
+        "positive_count": 0,
+        "negative_count": 0,
+        "unknown_count": 50,
+        "positive_rate_pct": null
+      },
+      "multi_source": {
+        "mirror_loaded": true,
+        "positive_count": 4,
+        "negative_count": 46,
+        "unknown_count": 0,
+        "positive_rate_pct": 8.0
+      }
     },
     "exploit_availability": {
-      "baseline_count": 0,
-      "baseline_pct": 0.0,
-      "multi_count": 50,
-      "multi_pct": 100.0,
-      "improvement_pp": 100.0
+      "baseline": {
+        "mirror_loaded": false,
+        "positive_count": 0,
+        "negative_count": 0,
+        "unknown_count": 50,
+        "positive_rate_pct": null
+      },
+      "multi_source": {
+        "mirror_loaded": true,
+        "positive_count": 3,
+        "negative_count": 47,
+        "unknown_count": 0,
+        "positive_rate_pct": 6.0
+      }
     }
   },
   "cohorts": {
     "cohort_a_nvd_control": {
       "count": 10,
-      "baseline_coverage_pct": 20.0,
-      "multi_coverage_pct": 60.0,
-      "improvement_pp": 40.0
+      "baseline_filled": 12,
+      "multi_filled": 16,
+      "baseline_coverage_pct": 30.0,
+      "multi_coverage_pct": 40.0,
+      "improvement_pp": 10.0
     },
     "cohort_b_nvd_gap": {
       "count": 10,
+      "baseline_filled": 0,
+      "multi_filled": 7,
       "baseline_coverage_pct": 0.0,
-      "multi_coverage_pct": 45.0,
-      "improvement_pp": 45.0
+      "multi_coverage_pct": 17.5,
+      "improvement_pp": 17.5
     },
     "cohort_c_cisa_kev": {
       "count": 10,
+      "baseline_filled": 0,
+      "multi_filled": 4,
       "baseline_coverage_pct": 0.0,
-      "multi_coverage_pct": 40.0,
-      "improvement_pp": 40.0
+      "multi_coverage_pct": 10.0,
+      "improvement_pp": 10.0
     },
     "cohort_d_high_epss_no_nvd": {
       "count": 10,
+      "baseline_filled": 0,
+      "multi_filled": 7,
       "baseline_coverage_pct": 0.0,
-      "multi_coverage_pct": 45.0,
-      "improvement_pp": 45.0
+      "multi_coverage_pct": 17.5,
+      "improvement_pp": 17.5
     },
     "cohort_e_weaponized_exploit": {
       "count": 10,
+      "baseline_filled": 0,
+      "multi_filled": 0,
       "baseline_coverage_pct": 0.0,
-      "multi_coverage_pct": 33.3,
-      "improvement_pp": 33.3
+      "multi_coverage_pct": 0.0,
+      "improvement_pp": 0.0
     }
   },
   "items": [
@@ -97,16 +197,16 @@
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": true,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "positive",
+        "exploit_availability": "positive"
       }
     },
     {
@@ -117,16 +217,16 @@
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": true,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "positive",
+        "exploit_availability": "positive"
       }
     },
     {
@@ -137,16 +237,16 @@
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": true,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -157,16 +257,16 @@
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": true,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -177,16 +277,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -197,16 +297,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -217,16 +317,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -237,16 +337,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -257,16 +357,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -277,16 +377,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -297,16 +397,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": true,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "positive",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -317,16 +417,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -337,16 +437,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -357,16 +457,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -377,16 +477,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -397,16 +497,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -417,16 +517,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -437,16 +537,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -457,16 +557,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -477,16 +577,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -497,16 +597,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": true,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "positive",
+        "exploit_availability": "positive"
       }
     },
     {
@@ -517,16 +617,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -537,16 +637,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -557,16 +657,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -577,16 +677,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -597,16 +697,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -617,16 +717,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -637,16 +737,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -657,16 +757,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -677,16 +777,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -697,16 +797,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": true,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -717,16 +817,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -737,16 +837,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -757,16 +857,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -777,16 +877,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -797,16 +897,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -817,16 +917,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -837,16 +937,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -857,16 +957,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -877,16 +977,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -897,16 +997,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -917,16 +1017,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -937,16 +1037,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -957,16 +1057,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -977,16 +1077,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -997,16 +1097,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -1017,16 +1117,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -1037,16 +1137,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -1057,16 +1157,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
@@ -1077,16 +1177,16 @@
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": false,
-        "exploit_availability": false
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
       },
       "multi_source": {
         "cvss_score": false,
         "cwe_ids": false,
         "summary": false,
         "epss_score": false,
-        "in_kev": true,
-        "exploit_availability": true
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     }
   ]

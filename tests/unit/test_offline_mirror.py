@@ -10,6 +10,7 @@ from cached local data without making external network calls.
 
 from __future__ import annotations
 
+import shutil
 import socket
 import urllib.request
 from pathlib import Path
@@ -17,9 +18,11 @@ from pathlib import Path
 import pytest
 
 from packages.schema.models.finding import EnrichedFinding
+from packages.schema.models.provenance import Source
 from services.enrichment.fusion import FusionEngine
 from services.enrichment.service import EnrichmentService
 from services.enrichment.sources import CISAKevSource, CVEOrgSource, FirstEPSSSource
+from services.enrichment.sources.sync import MIRROR_FILENAMES, mirror_path
 from tests.fixtures.findings.baseline_findings import (
     FINDING_APACHE_PATH_TRAVERSAL,
     FINDING_HEURISTIC_NO_CVE,
@@ -113,6 +116,43 @@ class TestOfflineMirrorIsolation:
         ]
         results = offline_enrichment_service.enrich_batch(findings, persist=False)
         assert len(results) == len(findings)
+
+    def test_full_mirror_cache_dir_fuses_offline(self, offline_guard: None, tmp_path: Path) -> None:
+        """A cache_dir holding every mirror (incl. secondary + exploit) fuses with no network."""
+        fixture_for = {
+            Source.CVE_ORG: "cve_org_sample.json",
+            Source.KEV: "cisa_kev_sample.json",
+            Source.EPSS: "epss_v4_sample.json",
+            Source.VULNRICHMENT: "vulnrichment_sample.json",
+            Source.NVD: "nvd_sample.json",
+            Source.EUVD: "euvd_sample.json",
+            Source.EXPLOITDB: "exploitdb_sample.json",
+            Source.METASPLOIT: "metasploit_sample.json",
+        }
+        assert set(fixture_for) == set(MIRROR_FILENAMES)
+        for source, fixture in fixture_for.items():
+            shutil.copyfile(FIXTURES_DIR / fixture, mirror_path(tmp_path, source))
+
+        service = EnrichmentService(cache_dir=tmp_path)
+        engine = service.fusion_engine
+        for loaded in (
+            engine.cve_org,
+            engine.cisa_kev,
+            engine.first_epss,
+            engine.vulnrichment,
+            engine.nvd,
+            engine.euvd,
+            engine.exploitdb,
+            engine.metasploit,
+        ):
+            assert loaded is not None and loaded.is_loaded
+
+        results = service.enrich_batch(get_baseline_findings(), persist=False)
+        assert len(results) == len(get_baseline_findings())
+        log4shell = next(r for r in results if r.finding.finding_id == FINDING_LOG4SHELL.finding_id)
+        assert log4shell.fields["has_public_exploit"].value is True
+        assert log4shell.fields["has_metasploit_module"].value is True
+        assert log4shell.ers is not None
 
     def test_network_block_fixture_actually_catches_connections(self, offline_guard: None) -> None:
         """Guards that our offline test fixture genuinely traps network attempts."""

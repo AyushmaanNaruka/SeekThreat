@@ -125,3 +125,31 @@ class TestVulnrichmentSource:
         assert rec.cvss_vector == "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N"
         assert rec.ssvc_decision == "Act"
         assert rec.cwe_ids == ["CWE-89"]
+
+
+UPSTREAM = FIXTURES_DIR / "upstream"
+
+
+class TestVulnrichmentRealShape:
+    """Parser against the captured cisagov/vulnrichment per-CVE file."""
+
+    def _mirror(self, tmp_path: Path) -> Path:
+        raw = (UPSTREAM / "vulnrichment_record_CVE-2024-3400.json").read_text("utf-8")
+        path = tmp_path / "vulnrichment.json"
+        path.write_text(json.dumps({"CVE-2024-3400": json.loads(raw)}), encoding="utf-8")
+        return path
+
+    def test_ssvc_decision_points(self, tmp_path: Path) -> None:
+        rec = VulnrichmentSource(cache_file=self._mirror(tmp_path)).lookup("CVE-2024-3400")
+        assert rec is not None
+        assert rec.ssvc_options == {
+            "Exploitation": "active",
+            "Automatable": "yes",
+            "Technical Impact": "total",
+        }
+        assert rec.ssvc_decision is None  # CISA publishes decision points, not a decision
+
+    def test_cna_metrics_are_not_mistaken_for_cisa_adp(self, tmp_path: Path) -> None:
+        rec = VulnrichmentSource(cache_file=self._mirror(tmp_path)).lookup("CVE-2024-3400")
+        assert rec is not None
+        assert rec.cvss_score is None

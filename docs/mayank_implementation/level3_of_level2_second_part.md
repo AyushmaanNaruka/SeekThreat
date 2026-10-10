@@ -401,7 +401,7 @@ prefixed with `_`.
 
 Level 4 (NVD-Only Baseline Eval) runs `FusionEngine` in two configurations:
 
-1. **CVE.org-only** — secondary sources absent; represents the NVD-era baseline.
+1. **NVD-only baseline** — only `NVDSource` loaded; every other source unloaded or absent (see `evals/enrichment_coverage.py` `build_engines`).
 2. **Full multi-source** — all seven sources loaded from mirror files.
 
 It counts filled vs. placeholder fields per configuration and reports the coverage

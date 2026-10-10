@@ -4,13 +4,15 @@ Load-bearing rules from services/enrichment/README.md:
 1. Every field gets a Provenance. No unattributed data.
    Every field is wrapped in Attributed[EnrichmentValue] — an unattributed value
    must be unrepresentable, not just discouraged.
-2. Fallback chain: CVE.org -> Vulnrichment -> EUVD -> derived. Label derived values.
-   The chain runs PER FIELD (CVSS, CWE, description independently), so each field's
-   provenance names the source it actually came from.
+2. Fallback chain: CVE.org -> Vulnrichment -> NVD -> EUVD -> derived. Label derived
+   values. The chain runs PER FIELD (CVSS, CWE, description independently), so each
+   field's provenance names the source it actually came from.
 5. Mirror sources locally. Don't hit APIs on the request path.
 
 An unloaded or empty mirror is never turned into a confident negative: missing KEV
-data yields ``in_kev`` = None attributed DERIVED/LOW ("KEV status unknown").
+data yields ``in_kev`` = None attributed DERIVED/LOW ("KEV status unknown"). Exploit
+mirrors are weaker still: absence from a loaded ExploitDB/Metasploit mirror is only
+MEDIUM-confidence False, because a public exploit can exist that neither indexes.
 """
 
 from __future__ import annotations
@@ -47,6 +49,8 @@ PLACEHOLDER_EPSS_NON_CVE: float = 0.0001
 PLACEHOLDER_EPSS_PERCENTILE_NON_CVE: float = 0.01
 
 KEV_UNKNOWN_NOTE = "KEV mirror not loaded; KEV status unknown"
+CHAIN_DESCRIPTION = "CVE.org, Vulnrichment, NVD or EUVD"
+EXPLOIT_ABSENCE_CAVEAT = "absence is not proof no exploit exists"
 
 _CHAIN_ORDER = (Source.CVE_ORG, Source.VULNRICHMENT, Source.NVD, Source.EUVD)
 _CONFIDENCE_RANK = {Confidence.LOW: 0, Confidence.MEDIUM: 1, Confidence.HIGH: 2}
@@ -88,7 +92,7 @@ class FusionEngine:
         """Build the engine from explicit sources and/or a local mirror directory.
 
         Args:
-            cve_org, cisa_kev, first_epss, vulnrichment, euvd, exploitdb, metasploit:
+            cve_org, cisa_kev, first_epss, vulnrichment, nvd, euvd, exploitdb, metasploit:
                 Explicit source instances. An explicit source always wins over ``cache_dir``.
             cache_dir: Directory of local mirror files, laid out exactly as
                 ``SourceSynchronizer`` writes it (``sources.sync.MIRROR_FILENAMES``):
@@ -97,6 +101,7 @@ class FusionEngine:
                 - ``cisa_kev.json``     -> CISAKevSource
                 - ``epss_v4.json``      -> FirstEPSSSource
                 - ``vulnrichment.json`` -> VulnrichmentSource
+                - ``nvd.json``          -> NVDSource
                 - ``euvd.json``         -> EUVDSource
                 - ``exploitdb.json``    -> ExploitDBSource
                 - ``metasploit.json``   -> MetasploitSource
@@ -124,14 +129,10 @@ class FusionEngine:
             EUVDSource(cache_file=_path(Source.EUVD)) if cache_dir is not None else None
         )
         self.exploitdb = exploitdb or (
-            ExploitDBSource(cache_file=_path(Source.EXPLOITDB))
-            if cache_dir is not None
-            else None
+            ExploitDBSource(cache_file=_path(Source.EXPLOITDB)) if cache_dir is not None else None
         )
         self.metasploit = metasploit or (
-            MetasploitSource(cache_file=_path(Source.METASPLOIT))
-            if cache_dir is not None
-            else None
+            MetasploitSource(cache_file=_path(Source.METASPLOIT)) if cache_dir is not None else None
         )
 
     def fuse(self, finding: Finding) -> dict[str, Attributed[EnrichmentValue]]:
@@ -144,7 +145,7 @@ class FusionEngine:
         cve_ids = [c.strip().upper() for c in finding.cve_ids]
         fields: dict[str, Attributed[EnrichmentValue]] = {}
 
-        # 1. Per-field fallback chain (CVE.org -> Vulnrichment -> EUVD -> derived).
+        # 1. Per-field fallback chain (CVE.org -> Vulnrichment -> NVD -> EUVD -> derived).
         best_cvss: tuple[float, str, BaseSourceRecord] | None = None
         cwe_values: list[str] = []
         cwe_contributors: list[tuple[str, BaseSourceRecord]] = []
@@ -205,8 +206,8 @@ class FusionEngine:
                     confidence=Confidence.LOW,
                     retrieved_at=now,
                     note=(
-                        "Derived placeholder CVSS; no CVSS in CVE.org, Vulnrichment or "
-                        "EUVD mirrors. Not a measurement."
+                        f"Derived placeholder CVSS; no CVSS in {CHAIN_DESCRIPTION} "
+                        "mirrors. Not a measurement."
                     ),
                 ),
             )
@@ -322,9 +323,10 @@ class FusionEngine:
         if record.source == Source.VULNRICHMENT:
             return "CISA Vulnrichment fallback CVSS (CVE.org lacked metrics)"
         if record.source == Source.NVD:
-            return "NVD 2.0 fallback CVSS"
+            author = getattr(record, "cvss_source", None)
+            return f"NVD 2.0 fallback CVSS{f' (metric by {author})' if author else ''}"
         if record.source == Source.EUVD:
-            return "ENISA EUVD fallback CVSS (CVE.org and Vulnrichment lacked metrics)"
+            return "ENISA EUVD fallback CVSS (CVE.org, Vulnrichment and NVD lacked metrics)"
         return f"CVSS from {record.source.value}"
 
     @staticmethod
@@ -476,9 +478,12 @@ class FusionEngine:
                         value=False,
                         provenance=Provenance(
                             source=Source.EXPLOITDB,
-                            confidence=Confidence.HIGH,
-                            retrieved_at=now,
-                            note=f"None of {', '.join(cve_ids)} listed in loaded ExploitDB mirror",
+                            confidence=Confidence.MEDIUM,
+                            retrieved_at=self.exploitdb.mirror_synced_at() or now,
+                            note=(
+                                f"{', '.join(cve_ids)} not found in ExploitDB mirror "
+                                f"({EXPLOIT_ABSENCE_CAVEAT})"
+                            ),
                         ),
                     )
 
@@ -529,9 +534,12 @@ class FusionEngine:
                         value=False,
                         provenance=Provenance(
                             source=Source.METASPLOIT,
-                            confidence=Confidence.HIGH,
-                            retrieved_at=now,
-                            note=f"None of {', '.join(cve_ids)} listed in loaded Metasploit mirror",
+                            confidence=Confidence.MEDIUM,
+                            retrieved_at=self.metasploit.mirror_synced_at() or now,
+                            note=(
+                                f"{', '.join(cve_ids)} not found in Metasploit mirror "
+                                f"({EXPLOIT_ABSENCE_CAVEAT})"
+                            ),
                         ),
                     )
 
@@ -600,24 +608,26 @@ class FusionEngine:
                 ),
             ),
         }
+        # The exploit mirrors are looked up by CVE ID, so a finding without one
+        # cannot be checked: its exploit status is unknown, not False.
         if self.exploitdb is not None:
             out["has_public_exploit"] = Attributed[EnrichmentValue](
-                value=False,
+                value=None,
                 provenance=Provenance(
                     source=Source.DERIVED,
-                    confidence=Confidence.HIGH,
+                    confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Finding has no CVE identifiers; ExploitDB tracks only CVEs",
+                    note="Finding has no CVE identifiers; ExploitDB status unknown",
                 ),
             )
         if self.metasploit is not None:
             out["has_metasploit_module"] = Attributed[EnrichmentValue](
-                value=False,
+                value=None,
                 provenance=Provenance(
                     source=Source.DERIVED,
-                    confidence=Confidence.HIGH,
+                    confidence=Confidence.LOW,
                     retrieved_at=now,
-                    note="Finding has no CVE identifiers; Metasploit tracks only CVEs",
+                    note="Finding has no CVE identifiers; Metasploit status unknown",
                 ),
             )
         return out
@@ -647,6 +657,7 @@ def fuse_finding(
     exploitdb: ExploitDBSource | None = None,
     metasploit: MetasploitSource | None = None,
     cache_dir: Path | None = None,
+    nvd: NVDSource | None = None,
 ) -> dict[str, Attributed[EnrichmentValue]]:
     """Convenience helper to fuse a single finding with given sources."""
     engine = FusionEngine(
@@ -654,6 +665,7 @@ def fuse_finding(
         cisa_kev=cisa_kev,
         first_epss=first_epss,
         vulnrichment=vulnrichment,
+        nvd=nvd,
         euvd=euvd,
         exploitdb=exploitdb,
         metasploit=metasploit,

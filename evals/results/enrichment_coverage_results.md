@@ -1,48 +1,63 @@
 # Enrichment Coverage Evaluation Results
 
-**Date Measured:** 2026-10-05  
-**Evaluation Mode:** Synthetic Test Fixtures (Offline)  
-**Dataset:** `evals\golden\enrichment_baseline.json` (50 CVEs evaluated)  
-**Source Cache:** `tests\fixtures\enrichment`  
+> **SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not measurements of the platform; no real-world coverage number exists yet.**
 
-> [!IMPORTANT]
-> **Provenance Notice (evals/README.md compliance):**
-> The metrics in this report were measured against **synthetic fixture files** (`tests/fixtures/enrichment/`). They verify the deterministic fusion engine, fallback chains, and provenance attributions offline without live network calls. They do not claim to reflect live production feed numbers.
+**Mode:** Synthetic fixtures  
+**Dataset:** `evals/golden/enrichment_baseline.json` (50 CVEs)  
+**Dataset verification:** unverified — cohort assignments are hypotheses, not checked against live NVD  
+**Source cache:** `tests/fixtures/enrichment`  
+**Fusion chain order:** cve.org -> cisa.vulnrichment -> nvd -> enisa.euvd -> derived  
 
-## 1. Executive Summary
+## Mirror files
 
-| Metric | NVD-Only Baseline | SeekThreat Multi-Source | Improvement |
+| Mirror | Path | Synthetic |
+|---|---|---|
+| `nvd` | `tests/fixtures/enrichment/nvd_sample.json` | yes |
+| `cve_org` | `tests/fixtures/enrichment/cve_org_sample.json` | yes |
+| `vulnrichment` | `tests/fixtures/enrichment/vulnrichment_sample.json` | yes |
+| `euvd` | `tests/fixtures/enrichment/euvd_sample.json` | yes |
+| `epss_v4` | `tests/fixtures/enrichment/epss_v4_sample.json` | yes |
+| `cisa_kev` | `tests/fixtures/enrichment/cisa_kev_sample.json` | yes |
+| `exploitdb` | `tests/fixtures/enrichment/exploitdb_sample.json` | yes |
+| `metasploit` | `tests/fixtures/enrichment/metasploit_sample.json` | yes |
+
+## Headline coverage (cvss_score, cwe_ids, summary, epss_score)
+
+| Metric | NVD-only baseline | Multi-source | Difference |
 |---|---|---|---|
-| **Overall Coverage** | **4.0%** | **44.7%** | **+40.7 pp** |
+| Overall | 6.0% (12/200) | 17.0% (34/200) | +11.0 pp |
 
-Overall enrichment coverage increased by **+40.7 percentage points** across all 300 evaluated field instances.
+| Field | NVD-only baseline | Multi-source | Difference |
+|---|---|---|---|
+| `cvss_score` | 8.0% (4/50) | 18.0% (9/50) | +10.0 pp |
+| `cwe_ids` | 8.0% (4/50) | 18.0% (9/50) | +10.0 pp |
+| `summary` | 8.0% (4/50) | 18.0% (9/50) | +10.0 pp |
+| `epss_score` | 0.0% (0/50) | 14.0% (7/50) | +14.0 pp |
 
-## 2. Per-Field Intelligence Coverage
+## Signal fields (not in the headline)
 
-| Field Identifier | Intelligence Dimension | NVD Baseline | Multi-Source | Gain |
+A loaded mirror answers every lookup with a definite True/False, so these are reported as whether the mirror was loaded and how many CVEs hit positive.
+
+| Field | NVD-only baseline | Multi-source |
+|---|---|---|
+| `in_kev` | not loaded | loaded; positive 8.0% (4/50) |
+| `exploit_availability` | not loaded | loaded; positive 6.0% (3/50) |
+
+## Cohorts (headline fields)
+
+| Cohort | CVEs | NVD-only baseline | Multi-source | Difference |
 |---|---|---|---|---|
-| `cvss_score` | Severity (CVSS) | 8.0% (4/50) | 18.0% (9/50) | **+10.0 pp** |
-| `cwe_ids` | Weakness Taxonomy (CWE) | 8.0% (4/50) | 18.0% (9/50) | **+10.0 pp** |
-| `summary` | Description | 8.0% (4/50) | 18.0% (9/50) | **+10.0 pp** |
-| `epss_score` | Exploit Probability (EPSS) | 0.0% (0/50) | 14.0% (7/50) | **+14.0 pp** |
-| `in_kev` | Active Exploitation (KEV) | 0.0% (0/50) | 100.0% (50/50) | **+100.0 pp** |
-| `exploit_availability` | Exploit Presence (EDB/MSF) | 0.0% (0/50) | 100.0% (50/50) | **+100.0 pp** |
+| `cohort_a_nvd_control` | 10 | 30.0% | 40.0% | +10.0 pp |
+| `cohort_b_nvd_gap` | 10 | 0.0% | 17.5% | +17.5 pp |
+| `cohort_c_cisa_kev` | 10 | 0.0% | 10.0% | +10.0 pp |
+| `cohort_d_high_epss_no_nvd` | 10 | 0.0% | 17.5% | +17.5 pp |
+| `cohort_e_weaponized_exploit` | 10 | 0.0% | 0.0% | +0.0 pp |
 
-## 3. Cohort Analysis
+## Limitations
 
-| Cohort Identifier | CVE Count | NVD Baseline | Multi-Source | Coverage Gain |
-|---|---|---|---|---|
-| `cohort_a_nvd_control` | 10 | 20.0% | 60.0% | **+40.0 pp** |
-| `cohort_b_nvd_gap` | 10 | 0.0% | 45.0% | **+45.0 pp** |
-| `cohort_c_cisa_kev` | 10 | 0.0% | 40.0% | **+40.0 pp** |
-| `cohort_d_high_epss_no_nvd` | 10 | 0.0% | 45.0% | **+45.0 pp** |
-| `cohort_e_weaponized_exploit` | 10 | 0.0% | 33.3% | **+33.3 pp** |
-
-## 4. Key Findings & Architecture Verification
-
-1. **Exploitation Telemetry Gap:** The NVD-only baseline provides 0.0% coverage for EPSS, KEV, and exploit availability, as the NVD does not compute or curate these signals.
-2. **Fallback Chain Efficacy:** In Cohort B (NVD gap CVEs), CVE.org, Vulnrichment, and EUVD successfully recover CVSS scores and CWE classifications where NVD is absent.
-3. **Zero Network Calls:** The entire evaluation suite executed 100% offline using local cache mirrors, satisfying Layer 2 non-negotiable Rule 5.
+- Baseline engine parses only NVD CVSS, CWE and description via NVDSource. NVD API 2.0 KEV fields (cisaExploitAdd etc.) are not parsed; EPSS, KEV and exploit sources are not loaded in the baseline.
+- Cohort labels come from the dataset and are unverified hypotheses; see `evals/golden/README.md`.
+- Every mirror marked synthetic above is a hand-authored fixture covering a handful of CVEs. Coverage here reflects which CVEs the fixtures happen to contain, not the platform.
 
 ---
-_Generated by `evals/enrichment_coverage.py` on 2026-10-05_
+_Generated by `evals/enrichment_coverage.py`._

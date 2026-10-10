@@ -405,3 +405,59 @@ class TestExploitAvailabilityIntegration:
         assert fields["has_metasploit_module"].provenance.source == Source.DERIVED
         assert fields["has_metasploit_module"].provenance.confidence == Confidence.LOW
 
+
+class TestExploitNegativesAreNotConfident:
+    """Absence from an exploit mirror is weak evidence; never HIGH-confidence False."""
+
+    def _engine(self) -> FusionEngine:
+        return FusionEngine(
+            cve_org=CVEOrgSource(cache_file=FIXTURES_DIR / "cve_org_sample.json"),
+            cisa_kev=CISAKevSource(cache_file=FIXTURES_DIR / "cisa_kev_sample.json"),
+            first_epss=FirstEPSSSource(cache_file=FIXTURES_DIR / "epss_v4_sample.json"),
+            exploitdb=ExploitDBSource(cache_file=FIXTURES_DIR / "exploitdb_sample.json"),
+            metasploit=MetasploitSource(cache_file=FIXTURES_DIR / "metasploit_sample.json"),
+        )
+
+    def test_absent_from_loaded_mirror_is_medium_false(self) -> None:
+        fields = self._engine().fuse(FINDING_NON_KEV_MODERATE)
+        edb = fields["has_public_exploit"]
+        assert edb.value is False
+        assert edb.provenance.source == Source.EXPLOITDB
+        assert edb.provenance.confidence == Confidence.MEDIUM
+        assert "absence is not proof" in (edb.provenance.note or "")
+
+        msf = fields["has_metasploit_module"]
+        assert msf.value is False
+        assert msf.provenance.source == Source.METASPLOIT
+        assert msf.provenance.confidence == Confidence.MEDIUM
+        assert "absence is not proof" in (msf.provenance.note or "")
+
+    def test_non_cve_finding_exploit_status_unknown(self) -> None:
+        fields = self._engine().fuse(FINDING_HEURISTIC_NO_CVE)
+        for key in ("has_public_exploit", "has_metasploit_module"):
+            attr = fields[key]
+            assert attr.value is None
+            assert attr.provenance.source == Source.DERIVED
+            assert attr.provenance.confidence == Confidence.LOW
+            assert "track only CVEs" not in (attr.provenance.note or "")
+
+
+class TestNVDInChain:
+    """NVD sits between Vulnrichment and EUVD and is reachable through fuse_finding."""
+
+    def test_fuse_finding_accepts_nvd(self) -> None:
+        from services.enrichment.fusion import fuse_finding
+        from services.enrichment.sources import NVDSource
+
+        nvd = NVDSource(cache_file=FIXTURES_DIR / "nvd_sample.json")
+        fields = fuse_finding(
+            _bare_finding("CVE-2021-44228"),
+            cve_org=CVEOrgSource(cache_file=None),
+            nvd=nvd,
+        )
+        assert fields["cvss_score"].provenance.source == Source.NVD
+
+    def test_placeholder_note_names_the_real_chain(self) -> None:
+        fields = get_test_engine().fuse(_bare_finding("CVE-2025-9999"))
+        note = fields["cvss_score"].provenance.note or ""
+        assert "NVD" in note

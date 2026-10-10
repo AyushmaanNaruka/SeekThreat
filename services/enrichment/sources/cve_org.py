@@ -7,7 +7,6 @@ Priority 1 source per services/enrichment/README.md:
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import Field
@@ -167,5 +166,5 @@ class CVEOrgSource(BaseEnrichmentSource[CVEOrgRecord]):
             base_severity=base_severity,
             cwe_ids=cwe_ids,
             raw_payload=record_dict,
-            retrieved_at=updated or datetime.now(UTC),
+            retrieved_at=updated or self.default_retrieved_at(),
         )

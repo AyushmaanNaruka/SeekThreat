@@ -70,9 +70,9 @@ Six new decisions were added to [`DECISIONS.md`](file:///e:/SeekThreat/SeekThrea
 
 **Problem:** `services/graph/README.md` shows `EPSS × exploit_availability × privilege_delta`. This looks like it multiplies EPSS. Rule 3 says "Never multiply EPSS by CVSS."
 
-**Decision:** The rule bans `EPSS × CVSS` specifically. Multiplying EPSS by non-CVSS factors (`exploit_availability`, `privilege_delta`) is a valid conditional probability decomposition: "is this path actually traversable given EPSS and exploit existence and privilege gain?" This is semantically sound. CVSS is not involved.
+**Decision:** The rule bans `EPSS × CVSS` specifically, and the path score does not multiply by CVSS, so it is within the letter of the rule. It is **not** a conditional probability decomposition, though. `privilege_delta` is not a probability, and EPSS already uses exploit-code availability among its inputs, so multiplying by `exploit_availability` risks double-counting. D-029 marks this as open and a viva risk.
 
-**Why it matters:** Prevents a future developer from "fixing" the graph's path score to be additive without understanding the distinction. Must be clearly explained in the final report.
+**Why it matters:** The graph owner must justify the product as a heuristic (and handle the double-counting) or switch formulation before Layer 3 path scoring lands.
 
 ---
 
@@ -80,7 +80,7 @@ Six new decisions were added to [`DECISIONS.md`](file:///e:/SeekThreat/SeekThrea
 
 **Problem:** `docs/02-architecture.md` line 72 places "ERS scoring, chokepoint analysis" under the graph layer. But ERS is computed in `services/enrichment/ers.py`.
 
-**Decision:** ERS *computation* is in enrichment (it depends on CVSS/EPSS/KEV — enrichment data). ERS *consumption* for path ranking is in the graph layer. The architecture diagram describes where ERS *influences output*, not where the calculation runs. No code change needed.
+**Decision:** ERS *computation* is in enrichment (it depends on CVSS/EPSS/KEV — enrichment data). ERS *consumption* for path ranking is in the graph layer. This moves ERS ownership from `services/graph` to `services/enrichment` and **diverges from `docs/00-scope.md`**, which lists ERS under Layer 3. D-028 records the divergence. The `docs/02-architecture.md` module map and pipeline comment were updated to match.
 
 **Why it matters:** If left unresolved, a future developer might move `ers.py` into `services/graph/`, inverting the module dependency (graph cannot import enrichment per the module map in `docs/02-architecture.md`).
 
@@ -124,15 +124,15 @@ Computed ERS under three profiles:
 | Apache traversal | 8.35 | 8.79 | 9.08 |
 | express-fileupload | 4.74 | 3.42 | 2.54 |
 
-**Result: ranking is fully stable.** Top-3 identical across all profiles. #4/#5 order preserved. The weights do not materially change what gets fixed first — this is the viva-defensible claim.
+**Result (corrected): the ranking is not fully stable.** Under exploitation-heavy weights, Apache traversal (9.08) overtakes Jenkins CLI (8.86). Ranks #1, #2 and #5 hold across all three profiles; #3 and #4 swap. Two synthetic probe cases (high CVSS / low EPSS vs low CVSS / high EPSS, both non-KEV) also flip order between profiles. The numbers come from `python evals/ers_sensitivity.py`, and D-027 has the full table.
 
-> ⚠️ These scores are from **synthetic fixture data**, not real measurements. When real mirror data is loaded, absolute scores will differ. The **ranking stability** is the property that matters.
+> These scores are from **synthetic fixture data**, not real measurements. With real mirror data, both the scores and the orderings may differ.
 
 #### Part 3: KEV circularity resolution
 
 D-008 said KEV "validates" the ranking. With KEV as a 25% input, using it to also validate is circular.
 
-**Resolution chosen (option a):** KEV stays as an input. Validation uses ExploitDB/Metasploit corroboration — independent of KEV. "Do top-N ERS-ranked CVEs have public exploits?" is a non-circular question. This validation is deferred to Level 3 (source implementations) and Level 4 (eval).
+**Resolution chosen (option a):** KEV stays as an input. Validation uses ExploitDB/Metasploit corroboration. This is only **partly** independent of ERS: EPSS (35% of ERS) uses exploit-code availability among its inputs, so a check against ExploitDB/Metasploit partly re-measures an input. The validation has not been run. Level 4 measured coverage only, so this is an open follow-up (D-027).
 
 D-008's "not as a training target" clause unchanged. Only the "validates the ranking" claim is updated to reflect that validation uses a different signal.
 
@@ -172,10 +172,10 @@ Same CRLF normalization. `ruff format` applied.
 ## Level 1 checklist — final status
 
 - [x] D-008 weight rationale written (D-027)
-- [x] Sensitivity analysis table written (D-027, 3 profiles × 5 CVEs)
-- [x] KEV circularity resolved (D-027, option a — ExploitDB/Metasploit as validator)
+- [x] Sensitivity analysis table written (D-027, 3 profiles × 5 CVEs; stability claim corrected, reproducible via `evals/ers_sensitivity.py`)
+- [x] KEV circularity addressed (D-027, option a — ExploitDB/Metasploit as validator; partly circular via EPSS, validation not yet run)
 - [x] ERS placement reconciled (D-028 — computation in enrichment, consumption in graph)
-- [x] Multiplicative path score reconciled (D-029 — EPSS × non-CVSS is valid)
+- [ ] Multiplicative path score reconciled (D-029 — within the letter of the EPSS × CVSS ban; soundness open, viva risk)
 - [x] Composite PK decision logged (D-031)
 - [x] in_kev=None semantics logged (D-030)
 - [x] /findings API contract logged (D-032)

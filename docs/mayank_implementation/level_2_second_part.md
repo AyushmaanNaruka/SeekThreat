@@ -78,7 +78,7 @@ D-008 exists but says "rationale and sensitivity analysis still to be documented
 
 `services/enrichment/README.md` rule 3: "Never multiply EPSS by CVSS."
 
-**Resolution:** Rule 3 specifically bans `EPSS × CVSS`. The graph's path score multiplies `EPSS × exploit_availability × privilege_delta` — different operands, different semantics (conditional probability along a path, not severity weighting). Log whether this distinction holds.
+**Resolution:** Rule 3 specifically bans `EPSS × CVSS`. The graph's path score multiplies `EPSS × exploit_availability × privilege_delta` — different operands, so it is within the letter of the rule. (Review note: it is not a conditional probability; `privilege_delta` is not a probability and EPSS already uses exploit availability. D-029 records this as open.) Log whether this distinction holds.
 
 - [ ] Log ruling in `DECISIONS.md`.
 
@@ -279,7 +279,7 @@ Document in `evals/enrichment_coverage.md` (new file):
 
 ### 4.4 — Run and report
 
-- [x] Execute harness. Record actual numbers.
+- [x] Execute harness. (Only on synthetic fixtures so far: a smoke test, not a measurement.)
 - [x] Write results to `evals/results/enrichment_coverage_results.md`:
   - Date measured, dataset size, per-field coverage table, overall coverage improvement.
 - [x] **No placeholder numbers.** Per `evals/README.md`: if a result cannot be measured yet (e.g., because a mirror file is not downloaded), say so explicitly. Do not fabricate.
@@ -287,9 +287,9 @@ Document in `evals/enrichment_coverage.md` (new file):
 ### Level 4 checklist
 
 - [x] Eval harness exists and runs offline
-- [x] Results are real (actually run), not estimated
+- [ ] Results measured on real mirrors (the committed results are a synthetic smoke test; no real coverage number exists yet)
 - [x] Results committed to `evals/results/`
-- [x] Layer 2 "done when" criterion addressed
+- [ ] Layer 2 "done when" criterion met (needs a real-mirror run; see D-035)
 - [x] CI green
 
 ---
