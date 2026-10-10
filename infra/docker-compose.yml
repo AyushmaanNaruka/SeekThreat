@@ -93,6 +93,10 @@ services:
       # (localhost, via the published ports below) and compose alike.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
       REDIS_URL: redis://redis:6379/0
+      # Feed mirrors: written by the sync task (worker), read by api and worker.
+      # One named volume at one path, so the writer and the readers agree.
+      ENRICHMENT_CACHE_DIR: /data/enrichment_cache
+    volumes: [enrichmentcache:/data/enrichment_cache]
     ports: ["127.0.0.1:8000:8000"]
     depends_on:
       postgres:
@@ -114,6 +118,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
       REDIS_URL: redis://redis:6379/0
+      ENRICHMENT_CACHE_DIR: /data/enrichment_cache
+    volumes: [enrichmentcache:/data/enrichment_cache]
     depends_on:
       postgres:
         condition: service_healthy
@@ -123,7 +129,31 @@ services:
         condition: service_completed_successfully
     command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans,enrichment
 
+  # Celery beat: the scheduler that enqueues the daily feed sync (02:00 UTC,
+  # apps/api/worker.py). Run exactly one. It only enqueues; the worker above runs
+  # the task and is the only process that reaches the network for feeds.
+  beat:
+    profiles: ["core"]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
+      REDIS_URL: redis://redis:6379/0
+      ENRICHMENT_CACHE_DIR: /data/enrichment_cache
+    volumes: [enrichmentcache:/data/enrichment_cache]
+    depends_on:
+      redis:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    command: celery -A apps.api.worker.celery_app beat --loglevel=info --schedule=/tmp/celerybeat-schedule
+
 volumes:
   pgdata:
+  enrichmentcache:
   neo4jdata:
   ollamadata:

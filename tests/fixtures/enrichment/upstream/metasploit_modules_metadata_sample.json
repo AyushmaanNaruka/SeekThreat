@@ -1,0 +1,41 @@
+{
+  "exploit_multi/http/log4shell_header_injection": {
+    "name": "Log4Shell HTTP Header Injection",
+    "fullname": "exploit/multi/http/log4shell_header_injection",
+    "type": "exploit",
+    "references": [
+      "CVE-2021-44228"
+    ],
+    "mod_time": "2026-03-11 21:31:08 +0000"
+  },
+  "auxiliary_scanner/http/log4shell_scanner": {
+    "name": "Log4Shell HTTP Scanner",
+    "fullname": "auxiliary/scanner/http/log4shell_scanner",
+    "type": "auxiliary",
+    "references": [
+      "CVE-2021-44228",
+      "CVE-2021-45046",
+      "URL-https://attackerkb.com/topics/in9sPR2Bzt/cve-2021-44228-log4shell/rapid7-analysis",
+      "URL-https://logging.apache.org/log4j/2.x/security.html"
+    ],
+    "mod_time": "2022-04-06 09:04:26 +0000"
+  },
+  "exploit_android/local/janus": {
+    "name": "Android Janus APK Signature bypass",
+    "fullname": "exploit/android/local/janus",
+    "type": "exploit",
+    "references": [
+      "CVE-2017-13156",
+      "URL-https://www.guardsquare.com/en/blog/new-android-vulnerability-allows-attackers-modify-apps-without-affecting-their-signatures",
+      "URL-https://github.com/V-E-O/PoC/tree/master/CVE-2017-13156"
+    ],
+    "mod_time": "2025-04-26 01:28:35 +0000"
+  },
+  "payload_cmd/unix/reverse_bash": {
+    "name": "Unix Command Shell, Reverse TCP (/dev/tcp)",
+    "fullname": "payload/cmd/unix/reverse_bash",
+    "type": "payload",
+    "references": [],
+    "mod_time": "2026-04-09 15:08:23 +0000"
+  }
+}

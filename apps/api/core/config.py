@@ -9,6 +9,12 @@ from typing import Annotated, Any
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
+#: Must equal services.enrichment.sources.sync.DEFAULT_CACHE_DIR (the FeedSyncer
+#: default). Not imported from there: importing services.enrichment from config is
+#: circular (services.enrichment -> service -> apps.api.db -> config). The equality
+#: is enforced by tests/unit/test_enrichment_wiring.py and test_feed_sync.py.
+DEFAULT_ENRICHMENT_CACHE_DIR = Path("data") / "enrichment_cache"
+
 
 def _normalize_db_url(url: str) -> str:
     """Ensure PostgreSQL URLs use the psycopg (psycopg3) driver for SQLAlchemy."""
@@ -62,12 +68,20 @@ class Settings(BaseSettings):
         ),
     )
 
-    enrichment_cache_dir: Path | None = Field(
+    enrichment_cache_dir: Path = Field(
+        default=DEFAULT_ENRICHMENT_CACHE_DIR,
+        description=(
+            "Directory holding the local enrichment feed mirrors written by the feed "
+            "sync job and read by EnrichmentService. Read from ENRICHMENT_CACHE_DIR; "
+            "defaults to the same directory FeedSyncer writes to (data/enrichment_cache), "
+            "so the writer and the readers can never disagree."
+        ),
+    )
+    nvd_api_key: str | None = Field(
         default=None,
         description=(
-            "Directory holding the local enrichment feed mirrors (KEV, EPSS, CVE). "
-            "Read from ENRICHMENT_CACHE_DIR. If unset, EnrichmentService uses its "
-            "own default source configuration."
+            "Optional NVD API key (NVD_API_KEY) for the feed sync job's targeted NVD "
+            "lookups. Without one NVD allows 5 requests per 30 seconds."
         ),
     )
 

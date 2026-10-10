@@ -7,7 +7,7 @@ Priority 3 source per services/enrichment/README.md:
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 
 from packages.schema.models.finding import EnrichmentValue
 from packages.schema.models.provenance import Attributed, Confidence, Source
@@ -91,7 +91,7 @@ class CISAKevSource(BaseEnrichmentSource[CISAKevRecord]):
 
         if isinstance(data, dict):
             self.catalog_date = parse_feed_date(data.get("dateReleased"))
-        as_of = self.catalog_date or datetime.now(UTC)
+        as_of = self.catalog_date or self.default_retrieved_at()
 
         records: dict[str, CISAKevRecord] = {}
         vuln_list = data.get("vulnerabilities", []) if isinstance(data, dict) else data
@@ -145,5 +145,5 @@ class CISAKevSource(BaseEnrichmentSource[CISAKevRecord]):
             is_in_kev=False,
             source=self.source,
             confidence=Confidence.HIGH,
-            retrieved_at=self.catalog_date or datetime.now(UTC),
+            retrieved_at=self.catalog_date or self.default_retrieved_at(),
         )

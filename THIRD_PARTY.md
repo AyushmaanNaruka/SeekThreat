@@ -43,6 +43,14 @@ dependency manifests.
 | Nuclei Templates | MIT (ProjectDiscovery) | Vendored | Official vulnerability template archive pinned in container image | Mayank | 2026-09-25 |
 | Greenbone / OpenVAS | GPL | Service | Run as container, GMP API via python-gvm | | |
 | Foundation-Sec-8B-Reasoning | Open weights | Service | Local model serving | | |
+| CISA Vulnrichment | CC0-1.0 (cisagov/vulnrichment LICENSE) | Data | Per-CVE files fetched for CVEs we have seen: SSVC decision points, CWE, CVSS fallback | Claude agent via GitHub licence API — human to confirm | 2026-10-11 |
+| CISA KEV catalog | CC0-1.0 (cisagov/kev-data LICENSE; no use of CISA logo / DHS seal or implied endorsement) | Data | Full catalog JSON mirrored daily; confirmed-exploitation flag, date added, ransomware use | Claude agent read LICENSE — human to confirm | 2026-10-11 |
+| FIRST EPSS | No licence stated; FIRST EPSS FAQ: "Attribution is requested when EPSS data is used in publications or products." | Data | Daily bulk CSV (`epss.empiricalsecurity.com/epss_scores-current.csv.gz`, per first.org/epss/data). Attribute FIRST EPSS SIG / Empirical Security in the report and UI | Claude agent read first.org FAQ + data page — human to confirm | 2026-10-11 |
+| CVE.org (CVE Services) | CVE Program Terms of Use — *TO VERIFY* (cve.org/Legal/TermsOfUse is a JS page; not read this session) | Data | Per-CVE CVE_RECORD from `cveawg.mitre.org/api/cve/{id}` for CVEs we have seen | | |
+| NVD API 2.0 | US Government work — *TO VERIFY* NVD terms of use and required "not endorsed by the NVD" notice (developer pages not retrievable this session) | Data | Per-CVE records from `services.nvd.nist.gov/rest/json/cves/2.0?cveId=`; 5 req/30 s without API key (per NVD docs, not re-verified) | | |
+| ENISA EUVD | *TO VERIFY* (EUVD terms of use not found; earlier "Open Data / EUPL" entry was unverified) | Data | Per-CVE lookup via `euvdservices.enisa.europa.eu/api/search?text={id}`; base score/vector/version, description | | |
+| ExploitDB (OffSec) | GPL-2.0-or-later (repository, GitLab licence API) | Data | Data only: derived CVE→EDB-ID facts from `files_exploits.csv` `id`/`codes` columns; no files or code copied (Hard Rule 4) | Claude agent via GitLab licence API — human to confirm | 2026-10-11 |
+| Rapid7 Metasploit Framework | BSD-3-Clause (LICENSE, Rapid7) | Data | `modules_metadata_base.json`: CVE → exploit module `fullname` only, `type == "exploit"`; no module code (Hard Rule 4) | Claude agent read LICENSE — human to confirm | 2026-10-11 |
 
 ---
 

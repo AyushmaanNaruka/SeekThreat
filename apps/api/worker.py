@@ -7,6 +7,9 @@ Usage:
     # Start the worker (from project root):
     celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans,enrichment
 
+    # Start the scheduler (one instance only) for the daily feed sync:
+    celery -A apps.api.worker.celery_app beat --loglevel=info
+
     # In the API, import and use:
     from apps.api.tasks.scans import execute_scan
     execute_scan.delay(...)
@@ -15,6 +18,7 @@ Usage:
 from __future__ import annotations
 
 from celery import Celery
+from celery.schedules import crontab
 
 from apps.api.core.config import settings
 from services.scanners.nuclei_adapter import MAX_TIMEOUT_SECONDS
@@ -41,6 +45,7 @@ celery_app.conf.update(
     task_routes={
         "seekthreat.scans.execute": {"queue": "scans"},
         "seekthreat.enrichment.enrich": {"queue": "enrichment"},
+        "seekthreat.sync_feeds.run": {"queue": "enrichment"},
     },
     # Retry policy defaults (overridden per-task where needed)
     task_acks_late=True,
@@ -52,6 +57,17 @@ celery_app.conf.update(
     broker_transport_options={
         "visibility_timeout": MAX_TIMEOUT_SECONDS + VISIBILITY_TIMEOUT_MARGIN_SECONDS,
     },
+    # Celery beat: daily feed mirror sync at 02:00 UTC (timezone above is UTC).
+    # Network is ONLY permitted inside this scheduled task (Rule 5,
+    # services/enrichment/README.md). Beat runs as its own process -- the `beat`
+    # service in infra/docker-compose.yml -- so exactly one scheduler fires it.
+    beat_schedule={
+        "sync-enrichment-feeds-daily": {
+            "task": "seekthreat.sync_feeds.run",
+            "schedule": crontab(hour=2, minute=0),
+            "options": {"queue": "enrichment"},
+        },
+    },
 )
 
 # Explicit import, not autodiscover_tasks(): Celery's autodiscovery treats each
@@ -61,3 +77,4 @@ celery_app.conf.update(
 # so execute_scan.delay() queued jobs no worker ever picked up.
 from apps.api.tasks import enrichment as _enrichment_tasks  # noqa: E402, F401
 from apps.api.tasks import scans as _scans_tasks  # noqa: E402, F401
+from apps.api.tasks import sync_feeds as _sync_feeds_tasks  # noqa: E402, F401

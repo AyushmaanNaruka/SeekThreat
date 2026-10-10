@@ -47,6 +47,306 @@ Newest first.
 
 ---
 
+### D-037 — Absence from exploit mirrors is medium-confidence False, not high
+**Date:** 2026-10-11
+**Decided by:** Ayushmaan (review of PR #18)
+**Type:** Reversal
+**Status:** Active
+
+**Decision**
+A CVE absent from a loaded ExploitDB or Metasploit mirror yields `has_public_exploit` / `has_metasploit_module` = False at MEDIUM confidence, noted "absence is not proof no exploit exists". An unloaded mirror, and any finding without a CVE ID, yields None (DERIVED/LOW, unknown). KEV absence stays HIGH-confidence False because KEV is an authoritative catalog of its own scope.
+
+**Why**
+ExploitDB and Metasploit index a subset of public exploits; a CVE missing from them can still have one (GitHub PoCs, vendor advisories, commercial kits). Reporting HIGH-confidence False overstated what the data shows. The old non-CVE note ("ExploitDB/Metasploit track only CVEs") was false: both index non-CVE entries; we simply look them up by CVE.
+
+**Impact on plan**
+Provenance confidence changes only; ERS inputs and eval signal classification (source + boolean) are unchanged.
+
+**Cost if we're wrong**
+Trivial; one confidence constant per field in `services/enrichment/fusion.py`.
+
+---
+
+### D-036 — Targeted per-CVE sync for record sources; full mirrors only for bounded catalogs
+**Date:** 2026-10-11
+**Decided by:** Ayushmaan (review of PR #18)
+**Type:** Divergence
+**Status:** Active — supersedes the download design in D-033
+
+**Decision**
+FeedSyncer mirrors CISA KEV (catalog JSON), FIRST EPSS (daily bulk CSV `epss_scores-current.csv.gz`), ExploitDB (`files_exploits.csv` id/codes only) and Metasploit (`modules_metadata_base.json`, `type == "exploit"` modules by `fullname`) in full. CVE.org (`cveawg.mitre.org/api/cve/{id}`), CISA Vulnrichment (per-CVE GitHub files), ENISA EUVD (`euvdservices.enisa.europa.eu/api/search?text={id}`, exact alias match) and NVD 2.0 (`?cveId=`) are synced per CVE, only for CVE IDs present in `enriched_findings` (plus any passed in), and merged into the existing mirror files keyed by CVE ID. The scheduled task (`seekthreat.sync_feeds.run`, 02:00 UTC via a dedicated `beat` compose service) syncs all eight sources every run.
+
+**Why**
+The original endpoints did not work: `api.first.org/data/v1/epss?all=true` returns 100 of ~385k rows; `cveawg.mitre.org/api/cve?state=PUBLISHED&resultsPerPage=1000` returns HTTP 400; `vulnrichment.json` does not exist (the repo is per-CVE files); `euvd.enisa.europa.eu/api/...` is the SPA, not the API. Mirroring CVE.org/Vulnrichment/EUVD/NVD whole means hundreds of thousands of records (and, for NVD, days of rate-limited requests without a key) for a platform that looks up the CVEs its scans found. Rejected: cvelistV5 bulk ZIPs (large, and covers only CVE.org); keeping the bulk endpoints (broken). NVD is now in the chain and synced, so the fallback chain is CVE.org -> Vulnrichment -> NVD -> EUVD -> derived (README rule 2 updated).
+
+**Impact on plan**
+Enrichment for a CVE first seen in a scan uses fallbacks until the next sync (daily, or on demand via the CLI `--cve`). Mirrors gain atomic writes with fsync, a shrink guard (refuse empty / <50% replacement), compact JSON, and a `.meta.json` sidecar (synced_at, source_url, record_count, sha256 of the written file; the sha256 records what was written, it does not validate against an upstream checksum). Readers use `synced_at` as provenance date when a record has none. Downloads are bounded (User-Agent, byte caps, timeouts, https-only redirects). Sync failures are reported per source, audited (`system:celery_beat` / `system:cli`) and fail the task. EUVD, CVE.org and NVD terms of use are still marked TO VERIFY in THIRD_PARTY.md.
+
+**Cost if we're wrong**
+Low. If whole-catalog coverage is needed (e.g. for eval cohorts not in enriched_findings), pass the IDs to the task or CLI, or add a bulk path for one source behind the same mirror format; readers do not change.
+
+---
+
+### D-035 — Enrichment coverage eval methodology: offline NVD-only baseline comparison
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+Enrichment coverage is evaluated offline by running SeekThreat's multi-source fusion engine and an NVD-only baseline engine over the CVE list in `evals/golden/enrichment_baseline.json` (50 CVEs, five hypothesised cohorts). The headline metric counts four intelligence fields: CVSS, CWE, description and EPSS. KEV membership and exploit availability are reported separately as "mirror loaded" plus positive-hit rate: a loaded mirror gives every CVE a definite True/False, so counting False as "filled" would only measure whether the file exists. Placeholders are excluded by provenance (`Source.DERIVED` / `Confidence.LOW`), never by value.
+
+**No coverage number has been measured yet.** The only committed run (`evals/results/`) is against the hand-authored fixtures in `tests/fixtures/enrichment/` (every file `_synthetic: true`) and is labelled as a synthetic smoke test of the harness. Its numbers describe which CVEs the fixtures happen to contain, not the platform.
+
+**Why**
+Layer 2 "Done When" requires coverage measured against an NVD-only baseline. Building the harness before real mirrors exist lets us check its logic offline. "Offline" here means enrichment README rule 5 ("Mirror sources locally. Don't hit APIs on the request path"): the harness reads local mirror files only and makes no network calls.
+
+An earlier version of this entry presented the fixture run's headline as a measurement. That was withdrawn because (a) the fixtures are synthetic; (b) most of the multi-source figure came from KEV and exploit fields counting a definite False as filled, which is 100% whenever the mirror file exists; and (c) the baseline has KEV, EPSS and exploit sources unloaded by construction, so its 0% on those fields is definitional, not a finding about NVD.
+
+Known limitation: the baseline engine parses only NVD CVSS, CWE and description. The real NVD API 2.0 also carries CISA KEV fields (`cisaExploitAdd`, `cisaActionDue`, `cisaRequiredAction`, `cisaVulnerabilityName`), which `NVDSource` does not parse. The earlier claim that NVD provides no KEV telemetry was wrong.
+
+**Impact on plan**
+`evals/enrichment_coverage.md` defines the metric. `evals/enrichment_coverage.py` is the harness. It detects synthetic mirrors from their `_synthetic` key (not the directory name) and, for real mirrors, records each file's sha256, mtime and `synced_at`. The golden dataset is marked `"verification": "unverified"`, and its unchecked `expected_sources` / `notes` fields were removed. A real number needs dated real mirrors (D-033 sync) and a verified CVE list. Until then `evals/README.md` lists the metric as not yet measured, and the Layer 2 "Done When" criterion is not met.
+
+**Cost if we're wrong**
+Moderate. If the four-field headline or the provenance-only placeholder rule is the wrong definition, the harness and its tests change, and any number already quoted from it has to be withdrawn. If the cohort hypotheses are wrong, per-cohort results mean nothing until the dataset is verified.
+---
+
+### D-034 — Real local-mirror readers for secondary sources and exploit availability signals
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+Implement real local-mirror readers and synchronization for secondary intelligence sources:
+1. `VulnrichmentSource` (Priority 2): CISA Vulnrichment SSVC decision points, CWE, and fallback CVSS v3.1/v4.0.
+2. `EUVDSource` (Priority 6): ENISA European Vulnerability Database fallback metrics.
+3. `ExploitDBSource` (Priority 9) & `MetasploitSource` (Priority 10): Exploit availability signals for finding enrichment and Layer 3 attack path scoring.
+
+Strictly enforce CLAUDE.md Hard Rule 4: ExploitDB records contain ONLY exploit IDs (`EDB-XXXXX`); Metasploit records contain ONLY module names (`exploit/...`). No exploit bodies, Ruby scripts, payloads, or execution harnesses are ingested, stored, or executed anywhere in the codebase.
+
+**Why**
+In Layer 2 first part, secondary sources were stubs (`load()` merely set `_loaded = True`), meaning the fallback chain in `FusionEngine` could only jump straight from CVE.org to derived placeholders. Real implementations enable a complete 4-tier fallback: `CVE.org -> Vulnrichment -> EUVD -> Derived`.
+Furthermore, Layer 3 (Graph / Path Engine) requires an exploit availability signal (`EPSS × exploit availability × privilege delta`). Exposing `has_public_exploit` / `exploit_ids` and `has_metasploit_module` / `metasploit_modules` as attributed enrichment fields provides this data deterministically without violating Hard Rule 4.
+
+**Impact on plan**
+`services/enrichment/sources/secondary.py` is now fully operational with dedicated synthetic fixtures. `FeedSyncer` supports syncing all 7 feeds (`include_secondary=True` or `--source vulnrichment|euvd|exploitdb|metasploit`). Zero new third-party Python dependencies needed (standard library `csv`, `json`, `re` suffice).
+
+**Cost if we're wrong**
+Low. All sources inherit `BaseEnrichmentSource` contract and lazy loading. Empty or absent mirror files degrade gracefully to `Confidence.LOW` / `Source.DERIVED` without throwing runtime errors or creating false negatives.
+
+---
+
+### D-033 — Off-request-path feed synchronization via FeedSyncer, Celery Beat, and CLI
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active — download design superseded by D-036
+
+**Decision**
+Download external intelligence feeds (CISA KEV, FIRST EPSS v4, CVE.org) strictly off the request path using `FeedSyncer`, scheduled daily via Celery beat (`seekthreat.sync_feeds.run`) on the `enrichment` queue and available on-demand via standalone CLI (`python -m services.enrichment.sync_feeds`). Downloads delegate to `SourceSynchronizer.sync_from_data()` for atomic file writes into `ENRICHMENT_CACHE_DIR`.
+
+**Why**
+Adheres strictly to Rule 5 of `services/enrichment/README.md` ("Mirror sources locally. Don't hit APIs on the request path"). Network calls are forbidden inside `EnrichmentService` and `FusionEngine`. Providing both Celery Beat (continuous production worker) and CLI (CI setup, container bootstrapping, manual sync) allows mirrors to be refreshed independently. Using `httpx` (already in `requirements.txt` v0.28.1) introduces zero new external dependencies.
+
+**Impact on plan**
+Implements Level 2 of Layer 2 second part. Adds `seekthreat.sync_feeds.run` Celery task and `sync-enrichment-feeds-daily` schedule in `apps/api/worker.py`.
+
+**Cost if we're wrong**
+Low. Mirror file contracts (`MIRROR_FILENAMES`) isolate feed download mechanics from source parsers. Switching transport or schedule requires no changes to fusion logic.
+
+---
+
+### D-032 — /findings API contract: engagement_id required on all calls
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`GET /findings/{finding_id}` requires `?engagement_id=...` as a query parameter.
+`POST /findings/enrich/batch` requires `engagement_id` in the JSON body.
+Both are validated against an existing engagement row before any enrichment or retrieval occurs.
+
+**Why**
+Authorization scoping (CLAUDE.md): every scan and query must be logged with actor, target, and engagement reference. Without `engagement_id`, the audit event has no authorization reference to log. The composite PK `(engagement_id, finding_id)` on `enriched_findings` (D-031) also means a `finding_id` alone is not unique — the engagement scope is needed to look anything up. This is a breaking change from a hypothetical global `/findings/{id}` contract.
+
+**Impact on plan**
+The frontend must pass `engagement_id` through all findings calls (tracked in Level 5 dashboard work). The API client in `apps/web/lib/api.ts` has no findings methods yet — wiring them correctly is part of that level.
+
+**Cost if we're wrong**
+Low. `engagement_id` is additive — callers that already have it pass it through. Removing the requirement later is a one-line router change.
+
+---
+
+### D-031 — Composite PK (engagement_id, finding_id) on enriched_findings
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+The `enriched_findings` table uses a composite primary key of `(engagement_id, finding_id)`. `finding_id` alone is not unique. Upserts de-duplicate per engagement.
+
+**Why**
+D-007 established that every row carries an `engagement_id`. Enrichment is produced per-engagement: the same `finding_id` string could appear in two different engagements (different targets, different observations) and legitimately produce different enriched results. A global PK on `finding_id` would either reject valid re-enrichment or silently overwrite data from a different engagement. The composite key makes the scoping structural rather than enforced by application code.
+
+**Impact on plan**
+Upsert logic must include `engagement_id` in the conflict target. `GET /findings/{id}` needs `engagement_id` to resolve the row (D-032).
+
+**Cost if we're wrong**
+Low. If global uniqueness of `finding_id` is later proven correct, the constraint is a migration that drops the composite and adds a simple PK.
+
+---
+
+### D-030 — in_kev=None means "unknown", not "confirmed absent"
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`in_kev` is `None` only when the KEV mirror is not loaded. A CVE checked against a loaded catalog gets a definite answer. Behaviour of `FusionEngine._kev_fields`:
+
+| KEV mirror | CVE listed | `in_kev` | Provenance |
+|---|---|---|---|
+| Not loaded (file missing, unreadable, or empty catalog) | n/a | `None` | `Source.DERIVED` / `Confidence.LOW`, note "KEV mirror not loaded; KEV status unknown" |
+| Loaded | No | `False` | `Source.KEV` / `Confidence.HIGH` |
+| Loaded | Yes | `True` | `Source.KEV` / `Confidence.HIGH` |
+
+Findings with no CVE IDs get `False` attributed `Source.DERIVED` / `Confidence.HIGH` (KEV lists only CVEs). The ERS KEV component explains `None` as "unknown" and applies zero boost. It never claims the CVE is confirmed absent from KEV.
+
+**Why**
+"Mirror not loaded" and "checked KEV and not listed" mean different things. Conflating them would let a missing download quietly lower ERS scores by asserting a confident negative. In a viva, "your tool said this was not exploited in the wild — how do you know?" needs an honest answer. When the mirror is missing, that answer is "we don't know", not "no".
+
+**Impact on plan**
+`_kev_fields` checks `cisa_kev.is_loaded` before reading anything into a lookup miss. `_kev_component` in `ers.py` handles the `None` branch (zero boost, derived provenance, "unknown" explanation). An earlier version of this entry said a CVE missing from a *loaded* mirror also yields `None`. That was wrong, and the table above matches the code.
+
+**Cost if we're wrong**
+Low to undo, with one open risk. A loaded but stale mirror still produces confident `False` values: confidence does not reflect mirror age. Fixing that means feeding the mirror's sync date (D-033) into the KEV provenance or confidence.
+---
+
+### D-029 — Multiplicative path score in graph layer does not violate the EPSS × CVSS prohibition
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`services/graph/README.md` describes a path score of `EPSS × exploit_availability × privilege_delta`. This multiplication does not break the letter of `services/enrichment/README.md` rule 3 ("Never multiply EPSS by CVSS"), because neither of the other factors is CVSS. That is the only claim this entry makes. **Whether the product is a sound score is an open question and a known viva risk** (see below).
+
+**Why**
+Rule 3 bans `EPSS × CVSS`. EPSS is a probability of exploitation activity and CVSS is a severity descriptor, so their product is neither. (`docs/02-architecture.md` attributes this point to FIRST. We have not yet pinned the exact FIRST passage, and it must be cited before the viva.)
+
+The graph's path score avoids CVSS, but it is **not** a conditional probability decomposition. Earlier wording saying it was is withdrawn:
+- `privilege_delta` measures how much privilege an attacker gains along an edge. It is not a probability, so the product is a heuristic ranking score, not P(path is traversable).
+- **Double-counting risk:** EPSS already uses exploit-code availability (for example, public exploits in ExploitDB or Metasploit) among its model inputs. Multiplying EPSS by an `exploit_availability` factor counts that evidence twice.
+- `exploit_availability` is binary or ordinal. A zero factor zeroes the whole path, whatever its other evidence.
+
+**Impact on plan**
+No code change in this entry. Before Layer 3 path scoring lands, the graph owner must either (a) justify the product as a heuristic and document how double-counting is handled, or (b) switch to an additive or otherwise non-overlapping formulation. Until then this is an open viva risk.
+
+**Cost if we're wrong**
+Contained. Path scoring lives inside `services/graph/`, and changing its formula does not touch enrichment or ERS. The bigger cost is in the viva, if the product gets defended as a probability when it isn't one.
+---
+
+### D-028 — ERS computation lives in enrichment (Layer 2); ERS consumption lives in graph (Layer 3)
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+ERS is computed by `services/enrichment/ers.py` and stored on `EnrichedFinding`. The graph layer (Layer 3) reads the stored ERS for path ranking and does not recompute it. This moves ERS ownership from `services/graph` to `services/enrichment`.
+
+**This diverges from the scope.** `docs/00-scope.md` lists ERS in the Layer 3 row ("graph, rules, paths, ERS, chokepoints", November), and the original `docs/02-architecture.md` module map gave `services/graph` ownership of ERS. ERS computation is now Layer 2 work. `docs/00-scope.md` is left as the original scope record and this entry records the divergence. `docs/02-architecture.md` is updated to match: the module map puts ERS under `services/enrichment`, `services/graph` consumes the stored score, and the pipeline comment says "ERS-based ranking".
+
+**Why**
+ERS depends only on enrichment data (CVSS, EPSS, KEV). Computing it in the graph layer would mean `services/graph` importing from `services/enrichment`, which the module map forbids (both may import only `schema`). Storing ERS on `EnrichedFinding` gives the graph a precomputed field and keeps dependencies flowing one way.
+
+**Impact on plan**
+ERS computation and its sensitivity check (D-027, `evals/ers_sensitivity.py`) move from November's Layer 3 work into October's Layer 2. The `ers.py` code was already in enrichment. The change is in ownership and docs. Layer 3 will read `enriched_finding.ers.value` for ranking.
+
+**Cost if we're wrong**
+Low. If the graph needs graph-specific inputs such as a reachability factor, it can combine the stored ERS with them in `services/graph` without changing the enrichment computation.
+---
+
+### D-027 — D-008 addendum: weight rationale, sensitivity analysis, and KEV circularity resolution
+**Date:** 2026-10-05
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+This entry extends D-008, which committed to hand-tuned, documented ERS weights but deferred the rationale and the sensitivity analysis. It provides both and resolves the circular-validation concern with KEV.
+
+#### Weight rationale
+
+ERS combines three additive components. Each component value is on a [0, 10] scale before weighting. Weights sum to 1.0, so the final score is in [0, 10].
+
+| Component | Weight | Component value (0-10) | Reasoning |
+|-----------|--------|-----------------|-----------|
+| CVSS Base Score | **0.40** | `cvss_score` | CVSS is the most established, most widely cited severity descriptor, so it should dominate. But a CVSS 10 with no exploitation history is less urgent than an actively exploited CVSS 7.5, so the weight is 40%, not 60% or more. |
+| EPSS v4 probability | **0.35** | `epss_probability × 10` | EPSS estimates the probability of exploitation activity in the next 30 days. It is the most operationally actionable signal. 35% puts it close to CVSS on purpose: "is someone actually exploiting this?" matters almost as much as "how bad is it if they do?" |
+| CISA KEV membership | **0.25** | `10 if in KEV else 0` | KEV membership is a binary, high-confidence signal of confirmed active exploitation. It is added, not multiplied (D-008 forbids multiplying). With a positive weight, a KEV-listed CVE always scores higher than an otherwise identical non-KEV CVE, but KEV alone contributes at most 2.5 points. |
+
+The formula: `ERS = cvss_score × 0.40 + (epss × 10) × 0.35 + (10 if KEV else 0) × 0.25`
+
+#### Sensitivity analysis
+
+Produced by `python evals/ers_sensitivity.py` (tested in `tests/unit/test_ers_sensitivity.py`). The script calls `services.enrichment.ers.calculate_ers` with `ERSWeights` for each profile. Inputs for the five CVEs come from the multi-source fusion engine over the **synthetic** fixtures in `tests/fixtures/enrichment/`, which are hand-authored and not real feed values. The two `SYN-*` rows are hand-chosen probe inputs, not CVEs, added because all five fixture CVEs except one are KEV-listed with high EPSS, so they barely separate the profiles. Nothing below is a measurement.
+
+| Profile | w_cvss | w_epss | w_kev |
+|---|---|---|---|
+| severity_heavy | 0.60 | 0.25 | 0.15 |
+| balanced (current) | 0.40 | 0.35 | 0.25 |
+| exploitation_heavy | 0.25 | 0.50 | 0.25 |
+
+Script output:
+
+| Item | Label | CVSS | EPSS | KEV | severity_heavy | balanced | exploitation_heavy |
+|---|---|---|---|---|---|---|---|
+| CVE-2021-44228 | Log4Shell | 10 | 0.97543 | yes | 9.94 | 9.91 | 9.88 |
+| CVE-2022-22947 | Spring Gateway | 9.8 | 0.8951 | yes | 9.62 | 9.55 | 9.43 |
+| CVE-2024-23897 | Jenkins CLI | 9.8 | 0.7812 | yes | 9.33 | 9.15 | 8.86 |
+| CVE-2021-41773 | Apache traversal | 7.5 | 0.9412 | yes | 8.35 | 8.79 | 9.08 |
+| CVE-2020-7699 | express-fileupload | 7.3 | 0.1425 | no | 4.74 | 3.42 | 2.54 |
+| SYN-HIGH-CVSS | high CVSS / low EPSS / non-KEV | 9.8 | 0.02 | no | 5.93 | 3.99 | 2.55 |
+| SYN-HIGH-EPSS | low CVSS / high EPSS / non-KEV | 5.3 | 0.9 | no | 5.43 | 5.27 | 5.83 |
+
+Rank order of the five fixture CVEs (highest first):
+
+- severity_heavy: Log4Shell > Spring Gateway > Jenkins CLI > Apache traversal > express-fileupload
+- balanced: Log4Shell > Spring Gateway > Jenkins CLI > Apache traversal > express-fileupload
+- exploitation_heavy: Log4Shell > Spring Gateway > **Apache traversal > Jenkins CLI** > express-fileupload
+
+**Ranking stability (corrected).** An earlier version of this entry called the ranking "fully stable", with "no reordering". The table above shows otherwise. Under the exploitation-heavy profile, Apache traversal (9.08) overtakes Jenkins CLI (8.86). Ranks #1, #2 and #5 hold across all three profiles. Ranks #3 and #4 swap when EPSS is weighted at 0.50.
+
+The probe rows show the weights can change which non-KEV finding comes first. The high-CVSS/low-EPSS case outranks the low-CVSS/high-EPSS case under severity_heavy (5.93 vs 5.43). The order flips under balanced (3.99 vs 5.27) and exploitation_heavy (2.55 vs 5.83). So the choice of weights matters most for the non-KEV middle of the list, where these synthetic inputs give no evidence about which order is right.
+
+What can be defended: on these synthetic inputs, the top two and the bottom one do not depend on the profile, and the current balanced profile already ranks the high-EPSS probe above the high-CVSS probe. What cannot be claimed: that the weights "do not materially change what gets fixed first". They do, for mid-ranked and non-KEV findings. With real mirror data, both the scores and the orderings may differ.
+
+#### KEV circularity resolution
+
+D-008 originally said KEV "validates" the ranking. With KEV now a 25% component of ERS, using it to also validate is circular.
+
+**Resolution (option a):** KEV remains an ERS input. Validation uses a separate signal: "do the top-N ERS-ranked CVEs have public ExploitDB entries or Metasploit modules?"
+
+**This validation is only partly independent.** EPSS carries 35% of ERS and is itself a model whose inputs include exploit-code availability (for example, public exploits in ExploitDB or Metasploit). A high-ERS CVE is therefore partly high *because* exploit code exists, so checking it against ExploitDB/Metasploit partly re-measures an input. The check still carries some information (the CVSS and KEV components do not use it), but a positive result cannot be presented as independent confirmation. Separating the two needs either an ERS variant without EPSS for the validation run, or a validation signal EPSS does not use.
+
+D-008's original sentence "KEV membership is used to *validate* the resulting ranking, not as a training target" is amended: KEV is an *input* to ERS. Validation uses ExploitDB/Metasploit corroboration, with the caveat above. The "not as a training target" clause is unchanged.
+
+**Open follow-up:** this entry originally said the ExploitDB/Metasploit validation "will be measured in the Level 4 eval". It was not. Level 4 (`evals/enrichment_coverage.py`, D-035) measures enrichment coverage only and does not rank anything by ERS. ERS validation has not been run and remains open.
+
+**Impact on plan**
+No weight or code changes. `evals/ers_sensitivity.py` reproduces the sensitivity table. ERS validation against exploit corroboration is an open follow-up, with the EPSS overlap above to be addressed in its design.
+
+**Cost if we're wrong**
+Low to change: `ERSWeights` keeps the weights separate from the computation. The higher cost is credibility. Claiming more stability or independence than the numbers support is the failure this correction fixes, and repeating it in the viva would be worse than the instability itself.
+---
+
+
 ### D-026 — Nuclei observations carry an nmap-shaped `endpoint` join key
 **Date:** 2026-09-26
 **Decided by:** Hritish

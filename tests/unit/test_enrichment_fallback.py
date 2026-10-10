@@ -11,10 +11,15 @@ from services.enrichment.sources import (
     CISAKevSource,
     CVEOrgSource,
     EUVDSource,
+    ExploitDBSource,
     FirstEPSSSource,
+    MetasploitSource,
     VulnrichmentSource,
 )
-from services.enrichment.sources.secondary import EUVDRecord, VulnrichmentRecord
+from services.enrichment.sources.secondary import (
+    EUVDRecord,
+    VulnrichmentRecord,
+)
 from tests.fixtures.findings.baseline_findings import (
     FINDING_APACHE_PATH_TRAVERSAL,
     FINDING_HEURISTIC_NO_CVE,
@@ -302,3 +307,157 @@ class TestRecordDatesAsRetrievedAt:
             .provenance.retrieved_at.isoformat()
             .startswith("2025-03-04T05:06:07")
         )
+
+
+class TestFullFallbackChainIntegration:
+    """Integration test verifying end-to-end fallback chain with real mirror files."""
+
+    def test_full_chain_file_fixtures(self) -> None:
+        """Verify: CVE.org -> Vulnrichment -> EUVD -> Derived."""
+        engine = FusionEngine(
+            cve_org=CVEOrgSource(cache_file=FIXTURES_DIR / "cve_org_sample.json"),
+            cisa_kev=CISAKevSource(cache_file=FIXTURES_DIR / "cisa_kev_sample.json"),
+            first_epss=FirstEPSSSource(cache_file=FIXTURES_DIR / "epss_v4_sample.json"),
+            vulnrichment=VulnrichmentSource(cache_file=FIXTURES_DIR / "vulnrichment_sample.json"),
+            euvd=EUVDSource(cache_file=FIXTURES_DIR / "euvd_sample.json"),
+        )
+
+        # 1. Primary: CVE-2021-44228 has CVSS in CVE.org
+        fields_cve_org = engine.fuse(_bare_finding("CVE-2021-44228"))
+        assert fields_cve_org["cvss_score"].value == 10.0
+        assert fields_cve_org["cvss_score"].provenance.source == Source.CVE_ORG
+        assert fields_cve_org["cvss_score"].provenance.confidence == Confidence.HIGH
+
+        # 2. Secondary fallback 1: CVE-2025-0001 is missing from CVE.org, present in Vulnrichment
+        fields_vuln = engine.fuse(_bare_finding("CVE-2025-0001"))
+        assert fields_vuln["cvss_score"].value == 8.1
+        assert fields_vuln["cvss_score"].provenance.source == Source.VULNRICHMENT
+        assert fields_vuln["cvss_score"].provenance.confidence == Confidence.MEDIUM
+        assert fields_vuln["cwe_ids"].value == ["CWE-79"]
+        assert fields_vuln["cwe_ids"].provenance.source == Source.VULNRICHMENT
+
+        # 3. Secondary fallback 2: CVE-2025-0002 missing from CVE.org
+        # and Vulnrichment, present in EUVD
+        fields_euvd = engine.fuse(_bare_finding("CVE-2025-0002"))
+        assert fields_euvd["cvss_score"].value == 6.5
+        assert fields_euvd["cvss_score"].provenance.source == Source.EUVD
+        assert fields_euvd["cvss_score"].provenance.confidence == Confidence.MEDIUM
+        assert fields_euvd["cwe_ids"].value == ["CWE-20"]
+        assert fields_euvd["cwe_ids"].provenance.source == Source.EUVD
+
+        # 4. Fallback 3: CVE-2025-9999 missing from all sources -> Derived placeholder
+        fields_derived = engine.fuse(_bare_finding("CVE-2025-9999"))
+        assert fields_derived["cvss_score"].value == 5.0
+        assert fields_derived["cvss_score"].provenance.source == Source.DERIVED
+        assert fields_derived["cvss_score"].provenance.confidence == Confidence.LOW
+        assert fields_derived["cwe_ids"].value == ["CWE-Other"]
+        assert fields_derived["cwe_ids"].provenance.source == Source.DERIVED
+
+
+class TestExploitAvailabilityIntegration:
+    """Integration test verifying ExploitDB and Metasploit metadata in FusionEngine."""
+
+    def test_exploit_signals_when_mirrors_loaded(self) -> None:
+        engine = FusionEngine(
+            cve_org=CVEOrgSource(cache_file=FIXTURES_DIR / "cve_org_sample.json"),
+            cisa_kev=CISAKevSource(cache_file=FIXTURES_DIR / "cisa_kev_sample.json"),
+            first_epss=FirstEPSSSource(cache_file=FIXTURES_DIR / "epss_v4_sample.json"),
+            exploitdb=ExploitDBSource(cache_file=FIXTURES_DIR / "exploitdb_sample.json"),
+            metasploit=MetasploitSource(cache_file=FIXTURES_DIR / "metasploit_sample.json"),
+        )
+
+        # Log4Shell has both ExploitDB and Metasploit
+        fields = engine.fuse(FINDING_LOG4SHELL)
+        assert fields["has_public_exploit"].value is True
+        assert fields["has_public_exploit"].provenance.source == Source.EXPLOITDB
+        assert fields["has_public_exploit"].provenance.confidence == Confidence.HIGH
+        assert fields["exploit_ids"].value == ["EDB-50592", "EDB-50593"]
+
+        assert fields["has_metasploit_module"].value is True
+        assert fields["has_metasploit_module"].provenance.source == Source.METASPLOIT
+        assert fields["has_metasploit_module"].provenance.confidence == Confidence.HIGH
+        assert fields["metasploit_modules"].value == [
+            "exploit/multi/http/log4shell_header_injection"
+        ]
+
+        # Moderate finding has no exploit entries in sample mirrors
+        fields_mod = engine.fuse(FINDING_NON_KEV_MODERATE)
+        assert fields_mod["has_public_exploit"].value is False
+        assert fields_mod["has_public_exploit"].provenance.source == Source.EXPLOITDB
+        assert fields_mod["has_metasploit_module"].value is False
+        assert fields_mod["has_metasploit_module"].provenance.source == Source.METASPLOIT
+
+    def test_exploit_signals_when_mirrors_unloaded(self) -> None:
+        """When exploit sources are unloaded, status is unknown (None, DERIVED/LOW)."""
+        engine = FusionEngine(
+            cve_org=CVEOrgSource(cache_file=FIXTURES_DIR / "cve_org_sample.json"),
+            cisa_kev=CISAKevSource(cache_file=FIXTURES_DIR / "cisa_kev_sample.json"),
+            first_epss=FirstEPSSSource(cache_file=FIXTURES_DIR / "epss_v4_sample.json"),
+            exploitdb=ExploitDBSource(cache_file=Path("/nonexistent/exploitdb.json")),
+            metasploit=MetasploitSource(cache_file=Path("/nonexistent/metasploit.json")),
+        )
+        fields = engine.fuse(FINDING_LOG4SHELL)
+        assert fields["has_public_exploit"].value is None
+        assert fields["has_public_exploit"].provenance.source == Source.DERIVED
+        assert fields["has_public_exploit"].provenance.confidence == Confidence.LOW
+
+        assert fields["has_metasploit_module"].value is None
+        assert fields["has_metasploit_module"].provenance.source == Source.DERIVED
+        assert fields["has_metasploit_module"].provenance.confidence == Confidence.LOW
+
+
+class TestExploitNegativesAreNotConfident:
+    """Absence from an exploit mirror is weak evidence; never HIGH-confidence False."""
+
+    def _engine(self) -> FusionEngine:
+        return FusionEngine(
+            cve_org=CVEOrgSource(cache_file=FIXTURES_DIR / "cve_org_sample.json"),
+            cisa_kev=CISAKevSource(cache_file=FIXTURES_DIR / "cisa_kev_sample.json"),
+            first_epss=FirstEPSSSource(cache_file=FIXTURES_DIR / "epss_v4_sample.json"),
+            exploitdb=ExploitDBSource(cache_file=FIXTURES_DIR / "exploitdb_sample.json"),
+            metasploit=MetasploitSource(cache_file=FIXTURES_DIR / "metasploit_sample.json"),
+        )
+
+    def test_absent_from_loaded_mirror_is_medium_false(self) -> None:
+        fields = self._engine().fuse(FINDING_NON_KEV_MODERATE)
+        edb = fields["has_public_exploit"]
+        assert edb.value is False
+        assert edb.provenance.source == Source.EXPLOITDB
+        assert edb.provenance.confidence == Confidence.MEDIUM
+        assert "absence is not proof" in (edb.provenance.note or "")
+
+        msf = fields["has_metasploit_module"]
+        assert msf.value is False
+        assert msf.provenance.source == Source.METASPLOIT
+        assert msf.provenance.confidence == Confidence.MEDIUM
+        assert "absence is not proof" in (msf.provenance.note or "")
+
+    def test_non_cve_finding_exploit_status_unknown(self) -> None:
+        fields = self._engine().fuse(FINDING_HEURISTIC_NO_CVE)
+        for key in ("has_public_exploit", "has_metasploit_module"):
+            attr = fields[key]
+            assert attr.value is None
+            assert attr.provenance.source == Source.DERIVED
+            assert attr.provenance.confidence == Confidence.LOW
+            assert "track only CVEs" not in (attr.provenance.note or "")
+
+
+class TestNVDInChain:
+    """NVD sits between Vulnrichment and EUVD and is reachable through fuse_finding."""
+
+    def test_fuse_finding_accepts_nvd(self) -> None:
+        from services.enrichment.fusion import fuse_finding
+        from services.enrichment.sources import NVDSource
+
+        nvd = NVDSource(cache_file=FIXTURES_DIR / "nvd_sample.json")
+        fields = fuse_finding(
+            _bare_finding("CVE-2021-44228"),
+            cve_org=CVEOrgSource(cache_file=None),
+            nvd=nvd,
+        )
+        assert fields["cvss_score"].provenance.source == Source.NVD
+
+    def test_placeholder_note_names_the_real_chain(self) -> None:
+        fields = get_test_engine().fuse(_bare_finding("CVE-2025-9999"))
+        note = fields["cvss_score"].provenance.note or ""
+        assert "NVD" in note

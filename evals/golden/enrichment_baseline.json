@@ -1,0 +1,266 @@
+{
+  "_synthetic": true,
+  "_comment": "Curated test inputs for the enrichment coverage harness. NOT measured results.",
+  "verification": "unverified — cohort assignments are hypotheses, not checked against live NVD",
+  "dataset_version": "1.1.0",
+  "description": "50 CVE IDs grouped into five hypothesised cohorts. The harness reads only cve_id and cohort; title is a human-readable label.",
+  "cohorts": [
+    "cohort_a_nvd_control",
+    "cohort_b_nvd_gap",
+    "cohort_c_cisa_kev",
+    "cohort_d_high_epss_no_nvd",
+    "cohort_e_weaponized_exploit"
+  ],
+  "items": [
+    {
+      "cve_id": "CVE-2021-44228",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Apache Log4j2 JNDI RCE (Log4Shell)"
+    },
+    {
+      "cve_id": "CVE-2021-41773",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Apache HTTP Server 2.4.49 Path Traversal & RCE"
+    },
+    {
+      "cve_id": "CVE-2020-7699",
+      "cohort": "cohort_a_nvd_control",
+      "title": "express-fileupload Prototype Pollution"
+    },
+    {
+      "cve_id": "CVE-2020-15778",
+      "cohort": "cohort_a_nvd_control",
+      "title": "OpenSSH scp Command Injection"
+    },
+    {
+      "cve_id": "CVE-2017-0144",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Microsoft SMBv1 Server Remote Code Execution (EternalBlue)"
+    },
+    {
+      "cve_id": "CVE-2019-0708",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Microsoft Remote Desktop Services RCE (BlueKeep)"
+    },
+    {
+      "cve_id": "CVE-2014-0160",
+      "cohort": "cohort_a_nvd_control",
+      "title": "OpenSSL TLS Heartbeat Information Disclosure (Heartbleed)"
+    },
+    {
+      "cve_id": "CVE-2017-5638",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Apache Struts 2 Jakarta Multipart Parser RCE"
+    },
+    {
+      "cve_id": "CVE-2019-11510",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Pulse Secure Pulse Connect Secure Arbitrary File Read"
+    },
+    {
+      "cve_id": "CVE-2018-13379",
+      "cohort": "cohort_a_nvd_control",
+      "title": "Fortinet FortiOS SSL VPN Path Traversal"
+    },
+    {
+      "cve_id": "CVE-2024-23897",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Jenkins CLI Arbitrary File Read"
+    },
+    {
+      "cve_id": "CVE-2025-0001",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Synthetic 2025 Enterprise Auth Bypass"
+    },
+    {
+      "cve_id": "CVE-2024-38077",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Windows Remote Desktop Licensing Service RCE (MadLicense)"
+    },
+    {
+      "cve_id": "CVE-2024-21413",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Microsoft Outlook Moniker RCE (MonikerLink)"
+    },
+    {
+      "cve_id": "CVE-2024-3094",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "XZ Utils Backdoor Supply Chain Compromise"
+    },
+    {
+      "cve_id": "CVE-2024-27198",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "JetBrains TeamCity Authentication Bypass"
+    },
+    {
+      "cve_id": "CVE-2024-1709",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "ConnectWise ScreenConnect Authentication Bypass"
+    },
+    {
+      "cve_id": "CVE-2024-21762",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Fortinet FortiOS Out-of-Bounds Write SSL-VPN"
+    },
+    {
+      "cve_id": "CVE-2024-3400",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "Palo Alto Networks PAN-OS GlobalProtect Command Injection"
+    },
+    {
+      "cve_id": "CVE-2024-4577",
+      "cohort": "cohort_b_nvd_gap",
+      "title": "PHP CGI Windows Argument Injection RCE"
+    },
+    {
+      "cve_id": "CVE-2022-22947",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Spring Cloud Gateway Code Injection"
+    },
+    {
+      "cve_id": "CVE-2023-34362",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Progress MOVEit Transfer SQL Injection"
+    },
+    {
+      "cve_id": "CVE-2023-2868",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Barracuda Email Security Gateway Command Injection"
+    },
+    {
+      "cve_id": "CVE-2023-22515",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Atlassian Confluence Broken Access Control"
+    },
+    {
+      "cve_id": "CVE-2023-22518",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Atlassian Confluence Data Center Improper Authorization"
+    },
+    {
+      "cve_id": "CVE-2023-46805",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Ivanti Connect Secure Authentication Bypass"
+    },
+    {
+      "cve_id": "CVE-2024-21887",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Ivanti Connect Secure Command Injection"
+    },
+    {
+      "cve_id": "CVE-2023-20198",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Cisco IOS XE Web UI Privilege Escalation"
+    },
+    {
+      "cve_id": "CVE-2023-20273",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Cisco IOS XE Web UI Command Injection"
+    },
+    {
+      "cve_id": "CVE-2023-27997",
+      "cohort": "cohort_c_cisa_kev",
+      "title": "Fortinet FortiOS Heap Overflow (XORtigate)"
+    },
+    {
+      "cve_id": "CVE-2022-22965",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Spring Framework RCE (Spring4Shell)"
+    },
+    {
+      "cve_id": "CVE-2025-0002",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Synthetic 2025 Cloud Storage Auth Bypass"
+    },
+    {
+      "cve_id": "CVE-2024-20656",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Microsoft Visual Studio Elevation of Privilege"
+    },
+    {
+      "cve_id": "CVE-2024-20931",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Oracle WebLogic Server T3/IIOP Deserialization"
+    },
+    {
+      "cve_id": "CVE-2024-26229",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows Kernel Elevation of Privilege"
+    },
+    {
+      "cve_id": "CVE-2024-26169",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows Error Reporting Service Elevation of Privilege"
+    },
+    {
+      "cve_id": "CVE-2024-30078",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows Wi-Fi Driver Remote Code Execution"
+    },
+    {
+      "cve_id": "CVE-2024-38112",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows MSHTML Platform Spoofing Vulnerability"
+    },
+    {
+      "cve_id": "CVE-2024-38063",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Windows TCP/IP Remote Code Execution (IPv6)"
+    },
+    {
+      "cve_id": "CVE-2024-38200",
+      "cohort": "cohort_d_high_epss_no_nvd",
+      "title": "Microsoft Office Spoofing Vulnerability"
+    },
+    {
+      "cve_id": "CVE-2020-1472",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Netlogon Elevation of Privilege (ZeroLogon)"
+    },
+    {
+      "cve_id": "CVE-2021-34527",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Windows Print Spooler RCE (PrintNightmare)"
+    },
+    {
+      "cve_id": "CVE-2021-26855",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server SSRF (ProxyLogon)"
+    },
+    {
+      "cve_id": "CVE-2021-34473",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server RCE (ProxyShell)"
+    },
+    {
+      "cve_id": "CVE-2022-26134",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Atlassian Confluence OGNL Injection"
+    },
+    {
+      "cve_id": "CVE-2022-30190",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Windows MSDT Arbitrary Code Execution (Follina)"
+    },
+    {
+      "cve_id": "CVE-2022-41040",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server SSRF (ProxyNotShell)"
+    },
+    {
+      "cve_id": "CVE-2022-41082",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Microsoft Exchange Server Remote PowerShell RCE"
+    },
+    {
+      "cve_id": "CVE-2023-0669",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "Fortra GoAnywhere MFT Deserialization RCE"
+    },
+    {
+      "cve_id": "CVE-2023-27350",
+      "cohort": "cohort_e_weaponized_exploit",
+      "title": "PaperCut MF/NG Improper Access Control"
+    }
+  ]
+}

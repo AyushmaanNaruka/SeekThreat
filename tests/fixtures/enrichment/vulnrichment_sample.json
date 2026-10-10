@@ -1,0 +1,37 @@
+{
+  "_synthetic": true,
+  "_comment": "SYNTHETIC test fixture shaped like CISA Vulnrichment data (SSVC decisions, CWE, CVSS). Values are illustrative, not real measurements. See README.md in this directory.",
+  "CVE-2021-44228": {
+    "cveId": "CVE-2021-44228",
+    "ssvc_decision": "Act",
+    "cvss_score": 10.0,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+    "cvss_version": "3.1",
+    "base_severity": "CRITICAL",
+    "cwe_ids": ["CWE-502"],
+    "description": "CISA Vulnrichment assessment for Log4j2 JNDI RCE.",
+    "updated_at": "2024-05-15T12:00:00Z"
+  },
+  "CVE-2021-41773": {
+    "cveId": "CVE-2021-41773",
+    "ssvc_decision": "Act",
+    "cvss_score": 7.5,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "cvss_version": "3.1",
+    "base_severity": "HIGH",
+    "cwe_ids": ["CWE-22"],
+    "description": "CISA Vulnrichment assessment for Apache HTTP Server path traversal.",
+    "updated_at": "2024-04-10T09:30:00Z"
+  },
+  "CVE-2025-0001": {
+    "cveId": "CVE-2025-0001",
+    "ssvc_decision": "Attend",
+    "cvss_score": 8.1,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "cvss_version": "3.1",
+    "base_severity": "HIGH",
+    "cwe_ids": ["CWE-79"],
+    "description": "CISA Vulnrichment fallback record for recent unreviewed vulnerability.",
+    "updated_at": "2025-02-01T15:00:00Z"
+  }
+}

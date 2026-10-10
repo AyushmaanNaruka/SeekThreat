@@ -3,6 +3,9 @@
  * Type-safe communication with the backend FastAPI service.
  */
 
+import { normalizeEnrichedFinding } from "./findings";
+import type { EnrichedFindingItem } from "./findings";
+
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
 
@@ -31,7 +34,7 @@ export interface ScanItem {
   scanner: "nmap" | "nuclei" | string;
   target: string;
   status: "pending" | "running" | "completed" | "failed";
-  options: Record<string, any>;
+  options: Record<string, unknown>;
   observation_count: number;
   artifact_id: string | null;
   error_message: string | null;
@@ -43,7 +46,7 @@ export interface CreateScanPayload {
   engagement_id: string;
   scanner: string;
   target: string;
-  options?: Record<string, any>;
+  options?: Record<string, unknown>;
 }
 
 export interface ObservationProvenance {
@@ -58,7 +61,7 @@ export interface ObservationItem {
   scanner: string;
   kind: string;
   subject: string;
-  attributes: Record<string, any>;
+  attributes: Record<string, unknown>;
   artifact_id: string;
   observed_at: string;
   provenance: ObservationProvenance | null;
@@ -69,6 +72,35 @@ export interface ObservationListResponse {
   total: number;
   limit: number;
   offset: number;
+}
+
+// ---------------------------------------------------------------------------
+// Enriched Findings & ERS (Level 5 Interfaces)
+// Types and normalization live in ./findings so they can be unit tested.
+// ---------------------------------------------------------------------------
+
+export { normalizeEnrichedFinding };
+export type {
+  AttributedValue,
+  ConfidenceLevel,
+  EnrichedFindingItem,
+  ERSInfo,
+  ProvenanceInfo,
+  ProvenanceSource,
+  ScoreComponentInfo,
+} from "./findings";
+
+export interface EnrichedFindingListResponse {
+  items: EnrichedFindingItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface BatchEnrichResult {
+  status: string;
+  count: number;
+  items?: EnrichedFindingItem[];
 }
 
 export class ApiError extends Error {
@@ -152,5 +184,85 @@ export const api = {
       `${API_BASE_URL}/scans/${encodeURIComponent(scanId)}/observations?limit=${limit}&offset=${offset}`
     );
     return handleResponse<ObservationListResponse>(res);
+  },
+
+  // -------------------------------------------------------------------------
+  // Enriched Findings API methods (Level 5)
+  // -------------------------------------------------------------------------
+
+  /**
+   * GET /findings/{id}?engagement_id=...
+   * Retrieve a single enriched finding record within an engagement.
+   */
+  async getFinding(findingId: string, engagementId: string): Promise<EnrichedFindingItem> {
+    const res = await fetch(
+      `${API_BASE_URL}/findings/${encodeURIComponent(findingId)}?engagement_id=${encodeURIComponent(
+        engagementId
+      )}`
+    );
+    const raw = await handleResponse<Record<string, unknown>>(res);
+    return normalizeEnrichedFinding(raw);
+  },
+
+  /**
+   * GET /findings?engagement_id=...&limit=...&offset=...
+   * Query paginated collection of enriched findings for the given engagement.
+   */
+  async getFindings(
+    engagementId: string,
+    limit = 50,
+    offset = 0,
+    signal?: AbortSignal
+  ): Promise<EnrichedFindingListResponse> {
+    const res = await fetch(
+      `${API_BASE_URL}/findings?engagement_id=${encodeURIComponent(
+        engagementId
+      )}&limit=${limit}&offset=${offset}`,
+      { signal }
+    );
+    const data = await handleResponse<{
+      items: unknown[];
+      total: number;
+      limit: number;
+      offset: number;
+    }>(res);
+
+    const items = (data.items || []).map((raw) => normalizeEnrichedFinding(raw));
+    return {
+      items,
+      total: data.total,
+      limit: data.limit,
+      offset: data.offset,
+    };
+  },
+
+  /**
+   * POST /findings/enrich/batch
+   * Batches up to 1000 findings with engagement_id in body.
+   */
+  async enrichFindingsBatch(
+    engagementId: string,
+    findings: Record<string, unknown>[]
+  ): Promise<BatchEnrichResult> {
+    const res = await fetch(`${API_BASE_URL}/findings/enrich/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        engagement_id: engagementId,
+        findings,
+        async_dispatch: false,
+      }),
+    });
+    const data = await handleResponse<{
+      status: string;
+      count: number;
+      items?: unknown[];
+    }>(res);
+
+    return {
+      status: data.status,
+      count: data.count,
+      items: (data.items || []).map((raw) => normalizeEnrichedFinding(raw)),
+    };
   },
 };

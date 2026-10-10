@@ -23,7 +23,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 SCAN_TASK_NAME = "seekthreat.scans.execute"
 ENRICHMENT_TASK_NAME = "seekthreat.enrichment.enrich"
-EXPECTED_TASKS = sorted([SCAN_TASK_NAME, ENRICHMENT_TASK_NAME])
+SYNC_FEEDS_TASK_NAME = "seekthreat.sync_feeds.run"
+EXPECTED_TASKS = sorted([SCAN_TASK_NAME, ENRICHMENT_TASK_NAME, SYNC_FEEDS_TASK_NAME])
 
 # Import ONLY the worker module, exactly as the celery CLI does, then force the
 # app to finalize and print what it knows about.
@@ -69,6 +70,16 @@ def test_enrichment_task_is_registered_by_importing_the_worker_module() -> None:
     assert ENRICHMENT_TASK_NAME in registered, (
         f"{ENRICHMENT_TASK_NAME!r} is not registered after importing apps.api.worker. "
         f"A real Celery worker would reject every dispatched enrichment job as an "
+        f"unregistered task. Registered: {registered}"
+    )
+
+
+def test_sync_feeds_task_is_registered_by_importing_the_worker_module() -> None:
+    """Importing apps.api.worker alone must register the sync_feeds task."""
+    registered = _registered_tasks_in_fresh_process()
+    assert SYNC_FEEDS_TASK_NAME in registered, (
+        f"{SYNC_FEEDS_TASK_NAME!r} is not registered after importing apps.api.worker. "
+        f"A real Celery worker would reject every dispatched feed sync as an "
         f"unregistered task. Registered: {registered}"
     )
 

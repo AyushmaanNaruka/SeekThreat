@@ -1,0 +1,22 @@
+{
+  "_synthetic": true,
+  "_comment": "SYNTHETIC test fixture shaped like ENISA EUVD data. Values are illustrative, not real measurements. See README.md in this directory.",
+  "CVE-2021-44228": {
+    "cve_id": "CVE-2021-44228",
+    "cvss_score": 10.0,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+    "cvss_version": "3.1",
+    "cwe_ids": ["CWE-502"],
+    "description": "EUVD entry for Apache Log4j vulnerability.",
+    "updated_at": "2024-03-01T10:00:00Z"
+  },
+  "CVE-2025-0002": {
+    "cve_id": "CVE-2025-0002",
+    "cvss_score": 6.5,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:L/A:L",
+    "cvss_version": "3.1",
+    "cwe_ids": ["CWE-20"],
+    "description": "EUVD fallback record for European advisory.",
+    "updated_at": "2025-01-20T08:00:00Z"
+  }
+}
