@@ -9,7 +9,9 @@ Non-negotiable invariants:
 from __future__ import annotations
 
 import json
+import threading
 from abc import ABC, abstractmethod
+from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Generic, TypeVar
@@ -59,6 +61,110 @@ def read_mirror_meta(mirror_file: Path | str) -> dict[str, Any] | None:
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
+
+
+@dataclass(frozen=True)
+class MirrorCacheEntry:
+    """Cached in-memory record store for a loaded mirror file."""
+
+    records: dict[str, Any]
+    synced_at: datetime | None = None
+    extra: dict[str, Any] = field(default_factory=dict)
+
+
+MirrorCacheKey = tuple[str, str, str | None, str | None, int, int]
+_PROCESS_MIRROR_CACHE: dict[MirrorCacheKey, MirrorCacheEntry] = {}
+_CACHE_LOCK = threading.Lock()
+
+
+def mirror_cache_key(source: Source, cache_file: Path | str) -> MirrorCacheKey:
+    """Calculate the cache key for an on-disk mirror file.
+
+    Keyed by: (source, canonical_path, sha256, synced_at, mtime_ns, size).
+    - If a .meta.json sidecar exists, sha256 and synced_at ensure sync cycles
+      trigger an automatic cache invalidation.
+    - mtime_ns and size protect hand-edited fixtures or mirrors without sidecars.
+    """
+    p = Path(cache_file).resolve()
+    meta = read_mirror_meta(p)
+    sha256 = meta.get("sha256") if meta else None
+    synced_at = meta.get("synced_at") if meta else None
+    try:
+        st = p.stat()
+        mtime_ns = st.st_mtime_ns
+        size = st.st_size
+    except OSError:
+        mtime_ns = 0
+        size = 0
+    return (source.value, str(p), sha256, synced_at, mtime_ns, size)
+
+
+def get_cached_mirror(key: MirrorCacheKey) -> MirrorCacheEntry | None:
+    """Retrieve cached in-memory mirror entry if key matches."""
+    with _CACHE_LOCK:
+        return _PROCESS_MIRROR_CACHE.get(key)
+
+
+def put_cached_mirror(
+    key: MirrorCacheKey,
+    records: dict[str, Any],
+    synced_at: datetime | None = None,
+    extra: dict[str, Any] | None = None,
+) -> None:
+    """Store loaded mirror records in process-level cache, evicting older versions."""
+    with _CACHE_LOCK:
+        source_val, path_str = key[0], key[1]
+        # Purge any older entry for the same (source, path) to prevent memory leaks
+        keys_to_remove = [
+            k for k in _PROCESS_MIRROR_CACHE if k[0] == source_val and k[1] == path_str
+        ]
+        for k in keys_to_remove:
+            del _PROCESS_MIRROR_CACHE[k]
+        _PROCESS_MIRROR_CACHE[key] = MirrorCacheEntry(
+            records=records,
+            synced_at=synced_at,
+            extra=extra or {},
+        )
+
+
+def clear_mirror_cache(source: Source | None = None) -> None:
+    """Purge process-level mirror cache entries (all or filtered by Source)."""
+    with _CACHE_LOCK:
+        if source is None:
+            _PROCESS_MIRROR_CACHE.clear()
+        else:
+            keys_to_remove = [k for k in _PROCESS_MIRROR_CACHE if k[0] == source.value]
+            for k in keys_to_remove:
+                del _PROCESS_MIRROR_CACHE[k]
+
+
+_LOAD_LOCK = threading.Lock()
+
+
+def load_with_cache(
+    source: Source,
+    cache_file: Path | str,
+    loader_fn: Any,
+) -> tuple[dict[str, Any], datetime | None, dict[str, Any]]:
+    """Thread-safe cached loading of an on-disk mirror file.
+
+    Double-checked locking ensures that concurrent workers or requests
+    read and parse the mirror at most once, and share the identical in-memory
+    record dictionary.
+    """
+    key = mirror_cache_key(source, cache_file)
+    cached = get_cached_mirror(key)
+    if cached is not None:
+        return cached.records, cached.synced_at, cached.extra
+
+    with _LOAD_LOCK:
+        cached = get_cached_mirror(key)
+        if cached is not None:
+            return cached.records, cached.synced_at, cached.extra
+
+        records, synced_at, extra = loader_fn()
+        put_cached_mirror(key, records=records, synced_at=synced_at, extra=extra)
+        return records, synced_at, extra
 
 
 class BaseSourceRecord(BaseModel):
@@ -166,7 +272,12 @@ class BaseEnrichmentSource(ABC, Generic[RecordT]):
         return len(self._cache)
 
     def clear(self) -> None:
-        """Clear the in-memory index."""
-        self._cache.clear()
+        """Clear this instance's in-memory index."""
+        self._cache = {}
         self._loaded = False
         self._synced_at_read = False
+
+    @classmethod
+    def clear_mirror_cache(cls) -> None:
+        """Clear the process-level mirror cache for this source."""
+        clear_mirror_cache(cls.source)

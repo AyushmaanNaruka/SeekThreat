@@ -100,6 +100,7 @@ export interface EnrichedFindingListResponse {
 export interface BatchEnrichResult {
   status: string;
   count: number;
+  finding_ids?: string[];
   items?: EnrichedFindingItem[];
 }
 
@@ -238,11 +239,19 @@ export const api = {
 
   /**
    * POST /findings/enrich/batch
-   * Batches up to 1000 findings with engagement_id in body.
+   *
+   * Submits a batch of findings (up to 1000) for synchronous or asynchronous enrichment
+   * against the backend findings router (`apps/api/routers/findings.py`).
+   *
+   * In standard SeekThreat workflows, findings enrichment is automatically triggered
+   * post-scan via Celery (`seekthreat.enrichment.sync_new_findings_cves`). This client
+   * method preserves API contract parity for direct batch enrichment operations,
+   * script-driven re-enrichments, and future batch UI workflows.
    */
   async enrichFindingsBatch(
     engagementId: string,
-    findings: Record<string, unknown>[]
+    findings: Record<string, unknown>[],
+    asyncDispatch = false
   ): Promise<BatchEnrichResult> {
     const res = await fetch(`${API_BASE_URL}/findings/enrich/batch`, {
       method: "POST",
@@ -250,18 +259,20 @@ export const api = {
       body: JSON.stringify({
         engagement_id: engagementId,
         findings,
-        async_dispatch: false,
+        async_dispatch: asyncDispatch,
       }),
     });
     const data = await handleResponse<{
       status: string;
       count: number;
+      finding_ids?: string[];
       items?: unknown[];
     }>(res);
 
     return {
       status: data.status,
       count: data.count,
+      finding_ids: data.finding_ids,
       items: (data.items || []).map((raw) => normalizeEnrichedFinding(raw)),
     };
   },

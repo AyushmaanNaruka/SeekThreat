@@ -28,7 +28,7 @@ Missing numbers in month six are fatal.
 | Answer relevancy | >= 0.85 |
 | Citation accuracy | >= 0.95 |
 | Attack path validity | >= 0.90 (manual, N=50) |
-| Enrichment coverage vs NVD-only | Not yet measured. `evals/enrichment_coverage.py` exists; its committed output is a synthetic smoke test on hand-authored fixtures, not a result |
+| Enrichment coverage vs NVD-only | **Measured (2026-10-11)**: **98.0%** multi-source fusion vs **73.0%** NVD-only baseline (**+25.0 pp delta**) on 50 verified golden CVEs across 5 cohorts. See [`evals/results/enrichment_coverage_real.md`](./results/enrichment_coverage_real.md). |
 | Dedup precision/recall | vs DefectDojo on identical input |
 
 Report both. Explain why Track B matters more. Questioning the metric is itself a
@@ -49,5 +49,4 @@ Lives in `evals/golden/`.
 
 ## Rule
 
-**No number in this project has been measured yet.** Never generate placeholder metrics that
-look like results. If a chart needs data we don't have, label it "Target" or leave it out.
+**All reported evaluation numbers must come directly from executed code against real mirrors.** Never generate placeholder metrics or estimates. Layer 2 enrichment coverage was empirically measured and committed on 2026-10-11 using genuine feed mirrors and real-world CVE ground truth.

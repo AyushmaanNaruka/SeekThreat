@@ -48,6 +48,39 @@ from services.scanners.nmap_xml import NmapParseError
 from services.scanners.nuclei_adapter import NucleiAdapter
 from services.scanners.nuclei_json import NucleiParseError
 
+
+# Import lazily resolved at call time to avoid a circular import at module
+# load; post_scan_enrichment imports celery_app which also lives in worker.
+def _dispatch_post_scan_enrichment(artifact_id: str, engagement_id: str, scan_id: str) -> None:
+    """Fire-and-forget: dispatch the post-scan enrichment task.
+
+    Any failure to enqueue (e.g. Redis unavailable) is caught and logged;
+    it must never propagate back to the scan result.
+    """
+    try:
+        from apps.api.tasks.post_scan_enrichment import sync_new_findings_cves  # noqa: PLC0415
+
+        sync_new_findings_cves.apply_async(
+            kwargs={
+                "artifact_id": artifact_id,
+                "engagement_id": engagement_id,
+                "scan_id": scan_id,
+            }
+        )
+        logger.info(
+            "post_scan_enrichment: enqueued for scan %s / artifact %s",
+            scan_id,
+            artifact_id,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "post_scan_enrichment: failed to enqueue for scan %s: %s "
+            "— enrichment will run at next beat",
+            scan_id,
+            exc,
+        )
+
+
 logger = logging.getLogger(__name__)
 
 # Failures that a retry cannot fix. An unsupported scanner name stays
@@ -146,6 +179,15 @@ def run_scan(
             completed_at=datetime.now(UTC),
         )
         db.commit()
+
+        # Dispatch post-scan enrichment off the request path (fire-and-forget).
+        # This is the integration point for Task 6 (D-036): the scan itself is
+        # already committed; a failure to enqueue must not roll it back.
+        _dispatch_post_scan_enrichment(
+            artifact_id=scan_result.artifact.artifact_id,
+            engagement_id=engagement_id,
+            scan_id=scan_id,
+        )
 
         celery_task_id = (
             getattr(task.request, "id", None)

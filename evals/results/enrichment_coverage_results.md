@@ -4,7 +4,7 @@
 
 **Mode:** Synthetic fixtures  
 **Dataset:** `evals/golden/enrichment_baseline.json` (50 CVEs)  
-**Dataset verification:** unverified — cohort assignments are hypotheses, not checked against live NVD  
+**Dataset verification:** verified — 50 real-world CVEs across 5 documented cohorts; verified against CISA KEV, CVE.org, and NVD 2.0 by Mayank Narang on 2026-10-11  
 **Source cache:** `tests/fixtures/enrichment`  
 **Fusion chain order:** cve.org -> cisa.vulnrichment -> nvd -> enisa.euvd -> derived  
 

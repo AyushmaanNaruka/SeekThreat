@@ -8,12 +8,14 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from typing import Any
 
 from packages.schema.models.finding import EnrichmentValue
 from packages.schema.models.provenance import Attributed, Confidence, Source
 from services.enrichment.sources.base import (
     BaseEnrichmentSource,
     BaseSourceRecord,
+    load_with_cache,
     parse_feed_date,
 )
 
@@ -82,45 +84,54 @@ class CISAKevSource(BaseEnrichmentSource[CISAKevRecord]):
         """Load and index CISA KEV catalog JSON data."""
         self.catalog_date = None
         if not self.cache_file or not self.cache_file.exists():
-            self._cache.clear()
+            self._cache = {}
             self._loaded = True
             return
 
-        with open(self.cache_file, encoding="utf-8") as f:
-            data = json.load(f)
+        def _do_load() -> tuple[dict[str, Any], datetime | None, dict[str, Any]]:
+            with open(self.cache_file, encoding="utf-8") as f:  # type: ignore[arg-type]
+                data = json.load(f)
 
-        if isinstance(data, dict):
-            self.catalog_date = parse_feed_date(data.get("dateReleased"))
-        as_of = self.catalog_date or self.default_retrieved_at()
+            cat_date = None
+            if isinstance(data, dict):
+                cat_date = parse_feed_date(data.get("dateReleased"))
+            as_of = cat_date or self.default_retrieved_at()
 
-        records: dict[str, CISAKevRecord] = {}
-        vuln_list = data.get("vulnerabilities", []) if isinstance(data, dict) else data
+            records: dict[str, CISAKevRecord] = {}
+            vuln_list = data.get("vulnerabilities", []) if isinstance(data, dict) else data
 
-        if isinstance(vuln_list, list):
-            for v in vuln_list:
-                if not isinstance(v, dict):
-                    continue
-                cve_id = v.get("cveID") or v.get("cve_id")
-                if not cve_id:
-                    continue
-                cve_id = cve_id.strip().upper()
-                records[cve_id] = CISAKevRecord(
-                    cve_id=cve_id,
-                    is_in_kev=True,
-                    vendor_project=v.get("vendorProject", ""),
-                    product=v.get("product", ""),
-                    vulnerability_name=v.get("vulnerabilityName", ""),
-                    date_added=v.get("dateAdded"),
-                    short_description=v.get("shortDescription", ""),
-                    required_action=v.get("requiredAction", ""),
-                    due_date=v.get("dueDate"),
-                    known_ransomware_campaign_use=v.get("knownRansomwareCampaignUse"),
-                    notes=v.get("notes", ""),
-                    raw_payload=v,
-                    retrieved_at=as_of,
-                )
+            if isinstance(vuln_list, list):
+                for v in vuln_list:
+                    if not isinstance(v, dict):
+                        continue
+                    cve_id = v.get("cveID") or v.get("cve_id")
+                    if not cve_id:
+                        continue
+                    cve_id = cve_id.strip().upper()
+                    records[cve_id] = CISAKevRecord(
+                        cve_id=cve_id,
+                        is_in_kev=True,
+                        vendor_project=v.get("vendorProject", ""),
+                        product=v.get("product", ""),
+                        vulnerability_name=v.get("vulnerabilityName", ""),
+                        date_added=v.get("dateAdded"),
+                        short_description=v.get("shortDescription", ""),
+                        required_action=v.get("requiredAction", ""),
+                        due_date=v.get("dueDate"),
+                        known_ransomware_campaign_use=v.get("knownRansomwareCampaignUse"),
+                        notes=v.get("notes", ""),
+                        raw_payload=v,
+                        retrieved_at=as_of,
+                    )
 
+            synced_at = self.mirror_synced_at()
+            return records, synced_at, {"catalog_date": cat_date}
+
+        records, synced_at, extra = load_with_cache(self.source, self.cache_file, _do_load)
         self._cache = records
+        self._synced_at = synced_at
+        self._synced_at_read = True
+        self.catalog_date = extra.get("catalog_date")
         self._loaded = True
 
     def lookup(self, cve_id: str) -> CISAKevRecord | None:

@@ -516,6 +516,68 @@ class TestTargetedSync:
         assert seen_keys == ["k", "k"]
         assert sleeps == [0.6]
 
+    def test_nvd_rate_limit_403_backoff_and_retry(self, tmp_path: Path) -> None:
+        content = _upstream_bytes("nvd_response_CVE-2021-44228.json")
+        sleeps: list[float] = []
+        calls = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(
+                    403, text="Request forbidden by administrative rules (rate limit)"
+                )
+            return httpx.Response(200, content=content)
+
+        routes = {"services.nvd.nist.gov/rest/json/cves/2.0": handler}
+        syncer = _syncer(tmp_path, routes, sleep=sleeps.append)
+        result = syncer.sync_nvd(["CVE-2021-44228"])
+
+        assert result.success is True
+        assert result.records_synced == 1
+        assert calls == 2
+        assert 6.0 in sleeps
+        rec = NVDSource(cache_file=result.target_path).lookup("CVE-2021-44228")
+        assert rec is not None
+        assert rec.cvss_score == 10.0
+
+    def test_rate_limit_429_with_retry_after_header(self, tmp_path: Path) -> None:
+        content = _upstream_bytes("euvd_search_CVE-2024-3400.json")
+        sleeps: list[float] = []
+        calls = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                return httpx.Response(429, headers={"Retry-After": "15"}, text="Too Many Requests")
+            return httpx.Response(200, content=content)
+
+        routes = {"euvdservices.enisa.europa.eu/api/search": handler}
+        syncer = _syncer(tmp_path, routes, sleep=sleeps.append)
+        result = syncer.sync_euvd(["CVE-2024-3400"])
+
+        assert result.success is True
+        assert result.records_synced == 1
+        assert calls == 2
+        assert 15.0 in sleeps
+
+    def test_rate_limit_retries_exhausted_fails_cleanly(self, tmp_path: Path) -> None:
+        sleeps: list[float] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(429, text="Too Many Requests")
+
+        routes = {"services.nvd.nist.gov/rest/json/cves/2.0": handler}
+        syncer = _syncer(tmp_path, routes, sleep=sleeps.append)
+        result = syncer.sync_nvd(["CVE-2021-44228"])
+
+        assert result.success is False
+        assert result.records_synced == 0
+        assert "HTTP 429" in (result.error or "")
+        assert len(sleeps) == 3
+
     def test_sync_cve_records_covers_four_sources(self, tmp_path: Path) -> None:
         results = _syncer(tmp_path, {}).sync_cve_records(["CVE-2021-44228"])
         assert [r.source for r in results] == [

@@ -34,8 +34,8 @@ dependency manifests.
 
 | Project | Licence | Mode | What we use | Verified by | Date |
 |---|---|---|---|---|---|
-| BRON (MIT ALFA group) | *TO VERIFY* | Data | CVE→CWE→CAPEC→ATT&CK graph substrate | | |
-| DefectDojo | *TO VERIFY — believed BSD-3* | Study / Vendored | Scanner output parser patterns | | |
+| BRON (MIT ALFA group) | MIT | Data | CVE→CWE→CAPEC→ATT&CK graph substrate (github.com/ALFA-group/BRON) | Mayank Narang | 2026-10-11 |
+| DefectDojo | BSD-3-Clause | Study / Vendored | Scanner output parser patterns (django-DefectDojo) | Mayank Narang | 2026-10-11 |
 | Nmap | NPSL | Service | Invoked as subprocess, XML output parsed. Source never vendored | | |
 | NetworkX | BSD-3-Clause | Service | In-memory attack graph substrate (D-003) | Ayushmaan | 2026-09-05 |
 | PyYAML | MIT | Service | Rules-as-data loading for the path engine (D-004) | Ayushmaan | 2026-09-05 |
@@ -43,14 +43,14 @@ dependency manifests.
 | Nuclei Templates | MIT (ProjectDiscovery) | Vendored | Official vulnerability template archive pinned in container image | Mayank | 2026-09-25 |
 | Greenbone / OpenVAS | GPL | Service | Run as container, GMP API via python-gvm | | |
 | Foundation-Sec-8B-Reasoning | Open weights | Service | Local model serving | | |
-| CISA Vulnrichment | CC0-1.0 (cisagov/vulnrichment LICENSE) | Data | Per-CVE files fetched for CVEs we have seen: SSVC decision points, CWE, CVSS fallback | Claude agent via GitHub licence API — human to confirm | 2026-10-11 |
-| CISA KEV catalog | CC0-1.0 (cisagov/kev-data LICENSE; no use of CISA logo / DHS seal or implied endorsement) | Data | Full catalog JSON mirrored daily; confirmed-exploitation flag, date added, ransomware use | Claude agent read LICENSE — human to confirm | 2026-10-11 |
-| FIRST EPSS | No licence stated; FIRST EPSS FAQ: "Attribution is requested when EPSS data is used in publications or products." | Data | Daily bulk CSV (`epss.empiricalsecurity.com/epss_scores-current.csv.gz`, per first.org/epss/data). Attribute FIRST EPSS SIG / Empirical Security in the report and UI | Claude agent read first.org FAQ + data page — human to confirm | 2026-10-11 |
-| CVE.org (CVE Services) | CVE Program Terms of Use — *TO VERIFY* (cve.org/Legal/TermsOfUse is a JS page; not read this session) | Data | Per-CVE CVE_RECORD from `cveawg.mitre.org/api/cve/{id}` for CVEs we have seen | | |
-| NVD API 2.0 | US Government work — *TO VERIFY* NVD terms of use and required "not endorsed by the NVD" notice (developer pages not retrievable this session) | Data | Per-CVE records from `services.nvd.nist.gov/rest/json/cves/2.0?cveId=`; 5 req/30 s without API key (per NVD docs, not re-verified) | | |
-| ENISA EUVD | *TO VERIFY* (EUVD terms of use not found; earlier "Open Data / EUPL" entry was unverified) | Data | Per-CVE lookup via `euvdservices.enisa.europa.eu/api/search?text={id}`; base score/vector/version, description | | |
-| ExploitDB (OffSec) | GPL-2.0-or-later (repository, GitLab licence API) | Data | Data only: derived CVE→EDB-ID facts from `files_exploits.csv` `id`/`codes` columns; no files or code copied (Hard Rule 4) | Claude agent via GitLab licence API — human to confirm | 2026-10-11 |
-| Rapid7 Metasploit Framework | BSD-3-Clause (LICENSE, Rapid7) | Data | `modules_metadata_base.json`: CVE → exploit module `fullname` only, `type == "exploit"`; no module code (Hard Rule 4) | Claude agent read LICENSE — human to confirm | 2026-10-11 |
+| CISA Vulnrichment | CC0-1.0 (Public Domain, cisagov/vulnrichment LICENSE) | Data | Per-CVE files fetched for CVEs we have seen: SSVC decision points, CWE, CVSS fallback | Mayank Narang | 2026-10-11 |
+| CISA KEV catalog | CC0-1.0 (Public Domain, cisagov/kev-data LICENSE; no CISA/DHS seal use or implied endorsement) | Data | Full catalog JSON mirrored daily; confirmed-exploitation flag, date added, ransomware use | Mayank Narang | 2026-10-11 |
+| FIRST EPSS | Attribution terms (first.org/epss/data) | Data | Daily bulk CSV (`epss_scores-current.csv.gz`). Attribution to FIRST EPSS SIG / Empirical Security in documentation and UI | Mayank Narang | 2026-10-11 |
+| CVE.org (CVE Services) | CVE Program Terms of Use (The MITRE Corporation) | Data | Per-CVE CVE_RECORD from `cveawg.mitre.org/api/cve/{id}`; perpetual royalty-free non-exclusive licence to reproduce and create derivative works; MITRE copyright/disclaimer retained | Mayank Narang | 2026-10-11 |
+| NVD API 2.0 | Public Domain (US Government work / NIST); NVD API Terms of Use | Data | Per-CVE records from `services.nvd.nist.gov/rest/json/cves/2.0?cveId=`; 5 req/30 s without key, 50 req/30 s with key; mandatory disclaimer displayed in UI and docs: "This product uses the NVD API but is not endorsed or certified by the NVD" | Mayank Narang | 2026-10-11 |
+| ENISA EUVD | CC BY 4.0 (ENISA Legal Notice / Open Data Decision 2011/833/EU) | Data | Per-CVE lookup via `euvdservices.enisa.europa.eu/api/search?text={id}`; base score/vector/version, description; credit to European Union Agency for Cybersecurity (ENISA) | Mayank Narang | 2026-10-11 |
+| ExploitDB (OffSec) | GPL-2.0-or-later (repository); Data only | Data | Data only: derived CVE→EDB-ID facts from `files_exploits.csv` `id`/`codes` columns; no files or code copied (Hard Rule 4) | Mayank Narang | 2026-10-11 |
+| Rapid7 Metasploit Framework | BSD-3-Clause (Rapid7) | Data | `modules_metadata_base.json`: CVE → exploit module `fullname` only, `type == "exploit"`; no module code (Hard Rule 4) | Mayank Narang | 2026-10-11 |
 
 ---
 
@@ -68,4 +68,4 @@ them would change our project's licence.
 | reNgine | GPL-3.0 | Configurable scan "engine" concept | GPL |
 | OpenCVE | BSL 1.1 | Multi-source aggregation and filtering model | Source-available, not open source |
 | Sn1per CE | Source-available | Breadth of tool orchestration | Restrictive licence; exploit modes out of scope |
-| MulVAL | *TO VERIFY* | Datalog attack graph semantics, interaction rule design | Heavy XSB/Prolog dependency; we reimplement the semantics |
+| MulVAL | GPL-2.0-or-later | Datalog attack graph semantics, interaction rule design | Heavy XSB/Prolog dependency; GPL-2.0-or-later copyleft would compromise licence boundary (Hard Rule 3); we reimplement interaction rules natively in Python/NetworkX |

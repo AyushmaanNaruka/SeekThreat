@@ -21,11 +21,23 @@ Scan facts (hosts, services, versions, CVEs, reachability)
 Asset-vulnerability graph
         |  deterministic — named rules
 Candidate paths (every edge traceable)
-        |  scored — EPSS x exploit availability x privilege delta
+        |  scored — Additive ERS composite & resistance cost (D-039)
 Ranked paths
         |  LLM here, and only here
 Narration
 ```
+
+## Path Scoring (DECISIONS.md D-039)
+
+The old multiplicative heuristic (`EPSS × exploit_availability × privilege_delta`) is deprecated (see `DECISIONS.md` D-029 and D-039). It conflated probabilities with ordinal multipliers, double-counted exploit evidence, and zeroed paths when public scripts were absent.
+
+Under D-039, path scoring is decoupled into two statistically sound tiers:
+1. **Edge Traversal Difficulty (Least-Resistance Path Discovery):**  
+   $\text{Cost}(e) = -\ln(\max(\text{EPSS}_e, 0.001)) + \text{Barrier}(\text{privilege\_delta}_e)$.  
+   Shortest-path discovery accumulates traversal resistance additively in log space.
+2. **Path Risk Ranking (Triage & Narration Prioritization):**  
+   $R(\text{path}) = 0.50 \cdot \max_{e \in \text{path}}(\text{ERS}_e) + 0.30 \cdot C_{\text{target}} + 0.20 \cdot \overline{\text{ERS}}_{\text{path}}$.  
+   Anchored directly on Layer 2's precomputed `EnrichedFinding.ers.value` (D-028), bounding composite path risk to $[0.0, 10.0]$ and preserving full component auditability.
 
 ## Knowledge substrate
 

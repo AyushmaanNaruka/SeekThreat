@@ -66,6 +66,56 @@ def test_finding_requires_at_least_one_observation() -> None:
         )
 
 
+def test_finding_normalizes_cve_ids_to_uppercase_and_deduplicates() -> None:
+    finding = Finding(
+        finding_id="fnd-003",
+        engagement_id="eng-001",
+        asset_id="ast-001",
+        scanner="nuclei",
+        cve_ids=["cve-2021-44228", "CVE-2021-44228", "cve-2024-3400"],
+        observation_ids=["obs-001"],
+        detected_at=NOW,
+    )
+    assert finding.cve_ids == ["CVE-2021-44228", "CVE-2024-3400"]
+
+
+def test_finding_rejects_malformed_cve_ids() -> None:
+    with pytest.raises(ValidationError, match="invalid CVE ID 'GHSA-jfh8-c2jp-5v3q'"):
+        Finding(
+            finding_id="fnd-004",
+            engagement_id="eng-001",
+            asset_id="ast-001",
+            scanner="nuclei",
+            cve_ids=["GHSA-jfh8-c2jp-5v3q"],
+            observation_ids=["obs-001"],
+            detected_at=NOW,
+        )
+
+    with pytest.raises(ValidationError, match="invalid CVE ID 'CWE-502'"):
+        Finding(
+            finding_id="fnd-005",
+            engagement_id="eng-001",
+            asset_id="ast-001",
+            scanner="nuclei",
+            cve_ids=["CWE-502"],
+            observation_ids=["obs-001"],
+            detected_at=NOW,
+        )
+
+
+def test_finding_allows_empty_cve_ids() -> None:
+    finding = Finding(
+        finding_id="fnd-006",
+        engagement_id="eng-001",
+        asset_id="ast-001",
+        scanner="nmap",
+        cve_ids=[],
+        observation_ids=["obs-001"],
+        detected_at=NOW,
+    )
+    assert finding.cve_ids == []
+
+
 def test_enriched_field_carries_value_and_provenance_together() -> None:
     enriched = EnrichedFinding(
         finding=_finding(),

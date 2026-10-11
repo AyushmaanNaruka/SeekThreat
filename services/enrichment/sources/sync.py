@@ -98,6 +98,7 @@ DEFAULT_MAX_BYTES: dict[Source, int] = {
 }
 DEFAULT_MAX_SECONDS = 900.0
 MAX_REDIRECTS = 5
+MAX_RATE_LIMIT_RETRIES = 3
 
 #: NVD API rate limits: 5 requests / rolling 30 s without a key, 50 with one.
 NVD_DELAY_NO_KEY_SECONDS = 6.0
@@ -475,38 +476,75 @@ class FeedSyncer:
         headers: Mapping[str, str] | None = None,
         missing_ok: bool = False,
     ) -> bytes | None:
-        """GET ``url`` within this source's bounds; None for a 404 when ``missing_ok``."""
+        """GET ``url`` within this source's bounds; None for a 404 when ``missing_ok``.
+
+        Includes automatic rate-limit back-off on HTTP 429 and NVD API 2.0 HTTP 403.
+        """
         cap = self._max_bytes[source]
         current = httpx.URL(url, params=dict(params) if params else None)
-        for _hop in range(MAX_REDIRECTS + 1):
-            if current.scheme != "https":
-                raise FeedFetchError(f"refusing non-https URL {current}")
-            with client.stream("GET", current, headers=dict(headers or {})) as response:
-                if response.is_redirect:
-                    location = response.headers.get("location")
-                    if not location:
-                        raise FeedFetchError(f"redirect without Location from {current}")
-                    current = current.join(location)
-                    continue
-                if response.status_code == 404 and missing_ok:
-                    return None
-                if response.status_code >= 400:
-                    raise FeedFetchError(f"HTTP {response.status_code} from {current}")
-                declared = response.headers.get("content-length")
-                if declared and declared.isdigit() and int(declared) > cap:
-                    raise FeedFetchError(f"{source.value} download exceeds {cap} bytes")
-                started = time.monotonic()
-                body = bytearray()
-                for chunk in response.iter_bytes():
-                    body += chunk
-                    if len(body) > cap:
-                        raise FeedFetchError(f"{source.value} download exceeds {cap} bytes")
-                    if time.monotonic() - started > self._max_seconds:
-                        raise FeedFetchError(
-                            f"{source.value} download exceeded {self._max_seconds:.0f}s"
+        for attempt in range(MAX_RATE_LIMIT_RETRIES + 1):
+            hop_url = current
+            rate_limited = False
+            for _hop in range(MAX_REDIRECTS + 1):
+                if hop_url.scheme != "https":
+                    raise FeedFetchError(f"refusing non-https URL {hop_url}")
+                with client.stream("GET", hop_url, headers=dict(headers or {})) as response:
+                    if response.is_redirect:
+                        location = response.headers.get("location")
+                        if not location:
+                            raise FeedFetchError(f"redirect without Location from {hop_url}")
+                        hop_url = hop_url.join(location)
+                        continue
+                    if response.status_code == 404 and missing_ok:
+                        return None
+                    # Rate limiting back-off (HTTP 429, or HTTP 403 on NVD API 2.0)
+                    is_rate_limited = response.status_code == 429 or (
+                        response.status_code == 403 and source == Source.NVD
+                    )
+                    if is_rate_limited and attempt < MAX_RATE_LIMIT_RETRIES:
+                        retry_after = response.headers.get("retry-after")
+                        if retry_after and retry_after.strip().isdigit():
+                            wait_s = max(1.0, float(retry_after.strip()))
+                        elif source == Source.NVD:
+                            wait_s = (
+                                NVD_DELAY_WITH_KEY_SECONDS
+                                if self._nvd_api_key
+                                else NVD_DELAY_NO_KEY_SECONDS
+                            ) * (attempt + 1)
+                        else:
+                            wait_s = 2.0 * (attempt + 1)
+                        logger.warning(
+                            "feed_sync: rate limited (HTTP %d) fetching %s; "
+                            "backing off %.1fs (attempt %d/%d)",
+                            response.status_code,
+                            hop_url,
+                            wait_s,
+                            attempt + 1,
+                            MAX_RATE_LIMIT_RETRIES,
                         )
-                return bytes(body)
-        raise FeedFetchError(f"too many redirects fetching {url}")
+                        self._sleep(wait_s)
+                        rate_limited = True
+                        break
+                    if response.status_code >= 400:
+                        raise FeedFetchError(f"HTTP {response.status_code} from {hop_url}")
+                    declared = response.headers.get("content-length")
+                    if declared and declared.isdigit() and int(declared) > cap:
+                        raise FeedFetchError(f"{source.value} download exceeds {cap} bytes")
+                    started = time.monotonic()
+                    body = bytearray()
+                    for chunk in response.iter_bytes():
+                        body += chunk
+                        if len(body) > cap:
+                            raise FeedFetchError(f"{source.value} download exceeds {cap} bytes")
+                        if time.monotonic() - started > self._max_seconds:
+                            raise FeedFetchError(
+                                f"{source.value} download exceeded {self._max_seconds:.0f}s"
+                            )
+                    return bytes(body)
+            else:
+                if not rate_limited:
+                    raise FeedFetchError(f"too many redirects fetching {url}")
+        raise FeedFetchError(f"HTTP rate limit retries exhausted for {url}")
 
     def _failure(self, source: Source, exc: BaseException, url: str | None) -> SyncResult:
         message = f"{type(exc).__name__}: {exc}"

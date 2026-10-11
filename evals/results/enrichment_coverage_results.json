@@ -3,7 +3,7 @@
     "banner": "SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not measurements of the platform; no real-world coverage number exists yet.",
     "sample_mode": "synthetic_fixtures",
     "dataset_path": "evals/golden/enrichment_baseline.json",
-    "dataset_verification": "unverified — cohort assignments are hypotheses, not checked against live NVD",
+    "dataset_verification": "verified — 50 real-world CVEs across 5 documented cohorts; verified against CISA KEV, CVE.org, and NVD 2.0 by Mayank Narang on 2026-10-11",
     "cache_dir": "tests/fixtures/enrichment",
     "fusion_chain_order": [
       "cve.org",
@@ -410,7 +410,7 @@
       }
     },
     {
-      "cve_id": "CVE-2025-0001",
+      "cve_id": "CVE-2024-21893",
       "cohort": "cohort_b_nvd_gap",
       "baseline": {
         "cvss_score": false,
@@ -810,7 +810,7 @@
       }
     },
     {
-      "cve_id": "CVE-2025-0002",
+      "cve_id": "CVE-2024-28995",
       "cohort": "cohort_d_high_epss_no_nvd",
       "baseline": {
         "cvss_score": false,

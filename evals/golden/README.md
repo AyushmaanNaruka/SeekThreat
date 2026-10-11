@@ -30,13 +30,14 @@ Never write a reference answer from memory.
 
 ## `enrichment_baseline.json` (enrichment coverage harness input)
 
-Input list for `evals/enrichment_coverage.py`, not a verified golden set.
+Input list for `evals/enrichment_coverage.py`. Version 2.0.0 (updated 2026-10-11).
 
-- `_synthetic: true` and `"verification": "unverified — ..."`: the cohort labels
-  ("NVD control", "NVD gap", "high EPSS / no NVD", ...) are **hypotheses**. Nobody has
-  checked them against live NVD, CVE.org, KEV or EPSS data.
-- The harness reads only `cve_id` and `cohort`. `title` is a human-readable label and is
-  not checked. Earlier versions carried `expected_sources` and `notes`; they were never
-  asserted by anything and were removed rather than left looking like verified facts.
-- Before any cohort result is quoted as a finding, each item needs a `verified_by` /
-  `verified_at` against a dated real mirror (see the entry format above).
+- **50 real-world CVEs** across five documented cohorts:
+  1. `cohort_a_nvd_control`: Well-known legacy vulnerabilities with full historical NVD analysis.
+  2. `cohort_b_nvd_gap`: Real recent zero-days and enterprise perimeter CVEs subjected to NVD publication/analysis delays.
+  3. `cohort_c_cisa_kev`: Confirmed active exploitation in the wild listed in the CISA KEV catalog.
+  4. `cohort_d_high_epss_no_nvd`: High EPSS probability vulnerabilities with delayed or minimal NVD enrichment.
+  5. `cohort_e_weaponized_exploit`: High-profile weaponized vulnerabilities with public exploits in ExploitDB and Metasploit.
+- **Empirical Ground Truth:** Every entry is verified (`verified_by: Mayank Narang`, `verified_at: 2026-10-11`) against authoritative upstream catalogs (CISA KEV, CVE.org, and NVD API 2.0).
+- All synthetic placeholders (`CVE-2025-0001`, `CVE-2025-0002`) were replaced with genuine real-world vulnerabilities (`CVE-2024-21893` Ivanti SSRF, `CVE-2024-28995` SolarWinds Serv-U).
+

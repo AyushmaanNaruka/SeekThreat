@@ -43,7 +43,78 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
-Newest first.
+### D-040 — Finding Ingestion Contract between Track 1 Normalization and Layer 2 Enrichment
+**Date:** 2026-10-11
+**Decided by:** Mayank (Layer 2 owner) & Track 1 Normalization owner
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+We establish and enforce a formal schema and interface contract between Track 1 (`services/normalize`) and Layer 2 (`services/enrichment`):
+1. **`asset_id` standardization:** Normalized to canonical address prefixes (`host:<canonical_ip>`, `host:<canonical_fqdn>`, or `host:mac:<lowercase_mac>`) following deterministic IPv4 > IPv6 > MAC > FQDN precedence. Decoupled fixture prefixes (`asset-*`, `ast-*`) remain valid for offline unit testing.
+2. **`cve_ids` canonicalization & segregation:** All entries must match standard format `CVE-YYYY-\d{4,7}`, are automatically uppercased, and deduplicated in order. Non-CVE identifiers (e.g. GHSA, CWE, scanner-specific template IDs) must never be passed in `cve_ids` and belong in `Observation.attributes` or finding metadata.
+3. **Observation provenance requirement:** Every `Finding` must link to at least one valid, stored `observation_id` under the same `engagement_id`, enforced at model construction by Pydantic (`Finding._must_trace_to_observations`) and at the API boundary by `_verify_findings_provenance()`.
+
+**Why**
+Deduplication and normalization in Track 1 produce `Finding` models consumed by Layer 2's enrichment fusion and ERS scoring. Without this agreement, inconsistent asset identifiers prevent joining Nmap port facts with Nuclei vulnerability candidates, lowercase or malformed CVE IDs cause cache misses against per-CVE local mirrors, non-CVE identifiers pollute mirror lookups, and untraced findings break the core architectural invariant that all derived data traces back to immutable observations.
+
+**Impact on plan**
+Unblocks Track 1 (`services/normalize`) implementation while protecting Layer 2 (`services/enrichment`) from schema discrepancies. Formally documents the boundary in `docs/02-architecture.md`, `packages/schema/README.md`, and `packages/schema/models/finding.py`.
+
+**Cost if we're wrong**
+Low. The contract aligns directly with the existing Pydantic validation and API verification paths already implemented and covered by unit tests.
+
+---
+
+### D-039 — Settlement of graph path-scoring formula and deprecation of multiplicative heuristic
+**Date:** 2026-10-11
+**Decided by:** Mayank (Layer 2 owner) & Ayushmaan (Graph Engine owner)
+**Type:** Reversal / Addition
+**Status:** Active
+
+**Decision**
+The multiplicative path-scoring formula (`EPSS × exploit_availability × privilege_delta`) described in `services/graph/README.md` and flagged as an open viva risk in `D-029` is formally **deprecated and rejected**. Prior to Layer 3 implementation, we adopt a decoupled two-tier formulation:
+1. **Path Traversal Resistance (Additive Negative Log-Likelihood):** For shortest-path and least-resistance path discovery, edge traversal difficulty is computed additively as $\text{Cost}(e) = -\ln(\max(\text{EPSS}_e, 0.001)) + \text{Barrier}(\text{privilege\_delta}_e)$.
+2. **Path Risk Ranking (Additive Composite of Precomputed ERS):** For SOC triage and LLM path narration ranking, the path risk composite is computed from the precomputed node-level ERS scores (D-028) and target asset criticality:
+   $$R(\text{path}) = 0.50 \cdot \max_{e \in \text{path}}(\text{ERS}_e) + 0.30 \cdot C_{\text{target}} + 0.20 \cdot \overline{\text{ERS}}_{\text{path}}$$
+   where $C_{\text{target}} \in [0.0, 10.0]$ is the crown-jewel target criticality.
+
+**Why**
+`D-029` noted that while multiplying EPSS by `privilege_delta` avoided CVSS, it was vulnerable in a viva on three counts:
+1. **Spurious Probability:** Multiplying a probability (EPSS) by an ordinal integer (`privilege_delta`) yields an arbitrary number that cannot be interpreted as a probability or a traversability metric.
+2. **Double Counting:** EPSS v4 already incorporates public exploit code availability in its model weights. Multiplying EPSS by `exploit_availability` penalizes or inflates the evidence twice.
+3. **Zero-Factor Vulnerability:** A zero in `exploit_availability` (common for non-public or bespoke zero-days) zeroes the entire path score regardless of critical CVSS or high EPSS evidence.
+
+The decoupled two-tier approach cleanly separates:
+- *Graph Traversal Physics:* Modeled as additive traversal cost using statistically valid negative log-likelihood ($-\ln(P)$), where independent probabilities add in log space.
+- *Operational Risk Prioritization:* Anchored directly on Layer 2's precomputed ERS (D-028), avoiding duplication of enrichment logic and ensuring path risk explanations directly mirror node risk components.
+
+**Impact on plan**
+`services/graph/README.md` pipeline diagram is updated to replace the multiplicative formula with ERS-anchored path ranking. When Layer 3 path ranking is implemented in November, it will consume the stored `EnrichedFinding.ers.value` according to this formula.
+
+**Cost if we're wrong**
+None. Settling this in October before Layer 3 code is written prevents refactoring in November and eliminates an open viva vulnerability.
+
+---
+
+### D-038 — ERS Exploit Corroboration and EPSS Partial Circularity Disclosure
+**Date:** 2026-10-11
+**Decided by:** Mayank
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+We empirically validate the Exposure Risk Score (ERS) against independent exploit catalogs (ExploitDB and Rapid7 Metasploit) via `evals/ers_validation.py`. We explicitly acknowledge and document a partial circularity: FIRST EPSS v4 incorporates public exploit evidence in its training data, meaning validating ERS against ExploitDB involves indirect feature overlap. We mitigate and defend this by (1) corroborating against weaponized Metasploit modules, (2) running a comparative control isolating the marginal contribution of EPSS against pure technical severity (CVSS + KEV), and (3) preserving additive auditability without multiplying EPSS by CVSS.
+
+**Why**
+In D-008, KEV was proposed as an external validator for ERS, which D-027 correctly rejected as circular because KEV is an explicit 25% additive input component. D-027 suggested using ExploitDB and Metasploit instead. However, in an academic viva, evaluators can point out that EPSS (35% of ERS) already uses exploit availability signals in its machine learning model.
+Rather than ignoring this overlap or attempting to hide it, transparent disclosure is a differentiator. ExploitDB and Metasploit are external verification sources for SeekThreat (neither is an input to ERS). Furthermore, the additive design ($0.40 \cdot \text{CVSS} + 0.35 \cdot \text{EPSS} + 0.25 \cdot \text{KEV}$) means each component's contribution is isolated and explained, with zero hidden weights.
+
+**Impact on plan**
+`evals/ers_validation.py` is established as the formal empirical validation harness. It produces reproducible precision and recall tables across top ranking tiers and compares Balanced ERS against a No-EPSS control and CVSS-only baseline.
+
+**Cost if we're wrong**
+Low. The scoring engine and weights are unchanged; this decision provides formal viva defensibility and methodological transparency.
 
 ---
 
@@ -231,7 +302,7 @@ Low to undo, with one open risk. A loaded but stale mirror still produces confid
 **Date:** 2026-10-05
 **Decided by:** Mayank
 **Type:** Divergence
-**Status:** Active
+**Status:** Superseded by D-039
 
 **Decision**
 `services/graph/README.md` describes a path score of `EPSS × exploit_availability × privilege_delta`. This multiplication does not break the letter of `services/enrichment/README.md` rule 3 ("Never multiply EPSS by CVSS"), because neither of the other factors is CVSS. That is the only claim this entry makes. **Whether the product is a sound score is an open question and a known viva risk** (see below).

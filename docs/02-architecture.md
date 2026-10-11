@@ -245,6 +245,35 @@ same ids, which is what lets `tests/fixtures/observations/` stand in for a scan.
 
 ---
 
+## The Finding Ingestion Contract (Track 1 Normalization -> Layer 2 Enrichment)
+
+`services/normalize` (Track 1) takes raw scanner `Observation` records and converts them into
+de-duplicated `Finding` records. Layer 2 (`services/enrichment`) takes those findings and
+computes intelligence fusion, CVSS/EPSS lookups, and Exposure Risk Scores (ERS).
+
+To prevent data drift and guarantee cross-scanner joinability, the two tracks adhere to this
+formal contract:
+
+### 1. Canonical `asset_id` Structure
+To link host facts (from Nmap) with vulnerability candidates (from Nuclei), `asset_id` follows
+deterministic address prioritization: IPv4 > IPv6 (compressed) > MAC address > FQDN:
+- **IP Target:** `host:<canonical_ip>` (e.g. `host:172.20.1.10`, `host:[2001:db8::10]`)
+- **DNS/Hostname Target:** `host:<canonical_fqdn>` (e.g. `host:dvwa.lab.local`, lowercased without trailing dot)
+- **Layer 2 MAC Fallback:** `host:mac:<lowercase_colon_mac>` (e.g. `host:mac:aa:bb:cc:dd:ee:ff`)
+- **Unit Test Fixtures:** Synthetic prefixes `asset-*` or `ast-*` remain permissible for isolated fixtures.
+
+### 2. `cve_ids` Normalization & Segregation
+- **Uppercase Standard Format:** `cve_ids` entries are strictly validated against `^CVE-\d{4}-\d{4,7}$`.
+- **Automatic Uppercasing:** Lowercase scanner outputs (`cve-2021-44228`) are automatically normalized to uppercase `CVE-2021-44228`.
+- **Deduplication:** Multiple scanner matches on the same CVE for an asset are deduplicated while preserving discovery order.
+- **Segregation of Non-CVE Identifiers:** Non-CVE identifiers (GHSA IDs, CWE identifiers, scanner template IDs, Bugtraq IDs) must **never** be placed into `cve_ids`. They belong in `Observation.attributes` (e.g. `template_id`, `type`, `tags`), keeping `cve_ids` clean for exact feed mirror queries.
+
+### 3. Provenance & Observation Traceability
+- Every `Finding` must link to at least one stored `observation_id` (`observation_ids` must not be empty).
+- The referenced observations must exist in the fact store under the same `engagement_id` — enforced at ingestion time by `_verify_findings_provenance()` in `apps/api/routers/findings.py`. Untraceable findings are rejected with HTTP 422.
+
+---
+
 ## Decisions
 
 Full reasoning in `DECISIONS.md`.
