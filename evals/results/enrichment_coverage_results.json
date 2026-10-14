@@ -1,9 +1,10 @@
 {
   "metadata": {
-    "banner": "SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not measurements of the platform; no real-world coverage number exists yet.",
+    "banner": "SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not measurements of the platform. The real-mirror run is evals/results/enrichment_coverage_real.md.",
     "sample_mode": "synthetic_fixtures",
     "dataset_path": "evals/golden/enrichment_baseline.json",
-    "dataset_verification": "verified — 50 real-world CVEs across 5 documented cohorts; verified against CISA KEV, CVE.org, and NVD 2.0 by Mayank Narang on 2026-10-11",
+    "dataset_verification": "batch-attested by Mayank Narang 2026-10-11; no per-CVE evidence records yet; cohort labels B (nvd_gap) and D (high_epss_no_nvd) are contradicted by the measured data (NVD supplied CVSS for all)",
+    "cohort_labels_verified": false,
     "cache_dir": "tests/fixtures/enrichment",
     "fusion_chain_order": [
       "cve.org",
@@ -81,6 +82,19 @@
     "baseline_overall_coverage_pct": 6.0,
     "multi_overall_coverage_pct": 17.0,
     "coverage_improvement_pp": 11.0
+  },
+  "summary_excluding_epss": {
+    "fields": [
+      "cvss_score",
+      "cwe_ids",
+      "summary"
+    ],
+    "total_instances": 150,
+    "baseline_filled": 12,
+    "multi_filled": 27,
+    "baseline_coverage_pct": 8.0,
+    "multi_coverage_pct": 18.0,
+    "coverage_improvement_pp": 10.0
   },
   "per_field": {
     "cvss_score": {

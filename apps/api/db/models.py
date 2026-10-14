@@ -17,7 +17,7 @@ from packages.schema.models.provenance import Attributed, Provenance
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite.
-JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")  # type: ignore[no-untyped-call]
+JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
 
 
 def _aware(value: datetime) -> datetime:

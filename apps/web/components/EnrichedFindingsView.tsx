@@ -846,7 +846,7 @@ export default function EnrichedFindingsView({
           Upstream Intelligence Sources &amp; Disclaimers
         </div>
         <div>
-          This product uses the NVD API but is not endorsed or certified by the NVD. EPSS exploit predictions provided by the FIRST EPSS Special Interest Group. EUVD intelligence provided by the European Union Agency for Cybersecurity (ENISA) under CC BY 4.0. CVE records provided under the CVE Program Terms of Use (The MITRE Corporation). KEV data provided by CISA (Public Domain, CC0 1.0). ExploitDB and Metasploit references provided for correlation only.
+          This product uses the NVD API but is not endorsed or certified by the NVD. EPSS exploit predictions provided by the FIRST EPSS Special Interest Group. EUVD data from the European Union Agency for Cybersecurity (ENISA), reused with source acknowledgement. CVE records provided under the CVE Program Terms of Use (The MITRE Corporation). KEV data provided by CISA (Public Domain, CC0 1.0). ExploitDB and Metasploit references provided for correlation only.
         </div>
       </footer>
     </div>

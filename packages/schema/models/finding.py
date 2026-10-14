@@ -19,8 +19,10 @@ from packages.schema.models.scoring import ExposureRiskScore
 # What an enrichment source can supply for a single field.
 EnrichmentValue = str | float | int | bool | list[str] | None
 
-# Standard canonical CVE identifier format: CVE-YYYY-NNNN+
-CVE_ID_PATTERN = re.compile(r"^CVE-\d{4}-\d{4,7}$")
+# Standard canonical CVE identifier format: CVE-YYYY-NNNN+. ASCII digits only:
+# `\d` would also accept other Unicode decimal digits (e.g. Arabic-Indic, fullwidth),
+# which then miss every mirror lookup and reach upstream URLs. Use with fullmatch.
+CVE_ID_PATTERN = re.compile(r"CVE-[0-9]{4}-[0-9]{4,7}", re.ASCII)
 
 
 class Finding(BaseModel):
@@ -43,7 +45,7 @@ class Finding(BaseModel):
         seen: set[str] = set()
         for raw in value:
             norm = raw.strip().upper()
-            if not CVE_ID_PATTERN.match(norm):
+            if not CVE_ID_PATTERN.fullmatch(norm):
                 raise ValueError(
                     f"invalid CVE ID {raw!r}; cve_ids must match standard 'CVE-YYYY-NNNN+' format"
                 )

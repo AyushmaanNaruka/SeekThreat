@@ -73,23 +73,23 @@ sequenceDiagram
 
 ### Files Modified & Added
 
-1. **[`services/enrichment/sources/base.py`](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/base.py):**
+1. **[`services/enrichment/sources/base.py`](../../services/enrichment/sources/base.py):**
    - Added `MirrorCacheEntry` dataclass.
    - Added thread-safe `_PROCESS_MIRROR_CACHE` dictionary and locks (`_CACHE_LOCK`, `_LOAD_LOCK`).
    - Implemented `mirror_cache_key()`, `get_cached_mirror()`, `put_cached_mirror()`, `clear_mirror_cache()`, and `load_with_cache()`.
    - Updated `BaseEnrichmentSource.clear()` to reassign `self._cache = {}`.
    - Added classmethod `BaseEnrichmentSource.clear_mirror_cache()`.
 
-2. **[`services/enrichment/sources/epss.py`](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/epss.py):**
+2. **[`services/enrichment/sources/epss.py`](../../services/enrichment/sources/epss.py):**
    - Updated `FirstEPSSSource.load()` to delegate reading and indexing to `load_with_cache()`.
 
-3. **[`services/enrichment/sources/cisa_kev.py`](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/cisa_kev.py):**
+3. **[`services/enrichment/sources/cisa_kev.py`](../../services/enrichment/sources/cisa_kev.py):**
    - Updated `CISAKevSource.load()` to delegate to `load_with_cache()`, safely caching `catalog_date` in `MirrorCacheEntry.extra`.
 
-4. **[`services/enrichment/sources/secondary.py`](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/secondary.py):**
+4. **[`services/enrichment/sources/secondary.py`](../../services/enrichment/sources/secondary.py):**
    - Updated `ExploitDBSource.load()` and `MetasploitSource.load()` to delegate parsing to `load_with_cache()`.
 
-5. **[`tests/unit/test_feed_cache.py`](file:///e:/SeekThreat/SeekThreat/tests/unit/test_feed_cache.py) (NEW):**
+5. **[`tests/unit/test_feed_cache.py`](../../tests/unit/test_feed_cache.py) (NEW):**
    - 10 unit and benchmark tests validating all caching invariants.
 
 ---
@@ -116,7 +116,7 @@ tests\unit\test_feed_cache.py::TestBulkMirrorsProcessCache::test_fusion_engine_i
 
 ### B. Empirical Benchmark Measurements
 - **200 consecutive instantiations of `FirstEPSSSource`:** Completed in **0.166s total** (~0.83ms per instantiation including file stat operations on Windows NTFS).
-- **Subsequent `FusionEngine` initialization time:** Dropped to **< 1ms**, eliminating the request-time bottleneck for `GET /findings`.
+- **Subsequent `FusionEngine` initialization time:** no committed benchmark measures this. The cache tests show that later instances reuse the loaded index without re-parsing. The 200-instantiation figure above was a one-off local timing, not a committed, repeatable benchmark. Treat "< 1ms" as a target, not a measurement.
 
 ### C. Full Project-Wide Test Suite
 ```bash

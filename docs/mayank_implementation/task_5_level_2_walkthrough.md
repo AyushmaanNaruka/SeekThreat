@@ -8,7 +8,7 @@
 
 ## 1. Overview & Objective
 
-In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_status.md#L180), [services/enrichment/README.md](file:///e:/SeekThreat/SeekThreat/services/enrichment/README.md#L45), and the architectural constraints of SeekThreat, **Task 5** implements the persistent storage layer for enriched findings.
+In accordance with [level2_status.md](level2_status.md#L180), [services/enrichment/README.md](../../services/enrichment/README.md#L45), and the architectural constraints of SeekThreat, **Task 5** implements the persistent storage layer for enriched findings.
 
 Enrichment tasks are often re-triggered across engagement lifecycles (e.g., scheduled hourly feed refreshes, re-evaluating risk scores after CISA KEV catalog updates, or re-running failed scans). Storing enriched findings therefore requires **strict idempotency**: re-running enrichment on an existing finding must seamlessly update the existing record in-place rather than failing on primary key conflicts or producing duplicate historical rows.
 
@@ -18,20 +18,20 @@ Enrichment tasks are often re-triggered across engagement lifecycles (e.g., sche
    * Executing an upsert $N$ times with identical finding data must always result in exactly 1 persistent record.
    * If source enrichment data has evolved (e.g., CVSS updated or added to KEV), an upsert overwrites the finding's enrichment payload in-place without altering other records.
 2. **Lossless Domain Round-Trip:**
-   * An [EnrichedFinding](file:///e:/SeekThreat/SeekThreat/packages/schema/models/finding.py#L38) domain object contains rich nested structures: [Attributed[EnrichmentValue]](file:///e:/SeekThreat/SeekThreat/packages/schema/models/provenance.py#L65) with full provenance metadata, the underlying [Finding](file:///e:/SeekThreat/SeekThreat/packages/schema/models/finding.py#L12), and an optional [ExposureRiskScore](file:///e:/SeekThreat/SeekThreat/packages/schema/models/scoring.py#L40) containing individual [ScoreComponent](file:///e:/SeekThreat/SeekThreat/packages/schema/models/scoring.py#L20) objects.
+   * An [EnrichedFinding](../../packages/schema/models/finding.py#L38) domain object contains rich nested structures: [Attributed[EnrichmentValue]](../../packages/schema/models/provenance.py#L65) with full provenance metadata, the underlying [Finding](../../packages/schema/models/finding.py#L12), and an optional [ExposureRiskScore](../../packages/schema/models/scoring.py#L40) containing individual [ScoreComponent](../../packages/schema/models/scoring.py#L20) objects.
    * The database representation preserves the domain object completely. Reconstructing an `EnrichedFinding` from the database via `.to_schema()` produces a fully typed Pydantic model identical to the original input.
 3. **Database Dialect Portability:**
    * In production, PostgreSQL provides native `ON CONFLICT (finding_id) DO UPDATE` semantics via `sqlalchemy.dialects.postgresql.insert`.
    * In local test environments and offline lab configurations, SQLite provides equivalent `sqlite_upsert` support. A generic `session.merge` fallback handles any auxiliary engine configurations.
 4. **Schema Evolution & Migration Management:**
-   * The database schema is managed via an explicit Alembic migration ([0004_create_enriched_findings.py](file:///e:/SeekThreat/SeekThreat/alembic/versions/0004_create_enriched_findings.py)), fully synchronized with SQLAlchemy metadata and verified against autogenerate diff checks in `test_alembic.py`.
+   * The database schema is managed via an explicit Alembic migration ([0004_create_enriched_findings.py](../../alembic/versions/0004_create_enriched_findings.py)), fully synchronized with SQLAlchemy metadata and verified against autogenerate diff checks in `test_alembic.py`.
 
 ---
 
 ## 2. What Was Built
 
 ### A. SQLAlchemy ORM Model: `EnrichedFindingModel`
-* **File:** [apps/api/db/models.py](file:///e:/SeekThreat/SeekThreat/apps/api/db/models.py)
+* **File:** [apps/api/db/models.py](../../apps/api/db/models.py)
 * **Table:** `enriched_findings`
 * **Key Columns:**
   * `finding_id` (`String(128)`, Primary Key): Matches `Finding.finding_id`.
@@ -48,7 +48,7 @@ Enrichment tasks are often re-triggered across engagement lifecycles (e.g., sche
 ---
 
 ### B. Idempotent Repository: `EnrichedFindingRepository`
-* **File:** [apps/api/db/repositories.py](file:///e:/SeekThreat/SeekThreat/apps/api/db/repositories.py)
+* **File:** [apps/api/db/repositories.py](../../apps/api/db/repositories.py)
 * **Implemented Capabilities:**
   * `upsert(enriched: EnrichedFinding, enriched_at: datetime | None = None) -> EnrichedFindingModel`:
     * Detects database dialect (`postgresql`, `sqlite`, or generic).
@@ -66,7 +66,7 @@ Enrichment tasks are often re-triggered across engagement lifecycles (e.g., sche
 ---
 
 ### C. Database Migration: `0004_create_enriched_findings.py`
-* **File:** [alembic/versions/0004_create_enriched_findings.py](file:///e:/SeekThreat/SeekThreat/alembic/versions/0004_create_enriched_findings.py)
+* **File:** [alembic/versions/0004_create_enriched_findings.py](../../alembic/versions/0004_create_enriched_findings.py)
 * **Revision:** `0004` (revises `0003_create_audit_logs`)
 * **Features:**
   * Supports PostgreSQL `JSONB` with automatic fallback to standard `JSON` for SQLite.
@@ -76,7 +76,7 @@ Enrichment tasks are often re-triggered across engagement lifecycles (e.g., sche
 ---
 
 ### D. Package Exports
-* **File:** [apps/api/db/__init__.py](file:///e:/SeekThreat/SeekThreat/apps/api/db/__init__.py)
+* **File:** [apps/api/db/__init__.py](../../apps/api/db/__init__.py)
 * Exported `EnrichedFindingModel` and `EnrichedFindingRepository` alongside existing models and repositories.
 
 ---
@@ -84,7 +84,7 @@ Enrichment tasks are often re-triggered across engagement lifecycles (e.g., sche
 ## 3. Verification & Test Results
 
 ### Dedicated Persistence Test Suite: `test_enriched_finding_persistence.py`
-We created a comprehensive unit test suite in [tests/unit/test_enriched_finding_persistence.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_enriched_finding_persistence.py) covering three core areas:
+We created a comprehensive unit test suite in [tests/unit/test_enriched_finding_persistence.py](../../tests/unit/test_enriched_finding_persistence.py) covering three core areas:
 
 1. **Model Round-Trip & Schema Fidelity (`TestEnrichedFindingModelRoundTrip`):**
    * `test_from_schema_populates_all_columns`: Verifies column extraction from Pydantic model.
@@ -169,5 +169,5 @@ Zero regressions introduced across all 282 test cases.
 ## 4. Next Steps
 
 With Task 5 complete, the remaining tasks under Level 2 Enrichment are:
-* **Task 6:** Enrichment Pipeline Coordinator & Worker Integration ([services/enrichment/service.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/service.py) and Celery task integration).
+* **Task 6:** Enrichment Pipeline Coordinator & Worker Integration ([services/enrichment/service.py](../../services/enrichment/service.py) and Celery task integration).
 * **Task 7:** Comprehensive Invariant Tests & Regression Suite (offline mirror tests and end-to-end integration tests).

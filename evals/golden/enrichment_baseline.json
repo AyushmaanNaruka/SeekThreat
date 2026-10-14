@@ -1,11 +1,13 @@
 {
   "_synthetic": false,
   "_comment": "Real golden evaluation dataset for SeekThreat Layer 2 enrichment coverage against an NVD-only baseline.",
-  "verification": "verified — 50 real-world CVEs across 5 documented cohorts; verified against CISA KEV, CVE.org, and NVD 2.0 by Mayank Narang on 2026-10-11",
-  "dataset_version": "2.0.0",
+  "verification": "batch-attested by Mayank Narang 2026-10-11; no per-CVE evidence records yet; cohort labels B (nvd_gap) and D (high_epss_no_nvd) are contradicted by the measured data (NVD supplied CVSS for all)",
+  "cohort_labels_verified": false,
+  "selection_rule": "none documented yet: the 50 CVEs are hand-picked well-known CVEs; evals/golden/eval_cve_list.txt is the same list used as sync input",
+  "dataset_version": "2.0.1",
   "verified_by": "Mayank Narang",
   "verified_at": "2026-10-11",
-  "description": "50 real-world CVE IDs grouped into five documented cohorts. Each entry verified against authoritative upstream catalogs.",
+  "description": "50 real-world CVE IDs grouped into five hypothesised cohorts. Entries carry a batch attestation (verified_by / verified_at), not per-CVE evidence; see the verification field.",
   "cohorts": [
     "cohort_a_nvd_control",
     "cohort_b_nvd_gap",
@@ -20,7 +22,8 @@
       "title": "Apache Log4j2 JNDI RCE (Log4Shell)",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2021-41773",
@@ -28,7 +31,8 @@
       "title": "Apache HTTP Server 2.4.49 Path Traversal & RCE",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2020-7699",
@@ -36,7 +40,8 @@
       "title": "express-fileupload Prototype Pollution",
       "authoritative_source": "NVD / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2020-15778",
@@ -44,7 +49,8 @@
       "title": "OpenSSH scp Command Injection",
       "authoritative_source": "NVD / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2017-0144",
@@ -52,7 +58,8 @@
       "title": "Microsoft SMBv1 Server Remote Code Execution (EternalBlue)",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2019-0708",
@@ -60,7 +67,8 @@
       "title": "Microsoft Remote Desktop Services RCE (BlueKeep)",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2014-0160",
@@ -68,7 +76,8 @@
       "title": "OpenSSL TLS Heartbeat Information Disclosure (Heartbleed)",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2017-5638",
@@ -76,7 +85,8 @@
       "title": "Apache Struts 2 Jakarta Multipart Parser RCE",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2019-11510",
@@ -84,7 +94,8 @@
       "title": "Pulse Secure Pulse Connect Secure Arbitrary File Read",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2018-13379",
@@ -92,7 +103,8 @@
       "title": "Fortinet FortiOS SSL VPN Path Traversal",
       "authoritative_source": "NVD / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-23897",
@@ -100,7 +112,8 @@
       "title": "Jenkins CLI Arbitrary File Read",
       "authoritative_source": "CVE.org / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-21893",
@@ -108,7 +121,8 @@
       "title": "Ivanti Connect Secure / Policy Secure SSRF",
       "authoritative_source": "CVE.org / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-38077",
@@ -116,7 +130,8 @@
       "title": "Windows Remote Desktop Licensing Service RCE (MadLicense)",
       "authoritative_source": "CVE.org / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-21413",
@@ -124,15 +139,18 @@
       "title": "Microsoft Outlook Moniker RCE (MonikerLink)",
       "authoritative_source": "CVE.org / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-3094",
       "cohort": "cohort_b_nvd_gap",
       "title": "XZ Utils Backdoor Supply Chain Compromise",
-      "authoritative_source": "CVE.org / CISA KEV / NVD",
+      "authoritative_source": "CVE.org / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "correction_note": "2026-10-12 review: 'CISA KEV' removed; the KEV mirror used for evals/results/enrichment_coverage_real.json reports this CVE as not in KEV",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-27198",
@@ -140,7 +158,8 @@
       "title": "JetBrains TeamCity Authentication Bypass",
       "authoritative_source": "CVE.org / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-1709",
@@ -148,7 +167,8 @@
       "title": "ConnectWise ScreenConnect Authentication Bypass",
       "authoritative_source": "CVE.org / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-21762",
@@ -156,7 +176,8 @@
       "title": "Fortinet FortiOS Out-of-Bounds Write SSL-VPN",
       "authoritative_source": "CVE.org / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-3400",
@@ -164,7 +185,8 @@
       "title": "Palo Alto Networks PAN-OS GlobalProtect Command Injection",
       "authoritative_source": "CVE.org / CISA KEV / EUVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-4577",
@@ -172,7 +194,8 @@
       "title": "PHP CGI Windows Argument Injection RCE",
       "authoritative_source": "CVE.org / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2022-22947",
@@ -180,7 +203,8 @@
       "title": "Spring Cloud Gateway Code Injection",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-34362",
@@ -188,7 +212,8 @@
       "title": "Progress MOVEit Transfer SQL Injection",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-2868",
@@ -196,7 +221,8 @@
       "title": "Barracuda Email Security Gateway Command Injection",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-22515",
@@ -204,7 +230,8 @@
       "title": "Atlassian Confluence Broken Access Control",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-22518",
@@ -212,7 +239,8 @@
       "title": "Atlassian Confluence Data Center Improper Authorization",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-46805",
@@ -220,7 +248,8 @@
       "title": "Ivanti Connect Secure Authentication Bypass",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-21887",
@@ -228,7 +257,8 @@
       "title": "Ivanti Connect Secure Command Injection",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-20198",
@@ -236,7 +266,8 @@
       "title": "Cisco IOS XE Web UI Privilege Escalation",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-20273",
@@ -244,7 +275,8 @@
       "title": "Cisco IOS XE Web UI Command Injection",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-27997",
@@ -252,7 +284,8 @@
       "title": "Fortinet FortiOS Heap Overflow (XORtigate)",
       "authoritative_source": "CISA KEV / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2022-22965",
@@ -260,7 +293,8 @@
       "title": "Spring Framework RCE (Spring4Shell)",
       "authoritative_source": "FIRST EPSS / CVE.org",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-28995",
@@ -268,7 +302,8 @@
       "title": "SolarWinds Serv-U Directory Traversal",
       "authoritative_source": "FIRST EPSS / CVE.org / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-20656",
@@ -276,7 +311,8 @@
       "title": "Microsoft Visual Studio Elevation of Privilege",
       "authoritative_source": "FIRST EPSS / CVE.org / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-20931",
@@ -284,15 +320,18 @@
       "title": "Oracle WebLogic Server T3/IIOP Deserialization",
       "authoritative_source": "FIRST EPSS / CVE.org / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-26229",
       "cohort": "cohort_d_high_epss_no_nvd",
       "title": "Windows Kernel Elevation of Privilege",
-      "authoritative_source": "FIRST EPSS / CISA KEV / NVD",
+      "authoritative_source": "FIRST EPSS / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "correction_note": "2026-10-12 review: 'CISA KEV' removed; the KEV mirror used for evals/results/enrichment_coverage_real.json reports this CVE as not in KEV",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-26169",
@@ -300,7 +339,8 @@
       "title": "Windows Error Reporting Service Elevation of Privilege",
       "authoritative_source": "FIRST EPSS / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-30078",
@@ -308,7 +348,8 @@
       "title": "Windows Wi-Fi Driver Remote Code Execution",
       "authoritative_source": "FIRST EPSS / CVE.org / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-38112",
@@ -316,7 +357,8 @@
       "title": "Windows MSHTML Platform Spoofing Vulnerability",
       "authoritative_source": "FIRST EPSS / CISA KEV / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-38063",
@@ -324,7 +366,8 @@
       "title": "Windows TCP/IP Remote Code Execution (IPv6)",
       "authoritative_source": "FIRST EPSS / CVE.org / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2024-38200",
@@ -332,7 +375,8 @@
       "title": "Microsoft Office Spoofing Vulnerability",
       "authoritative_source": "FIRST EPSS / CVE.org / NVD",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2020-1472",
@@ -340,7 +384,8 @@
       "title": "Microsoft Netlogon Elevation of Privilege (ZeroLogon)",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2021-34527",
@@ -348,7 +393,8 @@
       "title": "Windows Print Spooler RCE (PrintNightmare)",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2021-26855",
@@ -356,7 +402,8 @@
       "title": "Microsoft Exchange Server SSRF (ProxyLogon)",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2021-34473",
@@ -364,7 +411,8 @@
       "title": "Microsoft Exchange Server RCE (ProxyShell)",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2022-26134",
@@ -372,7 +420,8 @@
       "title": "Atlassian Confluence OGNL Injection",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2022-30190",
@@ -380,7 +429,8 @@
       "title": "Microsoft Windows MSDT Arbitrary Code Execution (Follina)",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2022-41040",
@@ -388,7 +438,8 @@
       "title": "Microsoft Exchange Server SSRF (ProxyNotShell)",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2022-41082",
@@ -396,7 +447,8 @@
       "title": "Microsoft Exchange Server Remote PowerShell RCE",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-0669",
@@ -404,7 +456,8 @@
       "title": "Fortra GoAnywhere MFT Deserialization RCE",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     },
     {
       "cve_id": "CVE-2023-27350",
@@ -412,7 +465,8 @@
       "title": "PaperCut MF/NG Improper Access Control",
       "authoritative_source": "ExploitDB / Metasploit / CISA KEV",
       "verified_by": "Mayank Narang",
-      "verified_at": "2026-10-11"
+      "verified_at": "2026-10-11",
+      "verification_note": "batch attestation; no per-CVE evidence record"
     }
   ]
 }

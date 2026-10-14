@@ -103,6 +103,27 @@ def test_finding_rejects_malformed_cve_ids() -> None:
         )
 
 
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "CVE-٢٠٢١-44228",  # Arabic-Indic digits: \d matches them
+        "CVE-2021-４４２２８",  # fullwidth digits
+        "CVE-2021-44228\nCVE-2014-0160",  # embedded newline
+    ],
+)
+def test_finding_rejects_non_ascii_digit_cve_ids(raw: str) -> None:
+    with pytest.raises(ValidationError, match="invalid CVE ID"):
+        Finding(
+            finding_id="fnd-007",
+            engagement_id="eng-001",
+            asset_id="ast-001",
+            scanner="nuclei",
+            cve_ids=[raw],
+            observation_ids=["obs-001"],
+            detected_at=NOW,
+        )
+
+
 def test_finding_allows_empty_cve_ids() -> None:
     finding = Finding(
         finding_id="fnd-006",

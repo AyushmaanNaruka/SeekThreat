@@ -14,12 +14,14 @@ In the SeekThreat project roadmap, Layer 2 ("Enrichment — feeds, secondary sou
 
 Prior to Task 3, `evals/enrichment_coverage.py` had only been run as a smoke test against synthetic fixtures in `tests/fixtures/enrichment/` (producing `evals/results/enrichment_coverage_results.json` explicitly labelled with the `SYNTHETIC SMOKE TEST` banner). As mandated by `evals/README.md` ("No number in this project has been measured yet. Never generate placeholder metrics that look like results"), that synthetic smoke test was not a platform measurement.
 
-**Task 3 delivers SeekThreat's first genuine empirical measurement using real feed mirrors and a verified golden CVE dataset:**
-1. **Real Golden Dataset (`evals/golden/enrichment_baseline.json` v2.0.0):** Established 50 real-world CVEs across 5 documented cohorts. Replaced all synthetic placeholders (`CVE-2025-0001`, `CVE-2025-0002`) with genuine vulnerabilities (`CVE-2024-21893`, `CVE-2024-28995`). Each entry was individually verified against live upstream catalogs by Mayank Narang on 2026-10-11.
+> **Review note (2026-10-12, PR #19):** headline claims in this document were corrected after review. Read `evals/results/enrichment_coverage_real.md`, including its reviewer notes, before quoting any number.
+
+**Task 3 delivers SeekThreat's first measurement on real feed mirrors, over a hand-picked, batch-attested golden CVE list:**
+1. **Real Golden Dataset (`evals/golden/enrichment_baseline.json` v2.0.0):** Established 50 real-world CVEs across 5 documented cohorts. Replaced all synthetic placeholders (`CVE-2025-0001`, `CVE-2025-0002`) with genuine vulnerabilities (`CVE-2024-21893`, `CVE-2024-28995`). Entries carry a batch attestation by Mayank Narang on 2026-10-11, with no per-CVE evidence records. There is no documented selection rule yet, and cohort labels B and D are contradicted by the measured data (see `evals/golden/README.md`).
 2. **Full Live Upstream Mirror Synchronization:** Synchronized all 8 intelligence mirrors into `data/enrichment_cache` (including FIRST EPSS ~385k rows, CISA KEV 1,739 rows, ExploitDB 25k rows, Metasploit 2.5k modules, and per-CVE records for NVD API 2.0, CVE.org, Vulnrichment, and EUVD).
 3. **Empirical Offline Coverage Evaluation:** Executed `evals/enrichment_coverage.py` in non-synthetic mode against `data/enrichment_cache`.
-4. **Headline Result:** Multi-source fusion achieved **98.0% (196/200)** headline coverage vs **73.0% (146/200)** for the NVD-only baseline, delivering an empirical **+25.0 percentage point gain**.
-5. **Committed Results:** Produced and committed [`evals/results/enrichment_coverage_real.json`](file:///e:/SeekThreat/SeekThreat/evals/results/enrichment_coverage_real.json) and [`evals/results/enrichment_coverage_real.md`](file:///e:/SeekThreat/SeekThreat/evals/results/enrichment_coverage_real.md), capturing exact mirror SHA256 hashes, generation timestamps, and per-cohort breakdowns.
+4. **Result:** read per field. CVSS, CWE and description coverage were identical for multi-source and NVD-only (+0.0 pp each; **+0.0 pp excluding EPSS**, 146/150 vs 146/150). The four-field figure of 98.0% (196/200) vs 73.0% (146/200), +25.0 pp, comes entirely from `epss_score`, which the baseline does not load by design. On this set, fusion added nothing over NVD for CVSS, CWE or description.
+5. **Committed Results:** Produced and committed [`evals/results/enrichment_coverage_real.json`](../../evals/results/enrichment_coverage_real.json) and [`evals/results/enrichment_coverage_real.md`](../../evals/results/enrichment_coverage_real.md), capturing exact mirror SHA256 hashes, generation timestamps, and per-cohort breakdowns.
 
 ---
 
@@ -42,13 +44,13 @@ In accordance with `evals/golden/README.md` ("never from memory — always from 
 - **Real-World Replacements:**
   - `CVE-2025-0001` was replaced by **`CVE-2024-21893`** (Ivanti Connect Secure SSRF, CVSS 8.2, in CISA KEV).
   - `CVE-2025-0002` was replaced by **`CVE-2024-28995`** (SolarWinds Serv-U Directory Traversal, CVSS 8.6, EPSS 0.972, in CISA KEV).
-- **Verification Metadata:** Every entry records `authoritative_source`, `verified_by: "Mayank Narang"`, and `verified_at: "2026-10-11"`.
+- **Verification Metadata:** Every entry records `authoritative_source`, `verified_by: "Mayank Narang"`, and `verified_at: "2026-10-11"`. This is one batch stamp, not per-CVE evidence. In review, `CVE-2024-3094` and `CVE-2024-26229` were found to list "CISA KEV" although the KEV mirror reports neither in KEV, and that source was removed (dataset 2.0.1).
 
 ---
 
 ## 3. Live Upstream Mirror Synchronization Audit
 
-All 8 intelligence mirrors were synchronized from authoritative upstream APIs using `services.enrichment.sync_feeds` into `data/enrichment_cache/`. Every mirror generated a cryptographically verifiable `.meta.json` sidecar.
+All 8 intelligence mirrors were synchronized from upstream using `services.enrichment.sync_feeds` into `data/enrichment_cache/` (gitignored). Every mirror has a `.meta.json` sidecar recording its sha256. The sha256 identifies the snapshot, but the snapshot itself is not archived and the feeds change daily, so it cannot be re-downloaded. The four per-CVE sources (NVD, CVE.org, Vulnrichment, EUVD) were fetched for exactly the 50 evaluated IDs, so their coverage partly measures fetch success. The record counts below come from this sync and are not in the committed results JSON.
 
 | Source Mirror | Upstream API / Source | Target Cache File | Records | File Size | SHA256 Hash | Synced Timestamp |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
@@ -100,7 +102,7 @@ Signal fields evaluate whether mirrors provide definite answers (`True` / `False
 | Signal Field | Baseline (NVD-Only) | Multi-Source Fusion | Positive Hit Count |
 | :--- | :--- | :--- | :--- |
 | **`in_kev`** | *Not loaded* (unknown) | **Loaded** (100% definite answers) | **80.0%** (40 / 50 CVEs confirmed in CISA KEV) |
-| **`exploit_availability`** | *Not loaded* (unknown) | **Loaded** (100% definite answers) | **72.0%** (36 / 50 CVEs with weaponized exploits) |
+| **`exploit_availability`** | *Not loaded* (unknown) | **Loaded** (100% definite answers) | **72.0%** (36 / 50 CVEs with an ExploitDB or Metasploit catalogue entry) |
 
 ### D. Cohort Analysis (Headline Coverage)
 
@@ -114,16 +116,16 @@ Signal fields evaluate whether mirrors provide definite answers (`True` / `False
 
 ---
 
-## 5. Viva Defensibility & Analytical Insights
+## 5. Interpretation & Limitations
 
-In the final defense, evaluators will scrutinize why multi-source fusion matters if NVD eventually achieves 100% CVSS coverage for historic CVEs:
+This run does not show that multi-source fusion improves CVSS, CWE or description coverage over NVD. On these 50 CVEs it did not.
 
-1. **The Definitional EPSS Advantage (+100.0 pp):**
-   NIST NVD does not compute or distribute EPSS scores. Without Layer 2's direct FIRST EPSS integration, a SOC analyst or vulnerability management team is blind to the 30-day probability of active exploitation in the wild.
+1. **The EPSS gain is definitional (+100.0 pp on that field):**
+   NVD does not distribute EPSS, and the baseline does not load it, so this field measures that the EPSS mirror is wired in. It does not measure a gap in NVD.
 2. **Actionable Threat Intelligence vs Severity Descriptions:**
-   CVSS measures theoretical severity (e.g. CVSS 9.8). However, without CISA KEV and ExploitDB/Metasploit corroboration, an organization cannot differentiate between a theoretical CVSS 9.8 vulnerability with 0% real-world exploit probability and an actively weaponized CVSS 7.5 vulnerability used in ransomware campaigns. Multi-source fusion fills this operational intelligence gap.
-3. **Resilience Against Upstream Outages and Publication Lags:**
-   During real-world zero-day disclosures (such as Ivanti `CVE-2024-21893` or PAN-OS `CVE-2024-3400`), CISA Vulnrichment and CVE Services publish actionable CVSS and SSVC vectors days or weeks before NVD finalizes its analysis. The multi-source fallback chain (`CVE.org -> Vulnrichment -> NVD -> EUVD -> Derived`) guarantees zero analysis downtime.
+   KEV and exploit-catalogue signals add information CVSS does not carry. They are reported as signals, not as headline coverage, and their positive rates here describe a set chosen to contain well-known exploited CVEs.
+3. **Publication lag is not measured here.**
+   The fallback chain (`CVE.org -> Vulnrichment -> NVD -> EUVD -> Derived`) is meant to fill fields when NVD has not analysed a CVE. This run cannot show that. NVD had CVSS for all 50 CVEs at sync time, and the run records no timing data. A claim about lead time over NVD needs a dataset of CVEs sampled at disclosure time.
 
 ---
 
@@ -138,4 +140,4 @@ All automated verification commands passed cleanly:
 - [x] **Code Formatter:** `ruff format --check` — Clean (169 files formatted).
 - [x] **Static Type Checking:** `mypy packages services apps` — Clean (51 source files checked, 0 errors).
 - [x] **Committed Real Artifacts:** `evals/results/enrichment_coverage_real.json` and `evals/results/enrichment_coverage_real.md` generated directly from executed code.
-- [x] **Layer 2 Milestone Done-When Criterion:** Formally verified and delivered.
+- [x] **Layer 2 Done-When Criterion ("coverage measured against an NVD-only baseline"):** measured once on real mirrors. Result: +0.0 pp excluding EPSS. Caveats are in `evals/results/enrichment_coverage_real.md`.

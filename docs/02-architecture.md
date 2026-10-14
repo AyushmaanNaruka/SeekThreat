@@ -254,16 +254,24 @@ computes intelligence fusion, CVSS/EPSS lookups, and Exposure Risk Scores (ERS).
 To prevent data drift and guarantee cross-scanner joinability, the two tracks adhere to this
 formal contract:
 
-### 1. Canonical `asset_id` Structure
-To link host facts (from Nmap) with vulnerability candidates (from Nuclei), `asset_id` follows
-deterministic address prioritization: IPv4 > IPv6 (compressed) > MAC address > FQDN:
-- **IP Target:** `host:<canonical_ip>` (e.g. `host:172.20.1.10`, `host:[2001:db8::10]`)
-- **DNS/Hostname Target:** `host:<canonical_fqdn>` (e.g. `host:dvwa.lab.local`, lowercased without trailing dot)
-- **Layer 2 MAC Fallback:** `host:mac:<lowercase_colon_mac>` (e.g. `host:mac:aa:bb:cc:dd:ee:ff`)
+### 1. Canonical `asset_id` Structure — contract (not yet enforced; enforced when Track 1 lands)
+`Finding.asset_id` is a plain string today: no validator checks this format, and adding a
+strict one before `services/normalize` exists would reject the synthetic fixtures. The
+format below is what Track 1 must emit; the validator lands with Track 1.
+
+To link host facts (from Nmap) with vulnerability candidates (from Nuclei), `asset_id` is
+`host:` + the host part of the nmap `HOST_UP` observation subject
+(`services/scanners/nmap_xml.py`), by deterministic address priority IPv4 > IPv6 > MAC > FQDN:
+- **IPv4:** `host:<dotted-quad>` (e.g. `host:172.20.1.10`)
+- **IPv6:** `host:<compressed>`, unbracketed, lowercase hex, exactly as
+  `ipaddress.IPv6Address(...).compressed` prints it and as nmap `HOST_UP` subjects carry it
+  (e.g. `host:2001:db8::10`). Brackets belong only to port subjects (`[2001:db8::10]:443/tcp`).
+- **Layer 2 MAC Fallback:** `host:mac:<mac>`, lowercase, colon-separated (e.g. `host:mac:aa:bb:cc:dd:ee:ff`)
+- **DNS/Hostname Target:** `host:<fqdn>`, lowercase, trailing dot removed (e.g. `host:dvwa.lab.local`)
 - **Unit Test Fixtures:** Synthetic prefixes `asset-*` or `ast-*` remain permissible for isolated fixtures.
 
 ### 2. `cve_ids` Normalization & Segregation
-- **Uppercase Standard Format:** `cve_ids` entries are strictly validated against `^CVE-\d{4}-\d{4,7}$`.
+- **Uppercase Standard Format:** `cve_ids` entries are strictly validated with `fullmatch` against `CVE-[0-9]{4}-[0-9]{4,7}` (`re.ASCII`).
 - **Automatic Uppercasing:** Lowercase scanner outputs (`cve-2021-44228`) are automatically normalized to uppercase `CVE-2021-44228`.
 - **Deduplication:** Multiple scanner matches on the same CVE for an asset are deduplicated while preserving discovery order.
 - **Segregation of Non-CVE Identifiers:** Non-CVE identifiers (GHSA IDs, CWE identifiers, scanner template IDs, Bugtraq IDs) must **never** be placed into `cve_ids`. They belong in `Observation.attributes` (e.g. `template_id`, `type`, `tags`), keeping `cve_ids` clean for exact feed mirror queries.

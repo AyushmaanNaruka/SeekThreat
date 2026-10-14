@@ -56,9 +56,10 @@ class FirstEPSSSource(BaseEnrichmentSource[FirstEPSSRecord]):
             self._cache = {}
             self._loaded = True
             return
+        path = self.cache_file
 
         def _do_load() -> tuple[dict[str, Any], datetime | None, dict[str, Any]]:
-            with open(self.cache_file, encoding="utf-8") as f:  # type: ignore[arg-type]
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
 
             records: dict[str, FirstEPSSRecord] = {}
@@ -88,14 +89,15 @@ class FirstEPSSSource(BaseEnrichmentSource[FirstEPSSRecord]):
                         epss=epss_val,
                         percentile=percentile_val,
                         date=date_str if isinstance(date_str, str) else None,
-                        raw_payload=item,
+                        # No raw_payload: the process cache holds every EPSS row
+                        # (~385k); a copy of each source dict would double that.
                         retrieved_at=score_date or fallback,
                     )
 
             synced_at = self.mirror_synced_at()
             return records, synced_at, {}
 
-        records, synced_at, _ = load_with_cache(self.source, self.cache_file, _do_load)
+        records, synced_at, _ = load_with_cache(self.source, path, _do_load)
         self._cache = records
         self._synced_at = synced_at
         self._synced_at_read = True

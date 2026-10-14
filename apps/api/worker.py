@@ -4,8 +4,13 @@ This module defines the single Celery app used by the API to dispatch
 scan and enrichment jobs and by the worker process to execute them.
 
 Usage:
-    # Start the worker (from project root):
+    # Start one worker for every queue (simplest local dev, from project root):
     celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans,enrichment
+
+    # Or, as infra/docker-compose.yml does, keep slow upstream feed lookups off the
+    # scan worker: one worker for scans, one single-slot worker for enrichment.
+    celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans
+    celery -A apps.api.worker.celery_app worker --loglevel=info --queues=enrichment --concurrency=1
 
     # Start the scheduler (one instance only) for the daily feed sync:
     celery -A apps.api.worker.celery_app beat --loglevel=info
@@ -46,6 +51,7 @@ celery_app.conf.update(
         "seekthreat.scans.execute": {"queue": "scans"},
         "seekthreat.enrichment.enrich": {"queue": "enrichment"},
         "seekthreat.sync_feeds.run": {"queue": "enrichment"},
+        "seekthreat.enrichment.sync_new_findings_cves": {"queue": "enrichment"},
     },
     # Retry policy defaults (overridden per-task where needed)
     task_acks_late=True,
@@ -76,5 +82,6 @@ celery_app.conf.update(
 # silently looked for the nonexistent apps.api.tasks.tasks and registered nothing,
 # so execute_scan.delay() queued jobs no worker ever picked up.
 from apps.api.tasks import enrichment as _enrichment_tasks  # noqa: E402, F401
+from apps.api.tasks import post_scan_enrichment as _post_scan_tasks  # noqa: E402, F401
 from apps.api.tasks import scans as _scans_tasks  # noqa: E402, F401
 from apps.api.tasks import sync_feeds as _sync_feeds_tasks  # noqa: E402, F401

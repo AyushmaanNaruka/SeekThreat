@@ -87,9 +87,10 @@ class CISAKevSource(BaseEnrichmentSource[CISAKevRecord]):
             self._cache = {}
             self._loaded = True
             return
+        path = self.cache_file
 
         def _do_load() -> tuple[dict[str, Any], datetime | None, dict[str, Any]]:
-            with open(self.cache_file, encoding="utf-8") as f:  # type: ignore[arg-type]
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
 
             cat_date = None
@@ -127,7 +128,7 @@ class CISAKevSource(BaseEnrichmentSource[CISAKevRecord]):
             synced_at = self.mirror_synced_at()
             return records, synced_at, {"catalog_date": cat_date}
 
-        records, synced_at, extra = load_with_cache(self.source, self.cache_file, _do_load)
+        records, synced_at, extra = load_with_cache(self.source, path, _do_load)
         self._cache = records
         self._synced_at = synced_at
         self._synced_at_read = True

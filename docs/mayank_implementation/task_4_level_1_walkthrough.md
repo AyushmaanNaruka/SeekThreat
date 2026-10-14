@@ -23,16 +23,16 @@ Decouple scan execution from the FastAPI HTTP request lifecycle by replacing the
 
 | File | Type | Purpose |
 |---|:---:|---|
-| [`apps/api/worker.py`](file:///e:/SeekThreat/SeekThreat/apps/api/worker.py) | New | Celery application instance bootstrap configured with Redis broker/backend and task routes. |
-| [`apps/api/tasks/__init__.py`](file:///e:/SeekThreat/SeekThreat/apps/api/tasks/__init__.py) | New | Celery tasks package root. |
-| [`apps/api/tasks/scans.py`](file:///e:/SeekThreat/SeekThreat/apps/api/tasks/scans.py) | New | `execute_scan` Celery task with JSON authorization reconstruction, adapter execution, idempotent DB persistence, and audit logging. |
-| [`apps/api/routers/scans.py`](file:///e:/SeekThreat/SeekThreat/apps/api/routers/scans.py) | Modified | Replaces `BackgroundTasks` with `execute_scan.delay(...)`. |
-| [`apps/api/Dockerfile`](file:///e:/SeekThreat/SeekThreat/apps/api/Dockerfile) | New | Unified Python 3.11 Debian-slim container image bundling `nmap`, Python packages, and uvicorn/celery entrypoints. |
-| [`infra/docker-compose.yml`](file:///e:/SeekThreat/SeekThreat/infra/docker-compose.yml) | Modified | Adds `api` and `worker` services to the `core` profile, replacing previous TODO comments. |
-| [`tests/unit/test_celery_task.py`](file:///e:/SeekThreat/SeekThreat/tests/unit/test_celery_task.py) | New | Unit tests for authorization dict round-trip, mocked happy path, and failure state transitions. |
-| [`tests/unit/test_api.py`](file:///e:/SeekThreat/SeekThreat/tests/unit/test_api.py) | Modified | Updates test client fixture to monkeypatch `apps.api.tasks.scans.execute_scan.delay`. |
-| [`DECISIONS.md`](file:///e:/SeekThreat/SeekThreat/DECISIONS.md) | Modified | Documents ADR **D-014** (Celery + Redis for async scan execution). |
-| [`docs/mayank_implementation/build.md`](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/build.md) | Modified | Updates progress checklist to mark Task 4 as complete. |
+| [`apps/api/worker.py`](../../apps/api/worker.py) | New | Celery application instance bootstrap configured with Redis broker/backend and task routes. |
+| [`apps/api/tasks/__init__.py`](../../apps/api/tasks/__init__.py) | New | Celery tasks package root. |
+| [`apps/api/tasks/scans.py`](../../apps/api/tasks/scans.py) | New | `execute_scan` Celery task with JSON authorization reconstruction, adapter execution, idempotent DB persistence, and audit logging. |
+| [`apps/api/routers/scans.py`](../../apps/api/routers/scans.py) | Modified | Replaces `BackgroundTasks` with `execute_scan.delay(...)`. |
+| [`apps/api/Dockerfile`](../../apps/api/Dockerfile) | New | Unified Python 3.11 Debian-slim container image bundling `nmap`, Python packages, and uvicorn/celery entrypoints. |
+| [`infra/docker-compose.yml`](../../infra/docker-compose.yml) | Modified | Adds `api` and `worker` services to the `core` profile, replacing previous TODO comments. |
+| [`tests/unit/test_celery_task.py`](../../tests/unit/test_celery_task.py) | New | Unit tests for authorization dict round-trip, mocked happy path, and failure state transitions. |
+| [`tests/unit/test_api.py`](../../tests/unit/test_api.py) | Modified | Updates test client fixture to monkeypatch `apps.api.tasks.scans.execute_scan.delay`. |
+| [`DECISIONS.md`](../../DECISIONS.md) | Modified | Documents ADR **D-014** (Celery + Redis for async scan execution). |
+| [`docs/mayank_implementation/build.md`](build.md) | Modified | Updates progress checklist to mark Task 4 as complete. |
 
 ---
 
@@ -160,7 +160,7 @@ In `infra/docker-compose.yml`, both `api` and `worker` are defined under the `co
         condition: service_healthy
       redis:
         condition: service_started
-    command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans,enrichment
+    command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans   # enrichment now runs on the dedicated enrichment-worker (D-041)
 ```
 
 ---

@@ -37,14 +37,13 @@ from packages.schema.models.provenance import Confidence, Source
 from services.enrichment.sources.base import (
     BaseEnrichmentSource,
     BaseSourceRecord,
-    load_with_cache,
     parse_feed_date,
 )
 
 logger = logging.getLogger(__name__)
 
 #: A whole reference/alias that IS a CVE ID (not a URL that merely mentions one).
-CVE_ID_EXACT = re.compile(r"CVE-\d{4}-\d{4,7}", re.IGNORECASE)
+CVE_ID_EXACT = re.compile(r"CVE-[0-9]{4}-[0-9]{4,7}", re.IGNORECASE | re.ASCII)
 
 #: NVD's "no CWE" placeholders. They are not weaknesses and must not reach fusion.
 NVD_CWE_PLACEHOLDERS = frozenset({"NVD-CWE-NOINFO", "NVD-CWE-OTHER"})
@@ -129,12 +128,10 @@ class VulnrichmentSource(BaseEnrichmentSource[VulnrichmentRecord]):
 
     def load(self) -> None:
         """Load and index local CISA Vulnrichment mirror data."""
-        if not self.cache_file or not self.cache_file.exists():
-            self._cache.clear()
-            self._loaded = True
-            return
+        self._load_cached(self._index)
 
-        data = _load_mirror_json(self.cache_file, self.source)
+    def _index(self, path: Path) -> dict[str, Any]:
+        data = _load_mirror_json(path, self.source)
         fallback = self.default_retrieved_at()
         records: dict[str, VulnrichmentRecord] = {}
 
@@ -153,8 +150,7 @@ class VulnrichmentSource(BaseEnrichmentSource[VulnrichmentRecord]):
                     if rec:
                         records[rec.cve_id] = rec
 
-        self._cache = records
-        self._loaded = True
+        return records
 
     def _parse_record(
         self, raw: dict[str, Any], fallback: datetime, fallback_id: str | None = None
@@ -288,12 +284,10 @@ class NVDSource(BaseEnrichmentSource[NVDRecord]):
 
     def load(self) -> None:
         """Load and index local NVD mirror JSON data."""
-        if not self.cache_file or not self.cache_file.exists():
-            self._cache.clear()
-            self._loaded = True
-            return
+        self._load_cached(self._index)
 
-        data = _load_mirror_json(self.cache_file, self.source)
+    def _index(self, path: Path) -> dict[str, Any]:
+        data = _load_mirror_json(path, self.source)
         fallback = self.default_retrieved_at()
         records: dict[str, NVDRecord] = {}
 
@@ -321,8 +315,7 @@ class NVDSource(BaseEnrichmentSource[NVDRecord]):
                     if rec:
                         records[rec.cve_id] = rec
 
-        self._cache = records
-        self._loaded = True
+        return records
 
     def _parse_nvd_item(self, item: dict[str, Any], fallback: datetime) -> NVDRecord | None:
         """Parse NVD 2.0 API 'vulnerabilities' item format."""
@@ -427,12 +420,10 @@ class EUVDSource(BaseEnrichmentSource[EUVDRecord]):
 
     def load(self) -> None:
         """Load and index local EUVD mirror JSON data."""
-        if not self.cache_file or not self.cache_file.exists():
-            self._cache.clear()
-            self._loaded = True
-            return
+        self._load_cached(self._index)
 
-        data = _load_mirror_json(self.cache_file, self.source)
+    def _index(self, path: Path) -> dict[str, Any]:
+        data = _load_mirror_json(path, self.source)
         fallback = self.default_retrieved_at()
         records: dict[str, EUVDRecord] = {}
 
@@ -460,8 +451,7 @@ class EUVDSource(BaseEnrichmentSource[EUVDRecord]):
                     if rec:
                         records[rec.cve_id] = rec
 
-        self._cache = records
-        self._loaded = True
+        return records
 
     def _parse_record(
         self, raw: dict[str, Any], fallback: datetime, fallback_id: str | None = None
@@ -611,25 +601,12 @@ class ExploitDBSource(BaseEnrichmentSource[ExploitDBRecord]):
 
     def load(self) -> None:
         """Load ExploitDB mappings from mirror file (supports JSON or CSV)."""
-        if not self.cache_file or not self.cache_file.exists():
-            self._cache = {}
-            self._loaded = True
-            return
+        self._load_cached(self._index)
 
-        def _do_load() -> tuple[dict[str, Any], datetime | None, dict[str, Any]]:
-            suffix = self.cache_file.suffix.lower()  # type: ignore[union-attr]
-            if suffix == ".csv":
-                records = self._parse_csv(self.cache_file)  # type: ignore[arg-type]
-            else:
-                records = self._parse_json(self.cache_file)  # type: ignore[arg-type]
-            synced_at = self.mirror_synced_at()
-            return records, synced_at, {}
-
-        records, synced_at, _ = load_with_cache(self.source, self.cache_file, _do_load)
-        self._cache = records
-        self._synced_at = synced_at
-        self._synced_at_read = True
-        self._loaded = True
+    def _index(self, path: Path) -> dict[str, Any]:
+        if path.suffix.lower() == ".csv":
+            return dict(self._parse_csv(path))
+        return dict(self._parse_json(path))
 
     def _parse_json(self, path: Path) -> dict[str, ExploitDBRecord]:
         data = _load_mirror_json(path, self.source)
@@ -695,52 +672,42 @@ class MetasploitSource(BaseEnrichmentSource[MetasploitRecord]):
 
     def load(self) -> None:
         """Load Metasploit module mappings from mirror JSON."""
-        if not self.cache_file or not self.cache_file.exists():
-            self._cache = {}
-            self._loaded = True
-            return
+        self._load_cached(self._index)
 
-        def _do_load() -> tuple[dict[str, Any], datetime | None, dict[str, Any]]:
-            data = _load_mirror_json(self.cache_file, self.source)  # type: ignore[arg-type]
-            fallback = self.default_retrieved_at()
-            records: dict[str, MetasploitRecord] = {}
+    def _index(self, path: Path) -> dict[str, Any]:
+        data = _load_mirror_json(path, self.source)
+        fallback = self.default_retrieved_at()
+        records: dict[str, MetasploitRecord] = {}
 
-            if isinstance(data, dict):
-                first_k = next((k for k in data if not k.startswith("_")), "")
-                first_v = data.get(first_k)
-                if isinstance(first_v, dict) and "references" in first_v:
-                    for cve, mods in metasploit_cve_map(data).items():
-                        records[cve] = MetasploitRecord(
-                            cve_id=cve,
-                            module_names=mods,
-                            has_metasploit_module=True,
-                            retrieved_at=fallback,
-                        )
-                else:
-                    for k, v in data.items():
-                        if k.startswith("_"):
+        if isinstance(data, dict):
+            first_k = next((k for k in data if not k.startswith("_")), "")
+            first_v = data.get(first_k)
+            if isinstance(first_v, dict) and "references" in first_v:
+                for cve, mods in metasploit_cve_map(data).items():
+                    records[cve] = MetasploitRecord(
+                        cve_id=cve,
+                        module_names=mods,
+                        has_metasploit_module=True,
+                        retrieved_at=fallback,
+                    )
+            else:
+                for k, v in data.items():
+                    if k.startswith("_"):
+                        continue
+                    if isinstance(v, dict):
+                        cve_id = v.get("cve_id") or k
+                        if not isinstance(cve_id, str):
                             continue
-                        if isinstance(v, dict):
-                            cve_id = v.get("cve_id") or k
-                            if not isinstance(cve_id, str):
-                                continue
-                            cve_id = cve_id.strip().upper()
-                            raw_mods = v.get("module_names", [])
-                            module_names = [str(m).strip() for m in raw_mods if m]
-                            has_mod = bool(v.get("has_metasploit_module", bool(module_names)))
-                            retrieved = parse_feed_date(v.get("updated_at")) or fallback
-                            records[cve_id] = MetasploitRecord(
-                                cve_id=cve_id,
-                                module_names=module_names,
-                                has_metasploit_module=has_mod,
-                                retrieved_at=retrieved,
-                            )
+                        cve_id = cve_id.strip().upper()
+                        raw_mods = v.get("module_names", [])
+                        module_names = [str(m).strip() for m in raw_mods if m]
+                        has_mod = bool(v.get("has_metasploit_module", bool(module_names)))
+                        retrieved = parse_feed_date(v.get("updated_at")) or fallback
+                        records[cve_id] = MetasploitRecord(
+                            cve_id=cve_id,
+                            module_names=module_names,
+                            has_metasploit_module=has_mod,
+                            retrieved_at=retrieved,
+                        )
 
-            synced_at = self.mirror_synced_at()
-            return records, synced_at, {}
-
-        records, synced_at, _ = load_with_cache(self.source, self.cache_file, _do_load)
-        self._cache = records
-        self._synced_at = synced_at
-        self._synced_at_read = True
-        self._loaded = True
+        return records

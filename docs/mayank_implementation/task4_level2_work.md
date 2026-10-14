@@ -3,7 +3,9 @@
 > **Document:** `docs/mayank_implementation/task4_level2_work.md`  
 > **Topic:** Task 4 of `docs/mayank_implementation/mayank_task_level2.md` (PR 5: `eval/ers-exploit-validation`)  
 > **Author:** Mayank Narang  
-> **Status:** ✅ Complete — ERS Empirically Validated & Defended (621 unit/integration tests passed, 19 frontend tests passed, all quality gates clean)  
+> **Status:** ⚠️ Run once, smoke-level only. Revised in the PR #19 review; real results must be regenerated with the revised harness (621 unit/integration tests passed at the time, 19 frontend tests passed)  
+
+> **Review note (2026-10-12):** this document originally overstated the result. The corrections are inline. The authoritative caveats are in `evals/results/ers_validation_results.md` (reviewer notes) and `DECISIONS.md` D-038.
 
 ---
 
@@ -13,12 +15,12 @@ In SeekThreat's multi-source intelligence engine, the **Exposure Risk Score (ERS
 
 In earlier design iterations (D-008), KEV was tentatively suggested as a validation metric for ERS. Decision `D-027` corrected this because CISA KEV is an explicit 25% input component to ERS, creating direct circular reasoning. `D-027` proposed corroborating top-N ERS rankings against ExploitDB and Metasploit entries. However, as recognized in Task 4, an indirect circularity remains: the FIRST EPSS v4 machine learning model incorporates public exploit availability features in its training pipeline.
 
-**Task 4 resolves the scoring validity concern and establishes full viva defensibility:**
-1. **Validation Evaluation Harness (`evals/ers_validation.py`):** Implemented a dedicated offline evaluation harness that scores vulnerabilities across the verified golden dataset (`evals/golden/enrichment_baseline.json`), ranks CVEs under multiple weight configurations, and evaluates precision, recall, and exploit corroboration against ExploitDB public exploits and Rapid7 Metasploit modules.
+**What Task 4 did (smoke-level corroboration, not validation):**
+1. **Validation Evaluation Harness (`evals/ers_validation.py`):** Implemented a dedicated offline evaluation harness that scores vulnerabilities across the golden dataset (`evals/golden/enrichment_baseline.json`), ranks CVEs under multiple weight configurations, and evaluates precision, recall, and exploit corroboration against ExploitDB public exploits and Rapid7 Metasploit modules.
 2. **Empirical Validation Results:**
-   - **Top Decile Precision:** **100.0%** of the top-ranked CVEs under Balanced ERS possess verified weaponized public exploits, compared to **80.0%** under a pure CVSS-only baseline (**+20.0 pp improvement**).
-   - **Top 15 Precision:** Balanced ERS maintains **100.0%** precision (15/15 exploited), outperforming the No-EPSS control (**93.3%**) and CVSS-only baseline (**80.0%**).
-3. **Formal Decision Record (`DECISIONS.md` D-038):** Documented the partial circularity between EPSS feature engineering and ExploitDB validation, establishing a transparent academic defense based on Metasploit independence, controlled ablation testing, and additive auditability.
+   - **Top 5 precision:** 100.0% of the balanced-ERS top 5 have an ExploitDB or Metasploit catalogue entry, against a **72.0% base rate** (random-ranking precision). The CVSS-only top 5 was 80.0%. That 20 pp gap is one CVE (`CVE-2024-3094`) entering through input-order tie breaking among 8 CVEs tied at CVSS 10.0. Under the revised deterministic tie rule the CVSS-only top 5 is 100.0% (recomputed from the committed scores).
+   - **EPSS marginal gain:** **+0.0 pp** at top 5 (balanced and no-EPSS control both 100.0%). At top 15 the 100.0% vs 93.3% difference is one CVE (`CVE-2024-21413`), within the control's tie-order range of 93.3% - 100.0%.
+3. **Decision Record (`DECISIONS.md` D-038):** Documents that the corroboration target overlaps with EPSS inputs. Metasploit is **not** independent: EPSS uses Metasploit modules among its features (D-029).
 4. **Comprehensive Test Coverage (`tests/unit/test_ers_validation.py`):** Added 9 dedicated regression tests covering exploit detection helpers, ranking precision/recall calculations, profile weight invariants, and report formatting.
 
 ---
@@ -36,7 +38,7 @@ graph TD
         V2[Validate ERS against ExploitDB / Metasploit] --> C2[Partial Overlap: EPSS uses ExploitDB in ML model]
     end
     subgraph "D-038 (Resolved & Defended)"
-        V3[Controlled Ablation + Metasploit Isolation] --> R1[1. Metasploit weaponized tooling independent of PoCs]
+        V3[Controlled Ablation, disclosed overlap] --> R1[1. Metasploit is NOT independent of EPSS - withdrawn]
         V3 --> R2[2. No-EPSS Control isolates marginal value of EPSS]
         V3 --> R3[3. Additive non-multiplicative auditability: zero hidden weights]
     end
@@ -49,10 +51,10 @@ In an academic examination, evaluators look for candidates who understand the li
 By logging **Decision `D-038`** in `DECISIONS.md`, we formally establish:
 1. **Direct Input Independence:** Neither ExploitDB nor Metasploit is an input to `calculate_ers()`. Inputs are strictly CVSS base score, FIRST EPSS probability, and CISA KEV membership.
 2. **Indirect Feature Overlap Acknowledgment:** We openly document that FIRST EPSS v4 incorporates public exploit evidence (including ExploitDB records) in its training dataset.
-3. **The Triple Mitigation Strategy:**
-   - **Metasploit Module Corroboration:** Metasploit modules represent weaponized, functionally validated exploitation frameworks that require significant manual exploit engineering beyond raw GitHub/ExploitDB PoCs.
-   - **Controlled Ablation Testing:** By evaluating a `no_epss_control` profile ($0.60 \cdot \text{CVSS} + 0.40 \cdot \text{KEV}$), we measure ranking efficacy with EPSS zeroed out, isolating the exact empirical contribution of the EPSS signal.
-   - **Additive Non-Multiplicative Architecture:** ERS strictly adheres to Project Hard Rule 1 and D-008: it **never** multiplies EPSS by CVSS. Every component has its own explicit weight and is accompanied by a self-explaining `ScoreComponent` with complete provenance.
+3. **What the check can and cannot show:**
+   - ~~Metasploit Module Corroboration~~ **(withdrawn in review):** Metasploit is listed among EPSS features (D-029, `task5_level2_work.md`), so a Metasploit catalogue entry is not an independent check. The harness now reports Metasploit-only precision as a narrower target, not as independent confirmation.
+   - **Controlled Ablation Testing:** the `no_epss_control` profile ($0.60 \cdot \text{CVSS} + 0.40 \cdot \text{KEV}$) zeroes EPSS. On this run the difference at top 5 was +0.0 pp. With n=50 and a 72% base rate, this ablation cannot isolate EPSS's contribution.
+   - **Additive Non-Multiplicative Architecture:** ERS follows D-008 and `services/enrichment/README.md` rule 3 ("Never multiply EPSS by CVSS"). Hard Rule 1 is about the LLM never creating graph edges and does not apply here. ERS **never** multiplies EPSS by CVSS. Every component has its own explicit weight and is accompanied by a self-explaining `ScoreComponent` with complete provenance.
 
 ---
 
@@ -71,7 +73,7 @@ The evaluation script (`evals/ers_validation.py`) was constructed following the 
 
 ## 4. Empirical Evaluation Results
 
-Execution against the 50 verified golden CVEs in `data/enrichment_cache`:
+Execution against the 50 batch-attested golden CVEs in `data/enrichment_cache` (pre-review harness; the revised harness takes the same flags):
 ```powershell
 python evals/ers_validation.py `
   --dataset evals/golden/enrichment_baseline.json `
@@ -85,10 +87,10 @@ python evals/ers_validation.py `
 | Metric | Measured Value | Notes |
 | :--- | :--- | :--- |
 | **Total Evaluated CVEs** | 50 CVEs | Golden dataset v2.0.0 across 5 cohorts |
-| **Exploited CVE Prevalence** | 36 / 50 CVEs (72.0%) | Verified in ExploitDB or Rapid7 Metasploit |
-| **Top Decile Precision (Balanced ERS)** | **100.0%** (5 / 5 CVEs) | All 5 top CVEs have weaponized exploits |
-| **Top Decile Precision (CVSS-Only)** | **80.0%** (4 / 5 CVEs) | 1 of top 5 lacks verified exploit activity |
-| **Precision Improvement over CVSS** | **+20.0 percentage points** | Demonstrates clear superiority over pure CVSS |
+| **Catalogue-entry base rate** | 36 / 50 CVEs (72.0%) | ExploitDB or Metasploit catalogue entry exists (= random-ranking precision) |
+| **Top Decile Precision (Balanced ERS)** | **100.0%** (5 / 5 CVEs) | All 5 top CVEs have a catalogue entry |
+| **Top Decile Precision (CVSS-Only)** | **80.0%** (4 / 5 CVEs) | 1 CVE, admitted by input-order tie breaking (pre-review harness) |
+| **Precision difference vs CVSS** | **+20.0 percentage points** | One CVE; 0.0 pp under the revised tie rule. Not evidence of superiority |
 
 ### B. Profile Ranking Across Slices
 
@@ -107,7 +109,7 @@ python evals/ers_validation.py `
 | **Exploitation Heavy** | 0.25 / 0.50 / 0.25 | Top 10 (20%) | 100.0% | 27.8% | 9.95 |
 | **Exploitation Heavy** | 0.25 / 0.50 / 0.25 | Top 15 (30%) | 100.0% | 41.7% | 9.95 |
 
-> **Key Finding:** In the Top 15 ranking slice, Balanced ERS achieves **100.0% precision** (15/15 exploited), whereas the No-EPSS control drops to **93.3%** (admitting an unexploited CVE), and the CVSS-only baseline drops to **80.0%** (admitting 3 unexploited CVEs). This proves empirically that the EPSS factor adds critical discriminating power beyond CVSS and KEV alone.
+> **Reading this table (review correction):** at top 15 the balanced profile is 100.0%, the no-EPSS control 93.3% (one CVE, `CVE-2024-21413`) and CVSS-only 80.0%. This is small, biased, smoke-level corroboration. n=50; base rate 72.0%; cohort E was selected for exploit presence and cohort C on KEV, which is an ERS input; ties were broken by input order; and the headline EPSS marginal gain (`epss_marginal_precision_gain_pp`) is **0.0**. It does **not** show that EPSS adds discriminating power.
 
 ### C. Top-Ranked Vulnerabilities Corroboration Table
 
@@ -142,7 +144,7 @@ Added record to `DECISIONS.md`:
 **Status:** Active
 
 **Decision**
-We empirically validate the Exposure Risk Score (ERS) against independent exploit catalogs (ExploitDB and Rapid7 Metasploit) via `evals/ers_validation.py`. We explicitly acknowledge and document a partial circularity: FIRST EPSS v4 incorporates public exploit evidence in its training data, meaning validating ERS against ExploitDB involves indirect feature overlap. We mitigate and defend this by (1) corroborating against weaponized Metasploit modules, (2) running a comparative control isolating the marginal contribution of EPSS against pure technical severity (CVSS + KEV), and (3) preserving additive auditability without multiplying EPSS by CVSS.
+(Original text, superseded by the revised D-038 in `DECISIONS.md`, which withdraws the "independent Metasploit" mitigation and records the 0.0 pp EPSS finding.)
 ```
 
 ---
@@ -156,5 +158,5 @@ All automated verification commands succeeded:
 - [x] **Frontend Unit Tests:** `npm --prefix apps/web test` — **19 passed, 0 failed**.
 - [x] **Linters & Style:** `ruff check` and `ruff format --check` — Clean (no warnings or errors).
 - [x] **Static Type Checking:** `mypy packages services apps` — Clean (51 source files checked, 0 errors).
-- [x] **Committed Results:** `evals/results/ers_validation_results.json` and `evals/results/ers_validation_results.md` committed with exact empirical data.
-- [x] **Viva Defensibility:** Circularity analysis formalized in `DECISIONS.md` D-038.
+- [x] **Committed Results:** `evals/results/ers_validation_results.json` / `.md` committed from the pre-review harness. **Must be regenerated** with the revised harness.
+- [x] **Circularity disclosure:** `DECISIONS.md` D-038 (revised in review).

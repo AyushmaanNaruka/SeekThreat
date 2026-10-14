@@ -8,7 +8,7 @@
 
 ## 1. Overview & Objective
 
-In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_status.md#L154), [services/enrichment/README.md](file:///e:/SeekThreat/SeekThreat/services/enrichment/README.md#L36), and [DECISIONS.md D-008](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L633), **Task 4** implements SeekThreat's composite **Exposure Risk Score (ERS)** engine in `services/enrichment/ers.py`.
+In accordance with [level2_status.md](level2_status.md#L154), [services/enrichment/README.md](../../services/enrichment/README.md#L36), and [DECISIONS.md D-008](../../DECISIONS.md#L633), **Task 4** implements SeekThreat's composite **Exposure Risk Score (ERS)** engine in `services/enrichment/ers.py`.
 
 ### Load-Bearing Principles & Non-Negotiable Rules
 
@@ -21,14 +21,14 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 3. **KEV Validates; It Does Not Train (D-008):**
    * CISA KEV membership provides an additive validation boost reflecting confirmed active weaponization in the wild. It validates the elevated prioritization of critical vulnerabilities, but does not solely dictate the score.
 4. **Self-Explaining Breakdown (Rule 4):**
-   * Every score is emitted as an [ExposureRiskScore](file:///e:/SeekThreat/SeekThreat/packages/schema/models/scoring.py#L40) model containing individual [ScoreComponent](file:///e:/SeekThreat/SeekThreat/packages/schema/models/scoring.py#L20) records. Every component carries its own human-readable explanation and non-null [Provenance](file:///e:/SeekThreat/SeekThreat/packages/schema/models/provenance.py#L43). Opaque risk numbers are completely unrepresentable.
+   * Every score is emitted as an [ExposureRiskScore](../../packages/schema/models/scoring.py#L40) model containing individual [ScoreComponent](../../packages/schema/models/scoring.py#L20) records. Every component carries its own human-readable explanation and non-null [Provenance](../../packages/schema/models/provenance.py#L43). Opaque risk numbers are completely unrepresentable.
 
 ---
 
 ## 2. What Was Built
 
 ### A. ERS Engine & Additive Formula
-* **[services/enrichment/ers.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/ers.py)**:
+* **[services/enrichment/ers.py](../../services/enrichment/ers.py)**:
   * Hand-tuned documented weights:
     * `DEFAULT_WEIGHT_CVSS = 0.40`: Reflects technical severity, impact on confidentiality/integrity/availability, and exploit vector characteristics.
     * `DEFAULT_WEIGHT_EPSS = 0.35`: Reflects empirical 30-day exploitation probability in the wild from FIRST EPSS v4.
@@ -46,10 +46,10 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 ---
 
 ### B. Pipeline Integration
-* **[services/enrichment/fusion.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/fusion.py)**:
+* **[services/enrichment/fusion.py](../../services/enrichment/fusion.py)**:
   * Updated `fuse_to_enriched_finding(finding, compute_ers=True)`:
     * Automatically runs `calculate_ers(fields)` and attaches the verified composite `ExposureRiskScore` to `EnrichedFinding.ers`.
-* **[services/enrichment/__init__.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/__init__.py)**:
+* **[services/enrichment/__init__.py](../../services/enrichment/__init__.py)**:
   * Exported `calculate_ers`, `ERSWeights`, and default weight constants.
 
 ---
@@ -57,7 +57,7 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 ## 3. Verification & Test Results
 
 ### Automated Test Suite
-We implemented 8 comprehensive tests in [tests/unit/test_ers_invariants.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_ers_invariants.py):
+We implemented 8 comprehensive tests in [tests/unit/test_ers_invariants.py](../../tests/unit/test_ers_invariants.py):
 1. **Anti-Multiplication Regression Guard (`test_ers_is_never_literally_epss_times_cvss`)**:
    * Evaluates all baseline findings and asserts that `abs(ers.value - (cvss * epss)) > 0.05`.
    * Proves that ERS is an additive weighted sum and never degenerates into the forbidden multiplicative product.

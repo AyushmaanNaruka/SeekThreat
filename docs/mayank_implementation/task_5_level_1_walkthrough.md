@@ -23,14 +23,14 @@ Add **Nuclei** as the second core scanner adapter, following the same contract a
 
 | File | Type | Purpose |
 |---|:---:|---|
-| [`services/scanners/nuclei_adapter.py`](file:///e:/SeekThreat/SeekThreat/services/scanners/nuclei_adapter.py) | New | `NucleiAdapter(ScannerAdapter)` subclass — subprocess invocation and parse delegation. |
-| [`services/scanners/nuclei_json.py`](file:///e:/SeekThreat/SeekThreat/services/scanners/nuclei_json.py) | New | Pure NDJSON/JSON-array parser → `tuple[Observation, ...]`. |
-| [`services/scanners/__init__.py`](file:///e:/SeekThreat/SeekThreat/services/scanners/__init__.py) | Modified | Exports `NucleiAdapter`, `parse_nuclei_json`, `NucleiParseError`. |
-| [`apps/api/tasks/scans.py`](file:///e:/SeekThreat/SeekThreat/apps/api/tasks/scans.py) | Modified | Adds `elif scanner == "nuclei"` dispatch branch in `execute_scan`. |
-| [`tests/fixtures/nuclei/`](file:///e:/SeekThreat/SeekThreat/tests/fixtures/nuclei/) | New | 6 fixture files: `lab_baseline.jsonl`, `single_cve.jsonl`, `empty.jsonl`, `json_array.json`, `malformed.jsonl`, `malicious_attributes.jsonl`. |
-| [`tests/unit/test_nuclei_json.py`](file:///e:/SeekThreat/SeekThreat/tests/unit/test_nuclei_json.py) | New | 11 unit tests covering parsing, CVE extraction, edge cases, and adapter mock. |
-| [`DECISIONS.md`](file:///e:/SeekThreat/SeekThreat/DECISIONS.md) | Modified | Added ADR **D-015** documenting Nuclei + NDJSON design decisions. |
-| [`docs/mayank_implementation/build.md`](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/build.md) | Modified | Task 5 marked complete; checklist table updated to 164/164 tests. |
+| [`services/scanners/nuclei_adapter.py`](../../services/scanners/nuclei_adapter.py) | New | `NucleiAdapter(ScannerAdapter)` subclass — subprocess invocation and parse delegation. |
+| [`services/scanners/nuclei_json.py`](../../services/scanners/nuclei_json.py) | New | Pure NDJSON/JSON-array parser → `tuple[Observation, ...]`. |
+| [`services/scanners/__init__.py`](../../services/scanners/__init__.py) | Modified | Exports `NucleiAdapter`, `parse_nuclei_json`, `NucleiParseError`. |
+| [`apps/api/tasks/scans.py`](../../apps/api/tasks/scans.py) | Modified | Adds `elif scanner == "nuclei"` dispatch branch in `execute_scan`. |
+| [`tests/fixtures/nuclei/`](../../tests/fixtures/nuclei) | New | 6 fixture files: `lab_baseline.jsonl`, `single_cve.jsonl`, `empty.jsonl`, `json_array.json`, `malformed.jsonl`, `malicious_attributes.jsonl`. |
+| [`tests/unit/test_nuclei_json.py`](../../tests/unit/test_nuclei_json.py) | New | 11 unit tests covering parsing, CVE extraction, edge cases, and adapter mock. |
+| [`DECISIONS.md`](../../DECISIONS.md) | Modified | Added ADR **D-015** documenting Nuclei + NDJSON design decisions. |
+| [`docs/mayank_implementation/build.md`](build.md) | Modified | Task 5 marked complete; checklist table updated to 164/164 tests. |
 
 ---
 

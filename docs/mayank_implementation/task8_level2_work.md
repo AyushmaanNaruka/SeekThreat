@@ -20,10 +20,10 @@ Without a strictly defined and enforced interface contract between Track 1 and L
 4. Untraced findings would violate the repository's core architectural invariant that every derived finding traces directly to immutable observations.
 
 **Task 8 formally settles and enforces the Finding Ingestion Contract between Track 1 and Layer 2:**
-- **Code Enforcement:** Added strict Pydantic field validators in [`packages/schema/models/finding.py`](file:///e:/SeekThreat/SeekThreat/packages/schema/models/finding.py) for automatic uppercase normalization, order-preserving deduplication, and non-CVE identifier rejection.
-- **Unit Test Coverage:** Added comprehensive invariant tests in [`tests/unit/test_finding.py`](file:///e:/SeekThreat/SeekThreat/tests/unit/test_finding.py).
-- **Formal Decision Record:** Logged **`D-040`** in [`DECISIONS.md`](file:///e:/SeekThreat/SeekThreat/DECISIONS.md).
-- **Architecture Documentation:** Documented the interface specifications in [`docs/02-architecture.md`](file:///e:/SeekThreat/SeekThreat/docs/02-architecture.md) and [`packages/schema/README.md`](file:///e:/SeekThreat/SeekThreat/packages/schema/README.md).
+- **Code Enforcement:** Added strict Pydantic field validators in [`packages/schema/models/finding.py`](../../packages/schema/models/finding.py) for automatic uppercase normalization, order-preserving deduplication, and non-CVE identifier rejection.
+- **Unit Test Coverage:** Added comprehensive invariant tests in [`tests/unit/test_finding.py`](../../tests/unit/test_finding.py).
+- **Formal Decision Record:** Logged **`D-040`** in [`DECISIONS.md`](../../DECISIONS.md).
+- **Architecture Documentation:** Documented the interface specifications in [`docs/02-architecture.md`](../02-architecture.md) and [`packages/schema/README.md`](../../packages/schema/README.md).
 
 ---
 
@@ -68,7 +68,7 @@ To allow deterministic correlation across different scanner engines, `asset_id` 
 ### Dimension 3: `observation_ids` Provenance Requirement
 - Every `Finding` must link to at least one stored `observation_id` (`len(observation_ids) >= 1`).
 - Enforced at model construction via Pydantic validator (`Finding._must_trace_to_observations`).
-- Enforced at the API ingestion boundary via `_verify_findings_provenance()` in [`apps/api/routers/findings.py`](file:///e:/SeekThreat/SeekThreat/apps/api/routers/findings.py), rejecting untraced or cross-engagement findings with HTTP 422.
+- Enforced at the API ingestion boundary via `_verify_findings_provenance()` in [`apps/api/routers/findings.py`](../../apps/api/routers/findings.py), rejecting untraced or cross-engagement findings with HTTP 422.
 
 ---
 

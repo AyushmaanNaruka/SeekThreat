@@ -67,7 +67,7 @@ graph TD
 
 ### Task 1: Mirror Caching & Performance Optimization (EPSS ~385k Rows) — ✅ Complete
 
-- **Status:** ✅ **Complete** — Implemented and documented in [`task1_level2_work.md`](./task1_level2_work.md). Process-level cache with double-checked locking in `services/enrichment/sources/base.py`, 10/10 dedicated tests in `tests/unit/test_feed_cache.py` passing, full test suite passing (607 passed, 3 skipped), repeated `FusionEngine` instantiation time dropped from multiple seconds to `< 1ms`.
+- **Status:** ✅ **Complete** — Implemented and documented in [`task1_level2_work.md`](./task1_level2_work.md). Process-level cache with double-checked locking in `services/enrichment/sources/base.py`, 10/10 dedicated tests in `tests/unit/test_feed_cache.py` passing, full test suite passing (607 passed, 3 skipped). The cache tests show repeated instantiation reuses the loaded index; a single ad-hoc timing is reported in task1_level2_work.md. No committed benchmark backs a `< 1ms` `FusionEngine` instantiation figure.
 - **Concern:** Performance & Memory Scalability.
 - **Context:**
   With the transition to the full FIRST EPSS mirror, `epss_scores-current.csv.gz` contains ~385,000 CVE records. In the current implementation (`services/enrichment/sources/epss.py`), `FirstEPSSSource.load()` reconstructs 385,000 `FirstEPSSRecord` Pydantic models in memory every time a `FusionEngine` instance is initialized. The FastAPI findings router creates an engine per request (`GET /findings`), creating a severe CPU and memory bottleneck.
@@ -80,7 +80,7 @@ graph TD
      - Test that initializing multiple `FusionEngine` or `FirstEPSSSource` instances reuses the in-memory record index without disk I/O or JSON re-parsing.
      - Test that updating the `.meta.json` sidecar triggers an atomic reload.
 - **Acceptance Criteria:**
-  - `FusionEngine` instantiation time with a loaded EPSS mirror drops from multiple seconds to `< 1ms`.
+  - `FusionEngine` instantiation with a loaded EPSS mirror reuses the cached index instead of re-parsing (target: `< 1ms`; not yet backed by a committed benchmark).
   - Memory consumption remains stable across repeated API queries.
   - All unit tests pass; `ruff` and `mypy` pass cleanly.
 
@@ -114,7 +114,7 @@ graph TD
 
 ### Task 3: Production of Real Layer 2 Evaluation & Baseline Measurement — ✅ Complete
 
-- **Status:** ✅ **Complete** — Implemented and documented in [`task3_level2_work.md`](./task3_level2_work.md). Real golden evaluation dataset (v2.0.0, 50 real-world CVEs across 5 cohorts) verified and synced to `data/enrichment_cache`. Empirical offline coverage benchmark executed via `evals/enrichment_coverage.py`: Multi-source fusion achieved **98.0% (196/200)** headline coverage vs NVD-only baseline **73.0% (146/200)** (**+25.0 pp delta**). Real evaluation results committed to `evals/results/enrichment_coverage_real.json` and `evals/results/enrichment_coverage_real.md`. Layer 2 "Done When" criterion formally verified.
+- **Status:** ✅ **Complete** — Implemented and documented in [`task3_level2_work.md`](./task3_level2_work.md). Golden dataset (50 hand-picked real CVEs in 5 hypothesised cohorts, batch-attested, no documented selection rule) synced to `data/enrichment_cache`. Coverage measured once on real mirrors (2026-10-11) via `evals/enrichment_coverage.py`. Per field, CVSS, CWE and description coverage were identical to NVD-only (**+0.0 pp excluding EPSS**). The four-field 98.0% vs 73.0% (+25.0 pp) is entirely EPSS, which the baseline does not load by design. Results in `evals/results/enrichment_coverage_real.json` / `.md` (read the reviewer notes). The "Done When" wording (coverage measured against an NVD-only baseline) is met; the result does not show a fusion gain over NVD on this set.
 - **Concern:** Layer 2 Milestone Delivery ("Done When: Coverage measured against an NVD-only baseline").
 - **Context:**
   Up to this point, enrichment coverage has only been run as a smoke test against synthetic fixtures (`evals/results/enrichment_coverage_results.json`). To fulfill the October done-when criterion, we must produce SeekThreat's first genuine empirical measurement using real feed mirrors and a documented, reproducible golden CVE dataset.
@@ -124,10 +124,10 @@ graph TD
      - Establish a transparent, reproducible selection rule (e.g., stratified sampling from recent CISA KEV additions, GitHub Advisory database, and NVD recent feeds).
      - Individually verify and record the baseline status of each CVE (who verified it, authoritative source, timestamp) in accordance with `evals/golden/README.md` ("never from memory").
   2. **Execute Full Live Synchronization:**
-     - Run `python -m services.enrichment.sync_feeds --source all --cve-file <eval_cve_list> --cache-dir data/enrichment_cache`.
+     - Run `python -m services.enrichment.sync_feeds --source all --cve-file evals/golden/eval_cve_list.txt --cache-dir data/enrichment_cache`.
      - Confirm all `.meta.json` sidecars are generated with accurate `sha256`, `synced_at`, and record counts.
   3. **Run Offline Evaluation:**
-     - Execute `python evals/enrichment_coverage.py --cache-dir data/enrichment_cache --baseline-file evals/golden/enrichment_baseline.json --output evals/results/enrichment_coverage_real.json`.
+     - Execute `python evals/enrichment_coverage.py --cache-dir data/enrichment_cache --dataset evals/golden/enrichment_baseline.json --output-json evals/results/enrichment_coverage_real.json --output-md evals/results/enrichment_coverage_real.md` (there is no `--baseline-file` or `--output` flag; see `--help` and `evals/README.md`).
      - Record multi-source fusion coverage vs NVD-only baseline across the four core intelligence fields (CVSS, CWE, description, EPSS) and the two secondary signals (KEV, public exploit availability).
   4. **Document and Commit Results:**
      - Commit the exact evaluation report in `evals/results/` alongside mirror metadata hashes.
@@ -141,7 +141,7 @@ graph TD
 
 ### Task 4: ERS Empirical Validation & Exploit Corroboration (D-027 Follow-up) — ✅ Complete
 
-- **Status:** ✅ **Complete** — Implemented and documented in [`task4_level2_work.md`](./task4_level2_work.md). Evaluation harness `evals/ers_validation.py` implemented and verified against real mirrors. Balanced ERS achieved **100.0%** precision across the top 15 ranked vulnerabilities (vs **93.3%** for No-EPSS control and **80.0%** for CVSS-only baseline; +20.0 pp delta). Decision record `D-038` logged in `DECISIONS.md` analyzing and defending the partial EPSS circularity for viva defense. 9/9 unit tests passing in `tests/unit/test_ers_validation.py`.
+- **Status:** ✅ **Complete** — Implemented and documented in [`task4_level2_work.md`](./task4_level2_work.md). Harness `evals/ers_validation.py` run once on real mirrors (2026-10-11) with the pre-review harness. Smoke-level only: n=50 hand-picked CVEs, 72.0% base rate, cohort E selected for exploit presence, cohort C selected on KEV (an ERS input). The EPSS marginal gain at top 5 was **+0.0 pp**. Top-k differences hinge on single CVEs and on input-order tie breaking. In review the harness gained a deterministic tie rule, boundary-tie reporting, random-baseline and Metasploit-only precision, and safe output paths. The committed real results must be regenerated (see `evals/results/ers_validation_results.md`). `D-038` records the circularity: Metasploit is not independent of EPSS.
 - **Concern:** Scoring Validity & Viva Defensibility.
 - **Context:**
   D-008 originally proposed using KEV to validate ERS rankings. D-027 corrected this because KEV is an explicit 25% input to ERS, creating circular reasoning. D-027 proposed validating whether the top-N ERS-ranked CVEs correlate with ExploitDB and Metasploit entries. However, this is also partially circular because EPSS (35% of ERS) includes public exploit availability features in its machine learning model.
@@ -163,7 +163,7 @@ graph TD
 
 ### Task 5: Graph Path-Scoring Risk Mitigation & Formula Settlement (D-029 Viva Defense) — ✅ Complete
 
-- **Status:** ✅ **Complete** — Implemented and documented in [`task5_level2_work.md`](./task5_level2_work.md). Formal settlement reached between Layer 2 (Mayank) and Layer 3 (Ayushmaan). Multiplicative formula deprecated; two-tier decoupled formulation adopted (additive traversal difficulty via negative log-likelihood $\text{Cost}(e) = -\ln(\text{EPSS}_e) + \text{Barrier}$, and path risk composite $R = 0.50 \cdot \max(\text{ERS}) + 0.30 \cdot C_{\text{target}} + 0.20 \cdot \overline{\text{ERS}}$ anchored to Layer 2 precomputed ERS). Decision record `D-039` logged in `DECISIONS.md`, `D-029` marked superseded, and `services/graph/README.md` updated.
+- **Status:** ✅ **Complete** — Implemented and documented in [`task5_level2_work.md`](./task5_level2_work.md). **Revised in review: D-039 is Proposed, pending sign-off by Ayushmaan (graph owner).** Multiplicative formula deprecated; two-tier decoupled formulation adopted (additive traversal difficulty via negative log-likelihood $\text{Cost}(e) = -\ln(\text{EPSS}_e) + \text{Barrier}$, and path risk composite $R = 0.50 \cdot \max(\text{ERS}) + 0.30 \cdot C_{\text{target}} + 0.20 \cdot \overline{\text{ERS}}$ anchored to Layer 2 precomputed ERS). Decision record `D-039` logged in `DECISIONS.md` (Status: Proposed; barrier values, weights and missing-EPSS edge cost are open), and `services/graph/README.md` updated. `D-029` stays Active until D-039 is signed off.
 - **Concern:** Layer 2 / Layer 3 Boundary & Theoretical Soundness.
 - **Context:**
   D-029 identifies a significant viva vulnerability in the tentative Layer 3 path-scoring formula (`EPSS × exploit_availability × privilege_delta`):

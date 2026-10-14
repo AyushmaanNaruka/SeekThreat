@@ -3,7 +3,9 @@
 > **Document:** `docs/mayank_implementation/task5_level2_work.md`  
 > **Topic:** Task 5 of `docs/mayank_implementation/mayank_task_level2.md` (PR 6: `docs/d029-path-scoring-settlement`)  
 > **Author:** Mayank Narang (Layer 2 Owner) in agreement with Ayushmaan (Graph Engine Owner)  
-> **Status:** ✅ Complete — Multiplicative Heuristic Formally Deprecated; D-039 Settled  
+> **Status:** ⚠️ Proposal. D-039 is **Proposed**, pending sign-off by Ayushmaan (graph owner)  
+
+> **Review note (2026-10-12, PR #19):** `DECISIONS.md` D-039 was revised in review and is the authoritative text. Tier 1 is a heuristic, not "statistically rigorous": summing −ln EPSS is the product of EPSS values in log space, and EPSS is a CVE-scoped 30-day in-the-wild likelihood, not a per-hop success probability. The barrier values, the 0.001 floor, the cost of edges without CVE/EPSS and the Tier 2 weights are open questions. Tier 2's max-ERS term is the most-exposed hop, not the "weakest link". Cost only ranks a path set the rules engine has already enumerated deterministically (Hard Rule 1). D-029 stays Active until D-039 is signed off.
 
 ---
 
@@ -22,7 +24,7 @@ Decision `D-029` ("Multiplicative path score in graph layer does not violate the
 2. **Adoption of the Two-Tier Decoupled Specification (`D-039`):**
    - **Tier 1 (Graph Traversal Physics):** Edge traversal difficulty modeled additively in log space using negative log-likelihood: $\text{Cost}(e) = -\ln(\max(\text{EPSS}_e, 0.001)) + \text{Barrier}(\text{privilege\_delta}_e)$.
    - **Tier 2 (Operational Path Risk Prioritization):** Path ranking anchored directly to Layer 2's precomputed ERS composite (D-028) and crown-jewel target criticality: $R(\text{path}) = 0.50 \cdot \max_{e \in \text{path}}(\text{ERS}_e) + 0.30 \cdot C_{\text{target}} + 0.20 \cdot \overline{\text{ERS}}_{\text{path}}$.
-3. **Repository Documentation Alignment:** Logged new Decision Record **`D-039`** in [`DECISIONS.md`](file:///e:/SeekThreat/SeekThreat/DECISIONS.md), marked `D-029` as `Superseded by D-039`, and updated the pipeline specification in [`services/graph/README.md`](file:///e:/SeekThreat/SeekThreat/services/graph/README.md).
+3. **Repository Documentation Alignment:** Logged new Decision Record **`D-039`** in [`DECISIONS.md`](../../DECISIONS.md), marked `D-029` as `Superseded by D-039`, and updated the pipeline specification in [`services/graph/README.md`](../../services/graph/README.md).
 
 ---
 
@@ -67,7 +69,7 @@ graph TD
 When the Graph Engine searches for candidate attack paths (e.g. finding the path an attacker is most likely to take), it treats edges as traversal resistance:
 $$\text{Cost}(e) = -\ln(\max(\text{EPSS}_e, 0.001)) + \text{Barrier}(\Delta \text{Priv}_e)$$
 Where:
-- $-\ln(\text{EPSS}_e)$ is the statistically rigorous **negative log-likelihood** (information content / difficulty). If EPSS is near $1.0$ (certain exploit), $-\ln(1.0) = 0$ (zero resistance). If EPSS is low ($0.001$), $-\ln(0.001) \approx 6.91$ (high resistance).
+- $-\ln(\text{EPSS}_e)$ is a **heuristic** negative-log transform (not a statistically rigorous likelihood; see review note above). If EPSS is near $1.0$ (certain exploit), $-\ln(1.0) = 0$ (zero resistance). If EPSS is low ($0.001$), $-\ln(0.001) \approx 6.91$ (high resistance).
 - $\text{Barrier}(\Delta \text{Priv}_e)$ is an additive cost representing privilege barriers (e.g., $0.0$ for existing privilege, $1.5$ for user traversal, $3.0$ for kernel/root escalation).
 - **Mathematical Property:** Traversal resistance accumulates **additively** along path edges:
   $$\text{Total Path Resistance} = \sum_{e \in \text{path}} \text{Cost}(e)$$
@@ -77,7 +79,7 @@ Where:
 Once candidate paths are identified, the system must rank them for SOC display and LLM narration. Rather than reinventing vulnerability severity in the graph layer, Tier 2 anchors directly on Layer 2's precomputed **Exposure Risk Score (ERS)**:
 $$R(\text{path}) = 0.50 \cdot \max_{e \in \text{path}}(\text{ERS}_e) + 0.30 \cdot C_{\text{target}} + 0.20 \cdot \overline{\text{ERS}}_{\text{path}}$$
 Where:
-- $\max_{e \in \text{path}}(\text{ERS}_e) \in [0.0, 10.0]$: The maximum vulnerability exposure along the chain (the weakest link).
+- $\max_{e \in \text{path}}(\text{ERS}_e) \in [0.0, 10.0]$: The maximum vulnerability exposure along the chain (the most-exposed hop, not the weakest link; see D-039).
 - $C_{\text{target}} \in [0.0, 10.0]$: The crown-jewel target asset criticality.
 - $\overline{\text{ERS}}_{\text{path}} \in [0.0, 10.0]$: The average vulnerability exposure along the entire path.
 - **Mathematical Property:** The composite score strictly sums to weights $0.50 + 0.30 + 0.20 = 1.00$, guaranteeing that $R(\text{path}) \in [0.0, 10.0]$. It never multiplies EPSS by CVSS, avoids double-counting exploit availability, and produces intuitive, explainable rankings.
@@ -86,7 +88,7 @@ Where:
 
 ## 4. Formal Decision Record (`DECISIONS.md` D-039)
 
-Logged record in [`DECISIONS.md`](file:///e:/SeekThreat/SeekThreat/DECISIONS.md):
+Logged record in [`DECISIONS.md`](../../DECISIONS.md):
 ```markdown
 ### D-039 — Settlement of graph path-scoring formula and deprecation of multiplicative heuristic
 **Date:** 2026-10-11
@@ -109,7 +111,7 @@ Additionally, marked `D-029` status as:
 
 ## 5. Documentation Updates (`services/graph/README.md`)
 
-Updated [`services/graph/README.md`](file:///e:/SeekThreat/SeekThreat/services/graph/README.md):
+Updated [`services/graph/README.md`](../../services/graph/README.md):
 1. **Pipeline Diagram:**
    ```
    Candidate paths (every edge traceable)

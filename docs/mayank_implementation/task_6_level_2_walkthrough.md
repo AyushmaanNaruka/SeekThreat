@@ -8,12 +8,12 @@
 
 ## 1. Overview & Objective
 
-In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_status.md#L203) and [services/enrichment/README.md](file:///e:/SeekThreat/SeekThreat/services/enrichment/README.md), **Task 6** unites the disparate components of the Track 2 vulnerability enrichment engine into an integrated operational pipeline.
+In accordance with [level2_status.md](level2_status.md#L203) and [services/enrichment/README.md](../../services/enrichment/README.md), **Task 6** unites the disparate components of the Track 2 vulnerability enrichment engine into an integrated operational pipeline.
 
 The task provides:
-1. A domain coordinator service ([EnrichmentService](file:///e:/SeekThreat/SeekThreat/services/enrichment/service.py)) that fuses intelligence, evaluates composite additive Exposure Risk Scores (ERS), and delegates to the persistence layer.
-2. An asynchronous background Celery worker task ([apps/api/tasks/enrichment.py](file:///e:/SeekThreat/SeekThreat/apps/api/tasks/enrichment.py)) allowing non-blocking batch enrichment of findings.
-3. RESTful API endpoints ([apps/api/routers/findings.py](file:///e:/SeekThreat/SeekThreat/apps/api/routers/findings.py)) allowing clients and consumers to query enriched findings and trigger on-demand enrichment.
+1. A domain coordinator service ([EnrichmentService](../../services/enrichment/service.py)) that fuses intelligence, evaluates composite additive Exposure Risk Scores (ERS), and delegates to the persistence layer.
+2. An asynchronous background Celery worker task ([apps/api/tasks/enrichment.py](../../apps/api/tasks/enrichment.py)) allowing non-blocking batch enrichment of findings.
+3. RESTful API endpoints ([apps/api/routers/findings.py](../../apps/api/routers/findings.py)) allowing clients and consumers to query enriched findings and trigger on-demand enrichment.
 
 ### Load-Bearing Principles & Non-Negotiable Rules
 
@@ -31,8 +31,8 @@ The task provides:
 ## 2. What Was Built
 
 ### A. Pipeline Orchestrator: `EnrichmentService`
-* **File:** [services/enrichment/service.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/service.py)
-* **Exported in:** [services/enrichment/__init__.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/__init__.py)
+* **File:** [services/enrichment/service.py](../../services/enrichment/service.py)
+* **Exported in:** [services/enrichment/__init__.py](../../services/enrichment/__init__.py)
 * **Key Capabilities:**
   * Coordinates `FusionEngine` and `calculate_ers()` to produce complete `EnrichedFinding` models with strict provenance attribution.
   * `enrich_finding(finding: Finding, persist: bool = False, session: Session | None = None, compute_ers: bool = True) -> EnrichedFinding`:
@@ -47,9 +47,9 @@ The task provides:
 ---
 
 ### B. Celery Worker Task: `seekthreat.enrichment.enrich`
-* **File:** [apps/api/tasks/enrichment.py](file:///e:/SeekThreat/SeekThreat/apps/api/tasks/enrichment.py)
+* **File:** [apps/api/tasks/enrichment.py](../../apps/api/tasks/enrichment.py)
 * **Task Name:** `seekthreat.enrichment.enrich`
-* **Worker Configuration:** [apps/api/worker.py](file:///e:/SeekThreat/SeekThreat/apps/api/worker.py)
+* **Worker Configuration:** [apps/api/worker.py](../../apps/api/worker.py)
   * Configured dedicated task route: `"seekthreat.enrichment.enrich": {"queue": "enrichment"}`.
   * Task imported in `worker.py` to ensure proper Celery app registration.
 * **Key Capabilities:**
@@ -62,8 +62,8 @@ The task provides:
 ---
 
 ### C. REST API Router: `/findings`
-* **File:** [apps/api/routers/findings.py](file:///e:/SeekThreat/SeekThreat/apps/api/routers/findings.py)
-* **Mounted in:** [apps/api/main.py](file:///e:/SeekThreat/SeekThreat/apps/api/main.py)
+* **File:** [apps/api/routers/findings.py](../../apps/api/routers/findings.py)
+* **Mounted in:** [apps/api/main.py](../../apps/api/main.py)
 * **Endpoints:**
   1. `GET /findings/{finding_id}`:
      * Retrieves an enriched finding by its primary key ID.
@@ -86,7 +86,7 @@ The task provides:
 ## 3. Verification & Test Results
 
 ### Test Suite 1: Service Coordinator & Worker Task (`test_enrichment_service.py`)
-* **File:** [tests/unit/test_enrichment_service.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_enrichment_service.py)
+* **File:** [tests/unit/test_enrichment_service.py](../../tests/unit/test_enrichment_service.py)
 * **Covered Behaviors:**
   * In-memory enrichment without database connection.
   * Persistence configuration validation (error thrown when persistence requested without repo or session).
@@ -124,7 +124,7 @@ tests\unit\test_enrichment_service.py::TestCeleryEnrichmentWorker::test_run_enri
 ---
 
 ### Test Suite 2: Findings API Endpoints (`test_findings_api.py`)
-* **File:** [tests/unit/test_findings_api.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_findings_api.py)
+* **File:** [tests/unit/test_findings_api.py](../../tests/unit/test_findings_api.py)
 * **Covered Behaviors:**
   * 404 response on nonexistent finding ID.
   * 200 response with full enriched payload on valid finding ID.
@@ -163,7 +163,7 @@ tests\unit\test_findings_api.py::TestBatchEnrichFindingsEndpoint::test_batch_enr
 ---
 
 ### Test Suite 3: Worker Subprocess Registration Guard (`test_worker_registration.py`)
-* **File:** [tests/unit/test_worker_registration.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_worker_registration.py)
+* **File:** [tests/unit/test_worker_registration.py](../../tests/unit/test_worker_registration.py)
 * Verifies in an isolated subprocess that importing `apps.api.worker` registers both `seekthreat.scans.execute` and `seekthreat.enrichment.enrich`.
 
 ```bash

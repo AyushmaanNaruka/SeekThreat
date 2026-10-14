@@ -10,15 +10,22 @@ Key invariants tested:
 3. Modifying the mirror file or updating the .meta.json sidecar triggers an atomic reload.
 4. Instance-level clear() does not mutate or clear the shared process cache.
 5. clear_mirror_cache() successfully purges the process-level cache.
-6. Thread safety under concurrent initialization with double-checked locking.
+6. Thread safety under concurrent initialization with double-checked locking; the
+   load lock is per cache key, so one slow mirror does not block the others.
+7. Per-CVE mirrors (CVE.org, Vulnrichment, NVD, EUVD) are cached the same way.
+8. A record with no date of its own and no sidecar gets the file mtime, not load time.
 """
 
 from __future__ import annotations
 
 import json
+import os
+import threading
 from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 
@@ -26,11 +33,15 @@ from packages.schema.models.provenance import Source
 from services.enrichment.fusion import FusionEngine
 from services.enrichment.sources import (
     CISAKevSource,
+    CVEOrgSource,
+    EUVDSource,
     ExploitDBSource,
     FirstEPSSSource,
     MetasploitSource,
+    NVDSource,
+    VulnrichmentSource,
 )
-from services.enrichment.sources.base import clear_mirror_cache
+from services.enrichment.sources.base import clear_mirror_cache, load_with_cache
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "enrichment"
 
@@ -164,22 +175,22 @@ class TestEPSSMirrorCache:
             assert inst._cache is first_cache
             assert inst.count() > 0
 
-    def test_epss_repeated_instantiation_performance(self) -> None:
-        """Verify repeated instantiations reuse cached dictionary in microseconds."""
-        import time
-
+    def test_epss_repeated_instantiation_parses_the_mirror_once(self) -> None:
+        """200 instantiations parse the file once (counted, not timed: timing is flaky)."""
         fixture_path = FIXTURES_DIR / "epss_v4_sample.json"
-        s0 = FirstEPSSSource(cache_file=fixture_path)
-        assert s0.is_loaded
+        with patch("services.enrichment.sources.epss.json.load", wraps=json.load) as parsed:
+            s0 = FirstEPSSSource(cache_file=fixture_path)
+            for _ in range(200):
+                s = FirstEPSSSource(cache_file=fixture_path)
+                assert s._cache is s0._cache
+        assert parsed.call_count == 1
 
-        start = time.perf_counter()
-        for _ in range(200):
-            s = FirstEPSSSource(cache_file=fixture_path)
-            assert s._cache is s0._cache
-        elapsed = time.perf_counter() - start
-
-        # 200 instantiations should take well under 500ms (<2.5ms per instantiation on Windows NTFS)
-        assert elapsed < 0.5, f"Repeated instantiations took {elapsed:.4f}s"
+    def test_epss_records_do_not_retain_raw_payload(self) -> None:
+        """~385k cached EPSS rows must not each keep a copy of their source dict."""
+        source = FirstEPSSSource(cache_file=FIXTURES_DIR / "epss_v4_sample.json")
+        record = source.lookup("CVE-2021-44228")
+        assert record is not None
+        assert record.raw_payload == {}
 
 
 class TestBulkMirrorsProcessCache:
@@ -232,3 +243,119 @@ class TestBulkMirrorsProcessCache:
         assert engine1.cisa_kev._cache is engine2.cisa_kev._cache
         assert engine1.exploitdb._cache is engine2.exploitdb._cache
         assert engine1.metasploit._cache is engine2.metasploit._cache
+
+
+class TestPerCveMirrorsProcessCache:
+    """Per-CVE mirrors are read on every API request; they are cached the same way."""
+
+    @pytest.mark.parametrize(
+        ("source_cls", "fixture", "module"),
+        [
+            (CVEOrgSource, "cve_org_sample.json", "services.enrichment.sources.cve_org"),
+            (
+                VulnrichmentSource,
+                "vulnrichment_sample.json",
+                "services.enrichment.sources.secondary",
+            ),
+            (NVDSource, "nvd_sample.json", "services.enrichment.sources.secondary"),
+            (EUVDSource, "euvd_sample.json", "services.enrichment.sources.secondary"),
+        ],
+    )
+    def test_parsed_once_and_shared(self, source_cls: Any, fixture: str, module: str) -> None:
+        path = FIXTURES_DIR / fixture
+        with patch(f"{module}.json.load", wraps=json.load) as parsed:
+            first = source_cls(cache_file=path)
+            second = source_cls(cache_file=path)
+        assert first.count() > 0
+        assert first._cache is second._cache
+        assert parsed.call_count == 1
+
+    def test_cve_org_reload_after_mirror_change(self, tmp_path: Path) -> None:
+        mirror = tmp_path / "cve_org.json"
+        mirror.write_text(json.dumps({"CVE-2021-44228": {}}), encoding="utf-8")
+        assert CVEOrgSource(cache_file=mirror).count() == 1
+        mirror.write_text(json.dumps({"CVE-2021-44228": {}, "CVE-2024-3400": {}}), "utf-8")
+        assert CVEOrgSource(cache_file=mirror).count() == 2
+
+    def test_missing_file_does_not_empty_the_shared_cache(self, tmp_path: Path) -> None:
+        mirror = tmp_path / "nvd.json"
+        mirror.write_text(json.dumps({"CVE-2021-44228": {"id": "CVE-2021-44228"}}), "utf-8")
+        first = NVDSource(cache_file=mirror)
+        shared = first._cache
+        mirror.unlink()
+        first.load()
+        assert len(shared) == 1, "load() of a missing file cleared the shared cached dict"
+
+
+class TestLoadLocking:
+    def test_loading_one_mirror_does_not_block_another(self, tmp_path: Path) -> None:
+        """The load lock is per cache key, not one global lock for every source."""
+        slow_file = tmp_path / "epss_v4.json"
+        fast_file = tmp_path / "cisa_kev.json"
+        slow_file.write_text("{}", encoding="utf-8")
+        fast_file.write_text("{}", encoding="utf-8")
+        release = threading.Event()
+        slow_started = threading.Event()
+
+        def slow_loader() -> tuple[dict[str, Any], None, dict[str, Any]]:
+            slow_started.set()
+            assert release.wait(timeout=5)
+            return {}, None, {}
+
+        t = threading.Thread(target=load_with_cache, args=(Source.EPSS, slow_file, slow_loader))
+        t.start()
+        try:
+            assert slow_started.wait(timeout=5)
+            done = threading.Event()
+
+            def fast() -> None:
+                load_with_cache(Source.KEV, fast_file, lambda: ({"x": 1}, None, {}))
+                done.set()
+
+            threading.Thread(target=fast).start()
+            assert done.wait(timeout=2), "KEV load waited on the EPSS load"
+        finally:
+            release.set()
+            t.join()
+
+    def test_same_key_loads_once_under_concurrency(self, tmp_path: Path) -> None:
+        mirror = tmp_path / "epss_v4.json"
+        mirror.write_text("{}", encoding="utf-8")
+        calls = 0
+        lock = threading.Lock()
+
+        def loader() -> tuple[dict[str, Any], None, dict[str, Any]]:
+            nonlocal calls
+            with lock:
+                calls += 1
+            return {}, None, {}
+
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            list(pool.map(lambda _i: load_with_cache(Source.EPSS, mirror, loader), range(16)))
+        assert calls == 1
+
+
+class TestFallbackRetrievedAt:
+    def test_record_without_dates_or_sidecar_uses_file_mtime(self, tmp_path: Path) -> None:
+        """No sidecar: retrieved_at is the file's mtime, not a frozen 'now' at load time."""
+        mirror = tmp_path / "exploitdb.json"
+        mirror.write_text(
+            json.dumps({"CVE-2021-44228": {"exploit_ids": ["EDB-1"]}}), encoding="utf-8"
+        )
+        stamp = datetime(2026, 9, 1, 12, 0, tzinfo=UTC).timestamp()
+        os.utime(mirror, (stamp, stamp))
+        record = ExploitDBSource(cache_file=mirror).lookup("CVE-2021-44228")
+        assert record is not None
+        assert record.retrieved_at == datetime(2026, 9, 1, 12, 0, tzinfo=UTC)
+
+    def test_sidecar_synced_at_still_wins(self, tmp_path: Path) -> None:
+        mirror = tmp_path / "exploitdb.json"
+        mirror.write_text(
+            json.dumps({"CVE-2021-44228": {"exploit_ids": ["EDB-1"]}}), encoding="utf-8"
+        )
+        (tmp_path / "exploitdb.meta.json").write_text(
+            json.dumps({"synced_at": "2026-10-01T00:00:00+00:00"}), encoding="utf-8"
+        )
+        record = ExploitDBSource(cache_file=mirror).lookup("CVE-2021-44228")
+        assert record is not None
+        assert record.retrieved_at == datetime(2026, 10, 1, tzinfo=UTC)

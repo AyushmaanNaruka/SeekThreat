@@ -1,19 +1,25 @@
 """Celery task: post-scan targeted feed sync & re-enrichment pipeline.
 
 Dispatched automatically off the request path upon scan completion by
-``apps/api/tasks/scans.execute_scan``.  The task is fire-and-forget from
-the scan's perspective: it never feeds back into the scan result and a
-failure here must never mark a scan as failed.
+``apps/api/tasks/scans.run_scan``, after the scan's ``scan.completed`` audit
+event. The task is fire-and-forget from the scan's perspective: it never feeds
+back into the scan result and a failure here must never mark a scan as failed.
 
 Pipeline (Task 6 – D-036):
 1. Extract unique CVE IDs from ``ObservationKind.VULN_CANDIDATE``
    observations that were produced by the scan (looked up by artifact_id).
-2. Identify which CVE IDs are missing from the local per-CVE record mirrors
-   (CVE.org, Vulnrichment, EUVD, NVD).
-3. Trigger ``FeedSyncer.sync_cve_records(missing_cves)`` for only the gaps.
-4. Trigger batch re-enrichment of every ``Finding`` whose ``cve_ids``
-   intersect the newly synced set, persisting updated ``EnrichedFinding``
-   rows via idempotent upsert.
+2. For each per-CVE source (CVE.org, Vulnrichment, EUVD, NVD) separately,
+   identify the CVE IDs that source's mirror lacks. A record in one mirror says
+   nothing about the others. IDs the source recently reported as not found
+   (``<name>.notfound.json``) are not missing.
+3. Cap the distinct IDs sent upstream at ``settings.post_scan_max_cves``; the
+   rest are logged as deferred and retried by the daily beat sync, which reads
+   CVE IDs from VULN_CANDIDATE observations as well as ``enriched_findings``.
+4. ``FeedSyncer.sync_missing_cve_records`` syncs each source for only its own
+   gaps, under a time budget inside the task's soft time limit.
+5. Re-enrich the persisted findings of *this scan's engagement* whose
+   ``cve_ids`` intersect the CVE IDs that actually got new records, and persist
+   them via idempotent upsert. Nothing new fetched means nothing re-enriched.
 
 Error isolation:
 - Network timeouts / upstream rate limits during post-scan sync do NOT fail
@@ -24,25 +30,31 @@ Error isolation:
   same CVE during an outage window.
 - A scan that produces no VULN_CANDIDATE observations exits immediately with
   no network I/O.
+- Celery's soft time limit is never swallowed by the per-step error handling;
+  it is audited by the task wrapper.
+
+Authorization scoping (CLAUDE.md, D-031/D-032):
+- Re-enrichment reads and writes only rows with the scan's ``engagement_id``.
+- Every run writes one audit event with actor = the scan authorization's
+  ``authorized_by`` (``system:post_scan_enrichment`` when none was passed),
+  target = engagement/scan, the CVE IDs sent upstream and per-source results.
 
 Design decisions:
 - ``artifact_id`` is passed rather than a full observation list so the Celery
   JSON transport carries only a small string across the broker.
-- Finding re-enrichment is limited to findings whose ``cve_ids`` intersect
-  the *missing* set; findings already enriched from a prior sync are left
-  untouched — their high-confidence data is still in the mirrors.
-- The task runs on the ``enrichment`` queue (same as ``sync_feeds.run``)
-  to share the dedicated worker pool and keep the default ``celery`` queue
-  free for scan tasks.
+- The task runs on the ``enrichment`` queue (same as ``sync_feeds.run``),
+  consumed by the dedicated ``enrichment-worker`` compose service
+  (concurrency 1), so slow upstream lookups never occupy the scan worker.
 """
 
 from __future__ import annotations
 
-import json
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -57,28 +69,35 @@ from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.finding import Finding
 from packages.schema.models.observation import ObservationKind
-from packages.schema.models.provenance import Source
 from services.enrichment.service import EnrichmentService
 from services.enrichment.sources.sync import (
-    MIRROR_FILENAMES,
+    SOURCE_NAMES,
+    TARGETED_SOURCES,
     FeedSyncer,
+    SyncReport,
+    missing_cve_ids_by_source,
     normalize_cve_ids,
 )
 
 logger = logging.getLogger(__name__)
 
+TASK_NAME = "seekthreat.enrichment.sync_new_findings_cves"
 SYSTEM_ACTOR = "system:post_scan_enrichment"
 AUDIT_SCANNER = "post_scan_enrichment"
-#: Per-CVE record sources that need targeted sync; full-catalog sources
-#: (KEV, EPSS, ExploitDB, Metasploit) are updated only by the daily beat job.
-TARGETED_SOURCES = ("cve_org", "vulnrichment", "euvd", "nvd")
-#: Source enum values that correspond to per-CVE mirrors.
-_PER_CVE_SOURCES: tuple[Source, ...] = (
-    Source.CVE_ORG,
-    Source.VULNRICHMENT,
-    Source.EUVD,
-    Source.NVD,
-)
+#: Hard time limit headroom over the soft limit, for the wrapper to audit and exit.
+HARD_LIMIT_MARGIN_SECONDS = 120
+#: Part of the soft limit kept back from the targeted sync for re-enrichment.
+REENRICH_RESERVE_SECONDS = 300
+#: Stored findings are scanned this many rows at a time (keyset-paged by finding_id).
+REENRICH_CHUNK_SIZE = 500
+
+__all__ = [
+    "SOURCE_NAMES",
+    "SYSTEM_ACTOR",
+    "TARGETED_SOURCES",
+    "run_post_scan_enrichment",
+    "sync_new_findings_cves",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -105,59 +124,88 @@ def _cve_ids_from_artifact(session: Any, artifact_id: str) -> list[str]:
     return normalize_cve_ids(raw_cves)
 
 
-def _missing_cve_ids(cve_ids: list[str], cache_dir: Path) -> list[str]:
-    """Return the subset of ``cve_ids`` absent from *all* per-CVE mirrors.
+def _missing_cve_ids(cve_ids: list[str], cache_dir: Path) -> dict[str, list[str]]:
+    """Per targeted source, the subset of ``cve_ids`` that source's mirror lacks.
 
-    A CVE ID is considered 'known' if it appears as a key in **any** of the
-    four per-CVE mirror files.  If the mirror file does not exist, every ID
-    is treated as missing for that source and becomes a sync candidate.
+    Computed per source: being in the CVE.org mirror does not mean NVD,
+    Vulnrichment or EUVD were ever asked. A missing or unreadable mirror makes
+    every ID missing for that source; a recent not-found entry makes it not
+    missing (see ``services.enrichment.sources.sync.missing_cve_ids_by_source``).
     """
-    known: set[str] = set()
-    for source in _PER_CVE_SOURCES:
-        path = cache_dir / MIRROR_FILENAMES.get(source, f"{source.value}.json")
-        if not path.exists():
-            continue
-        try:
-            with open(path, encoding="utf-8") as fh:
-                data = json.load(fh)
-            if isinstance(data, dict):
-                known.update(k.upper() for k in data if not k.startswith("_"))
-        except (OSError, json.JSONDecodeError) as exc:
-            logger.warning(
-                "post_scan_enrichment: could not read mirror %s to check known CVEs: %s",
-                path,
-                exc,
-            )
-    return [cve for cve in cve_ids if cve not in known]
+    return missing_cve_ids_by_source(cache_dir, cve_ids)
 
 
-def _findings_for_cves(session: Any, cve_ids: set[str]) -> list[Finding]:
-    """Return every persisted Finding whose ``cve_ids`` intersect ``cve_ids``.
+def _findings_for_cves(
+    session: Any,
+    engagement_id: str,
+    cve_ids: set[str],
+    *,
+    chunk_size: int = REENRICH_CHUNK_SIZE,
+) -> Iterator[list[Finding]]:
+    """Yield, in chunks, the engagement's stored Findings whose ``cve_ids`` intersect.
 
-    Findings are stored as JSON blobs in ``enriched_findings.finding_data``.
-    We load all rows and filter in Python rather than relying on a JSON
-    containment query, keeping this portable across PostgreSQL and SQLite.
+    Scoped to ``engagement_id`` (D-031): another engagement's rows are never read,
+    so they can never be rewritten. Rows are keyset-paged by ``finding_id`` and only
+    the ``finding_id``/``finding_data`` columns are loaded, so memory stays bounded
+    by ``chunk_size`` regardless of how many findings the engagement holds. CVE
+    matching is done in Python to stay portable across PostgreSQL and SQLite.
     """
-    stmt = select(EnrichedFindingModel)
-    rows = session.scalars(stmt).all()
-    matches: list[Finding] = []
-    for row in rows:
-        finding_data = row.finding_data
-        if not isinstance(finding_data, dict):
-            continue
-        stored_cves = finding_data.get("cve_ids")
-        if not isinstance(stored_cves, list):
-            continue
-        if cve_ids.intersection(c.upper() for c in stored_cves if isinstance(c, str)):
-            try:
-                matches.append(Finding.model_validate(finding_data))
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "post_scan_enrichment: could not deserialize finding %s: %s",
-                    finding_data.get("finding_id", "<unknown>"),
-                    exc,
-                )
-    return matches
+    wanted = {c.upper() for c in cve_ids}
+    last_id: str | None = None
+    while True:
+        stmt = (
+            select(EnrichedFindingModel.finding_id, EnrichedFindingModel.finding_data)
+            .where(EnrichedFindingModel.engagement_id == engagement_id)
+            .order_by(EnrichedFindingModel.finding_id.asc())
+            .limit(chunk_size)
+        )
+        if last_id is not None:
+            stmt = stmt.where(EnrichedFindingModel.finding_id > last_id)
+        rows = session.execute(stmt).all()
+        if not rows:
+            return
+        last_id = rows[-1][0]
+        matches: list[Finding] = []
+        for _finding_id, finding_data in rows:
+            if not isinstance(finding_data, dict):
+                continue
+            stored_cves = finding_data.get("cve_ids")
+            if not isinstance(stored_cves, list):
+                continue
+            if wanted.intersection(c.upper() for c in stored_cves if isinstance(c, str)):
+                try:
+                    matches.append(Finding.model_validate(finding_data))
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "post_scan_enrichment: could not deserialize finding %s: %s",
+                        finding_data.get("finding_id", "<unknown>"),
+                        exc,
+                    )
+        if matches:
+            yield matches
+        if len(rows) < chunk_size:
+            return
+
+
+def _cap(
+    missing: dict[str, list[str]], limit: int, scan_id: str
+) -> tuple[dict[str, list[str]], list[str], int]:
+    """Limit the distinct CVE IDs sent upstream to ``limit`` (lowest IDs first)."""
+    union = sorted({cve for ids in missing.values() for cve in ids})
+    sent = union[:limit]
+    deferred = len(union) - len(sent)
+    if deferred:
+        logger.warning(
+            "post_scan_enrichment: scan %s has %d CVEs missing from local mirrors; per-run "
+            "cap is %d, so %d are deferred to the daily beat sync",
+            scan_id,
+            len(union),
+            limit,
+            deferred,
+        )
+    keep = set(sent)
+    capped = {name: [cve for cve in ids if cve in keep] for name, ids in missing.items()}
+    return capped, sent, deferred
 
 
 # ---------------------------------------------------------------------------
@@ -172,27 +220,25 @@ def _reenrich_findings(
     cache_dir: Path,
     summary: dict[str, Any],
 ) -> None:
-    """Re-enrich and persist findings whose CVE IDs intersect ``cve_ids``."""
+    """Re-enrich and persist this engagement's findings whose CVE IDs intersect ``cve_ids``."""
     try:
         with SessionLocal() as session:
-            findings = _findings_for_cves(session, cve_ids)
-            if not findings:
-                logger.debug(
-                    "post_scan_enrichment: no persisted findings intersect CVE set %s",
-                    sorted(cve_ids)[:5],
-                )
-                return
-
             repo = EnrichedFindingRepository(session)
             service = EnrichmentService(repository=repo, cache_dir=cache_dir)
-            enriched_list = service.enrich_batch(findings, persist=True)
+            total = 0
+            for chunk in _findings_for_cves(
+                session, engagement_id, cve_ids, chunk_size=REENRICH_CHUNK_SIZE
+            ):
+                total += len(service.enrich_batch(chunk, persist=True))
             session.commit()
-            summary["findings_reenriched"] = len(enriched_list)
+            summary["findings_reenriched"] = total
             logger.info(
                 "post_scan_enrichment: re-enriched %d findings for engagement %s",
-                len(enriched_list),
+                total,
                 engagement_id,
             )
+    except SoftTimeLimitExceeded:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "post_scan_enrichment: re-enrichment failed for engagement %s: %s",
@@ -200,6 +246,7 @@ def _reenrich_findings(
             exc,
         )
         summary["ok"] = False
+        summary["error"] = f"re-enrichment: {type(exc).__name__}: {exc}"
 
 
 def run_post_scan_enrichment(
@@ -218,7 +265,7 @@ def run_post_scan_enrichment(
 
     Args:
         artifact_id: The ``RawArtifact.artifact_id`` produced by the scan.
-        engagement_id: Parent engagement ID (for audit logging).
+        engagement_id: The scan's engagement. Re-enrichment is scoped to it.
         scan_id: The scan record ID (for audit context only).
         cache_dir: Local mirror directory. Defaults to
             ``settings.enrichment_cache_dir``.
@@ -226,8 +273,14 @@ def run_post_scan_enrichment(
             ``settings.nvd_api_key``.
 
     Returns:
-        Summary dict with keys ``cves_found``, ``cves_missing``,
-        ``cves_synced``, ``findings_reenriched``, and ``ok`` (bool).
+        Summary dict: ``cves_found``, ``cves_missing`` (distinct IDs missing from
+        at least one source), ``missing_by_source``, ``cves_sent_upstream``,
+        ``cves_deferred`` (over the per-run cap), ``cves_synced`` (records
+        written), ``cves_with_new_data``, ``sources`` (per-source results),
+        ``failed_sources``, ``findings_reenriched`` and ``ok`` (bool).
+
+    Raises:
+        SoftTimeLimitExceeded: never swallowed here; the task wrapper audits it.
     """
     effective_cache_dir: Path = cache_dir or settings.enrichment_cache_dir
     effective_nvd_key: str | None = nvd_api_key or settings.nvd_api_key
@@ -237,7 +290,13 @@ def run_post_scan_enrichment(
         "scan_id": scan_id,
         "cves_found": 0,
         "cves_missing": 0,
+        "missing_by_source": {},
+        "cves_sent_upstream": [],
+        "cves_deferred": 0,
         "cves_synced": 0,
+        "cves_with_new_data": [],
+        "sources": {},
+        "failed_sources": [],
         "findings_reenriched": 0,
         "ok": True,
     }
@@ -254,6 +313,7 @@ def run_post_scan_enrichment(
             exc,
         )
         summary["ok"] = False
+        summary["error"] = f"{type(exc).__name__}: {exc}"
         return summary
 
     summary["cves_found"] = len(cve_ids)
@@ -265,56 +325,67 @@ def run_post_scan_enrichment(
         )
         return summary
 
-    # ---------------------------------------------------- 2. Identify missing
-    missing_cves = _missing_cve_ids(cve_ids, effective_cache_dir)
-    summary["cves_missing"] = len(missing_cves)
+    # ------------------------------------------- 2. Identify gaps, per source
+    missing = _missing_cve_ids(cve_ids, effective_cache_dir)
+    missing_union = sorted({cve for ids in missing.values() for cve in ids})
+    summary["cves_missing"] = len(missing_union)
 
-    if not missing_cves:
+    if not missing_union:
+        # Every source already has (or recently reported not having) every CVE, so
+        # this run fetches nothing new and there is nothing to re-enrich.
         logger.info(
-            "post_scan_enrichment: all %d CVEs from scan %s already in local mirrors",
+            "post_scan_enrichment: all %d CVEs from scan %s already in every local mirror",
             len(cve_ids),
             scan_id,
         )
-        # Still re-enrich in case new findings were stored but not yet enriched.
-        _reenrich_findings(
-            cve_ids=set(cve_ids),
-            engagement_id=engagement_id,
-            cache_dir=effective_cache_dir,
-            summary=summary,
-        )
         return summary
 
-    # ------------------------------------------------------- 3. Targeted sync
+    # ------------------------------------------------------ 3. Per-run cap
+    missing, sent, deferred = _cap(missing, settings.post_scan_max_cves, scan_id)
+    summary["missing_by_source"] = missing
+    summary["cves_sent_upstream"] = sent
+    summary["cves_deferred"] = deferred
+
+    # ------------------------------------------------------- 4. Targeted sync
     logger.info(
-        "post_scan_enrichment: syncing %d missing CVEs for scan %s: %s%s",
-        len(missing_cves),
+        "post_scan_enrichment: syncing %d CVEs for scan %s: %s%s",
+        len(sent),
         scan_id,
-        missing_cves[:10],
-        " ..." if len(missing_cves) > 10 else "",
+        sent[:10],
+        " ..." if len(sent) > 10 else "",
     )
+    new_data: set[str] = set()
     try:
         syncer = FeedSyncer(
             cache_dir=effective_cache_dir,
             nvd_api_key=effective_nvd_key,
+            time_budget_seconds=max(
+                60.0, float(settings.post_scan_soft_time_limit_seconds - REENRICH_RESERVE_SECONDS)
+            ),
         )
-        sync_results = syncer.sync_cve_records(missing_cves)
-        synced_count = sum(r.records_synced for r in sync_results)
-        summary["cves_synced"] = synced_count
-        failed_sources = [r.key for r in sync_results if not r.success]
-        if failed_sources:
+        sync_results = syncer.sync_missing_cve_records(missing)
+        report = SyncReport(results=list(sync_results))
+        summary["sources"] = report.to_summary()["sources"]
+        summary["cves_synced"] = sum(r.records_synced for r in sync_results)
+        for r in sync_results:
+            new_data.update(r.cve_ids_synced)
+        summary["failed_sources"] = [r.key for r in report.failed]
+        if report.failed:
             logger.warning(
                 "post_scan_enrichment: sync partially failed for sources %s (scan %s)",
-                failed_sources,
+                summary["failed_sources"],
                 scan_id,
             )
             summary["ok"] = False
         else:
             logger.info(
                 "post_scan_enrichment: synced %d records for %d CVEs (scan %s)",
-                synced_count,
-                len(missing_cves),
+                summary["cves_synced"],
+                len(sent),
                 scan_id,
             )
+    except SoftTimeLimitExceeded:
+        raise
     except Exception as exc:  # noqa: BLE001
         logger.error(
             "post_scan_enrichment: targeted sync raised unexpectedly for scan %s: %s",
@@ -322,11 +393,17 @@ def run_post_scan_enrichment(
             exc,
         )
         summary["ok"] = False
-        # Fall through — re-enrich using whatever mirror data existed before.
+        summary["error"] = f"{type(exc).__name__}: {exc}"
+    summary["cves_with_new_data"] = sorted(new_data)
 
-    # -------------------------------------------------- 4. Re-enrich findings
+    # -------------------------------------------------- 5. Re-enrich findings
+    if not new_data:
+        logger.info(
+            "post_scan_enrichment: no new records for scan %s; nothing to re-enrich", scan_id
+        )
+        return summary
     _reenrich_findings(
-        cve_ids=set(cve_ids),
+        cve_ids=new_data,
         engagement_id=engagement_id,
         cache_dir=effective_cache_dir,
         summary=summary,
@@ -340,17 +417,20 @@ def run_post_scan_enrichment(
 
 
 @celery_app.task(  # type: ignore[untyped-decorator]
-    name="seekthreat.enrichment.sync_new_findings_cves",
+    name=TASK_NAME,
     bind=True,
     max_retries=0,  # fire-and-forget; daily beat corrects stale mirrors
     queue="enrichment",
     ignore_result=True,
+    soft_time_limit=settings.post_scan_soft_time_limit_seconds,
+    time_limit=settings.post_scan_soft_time_limit_seconds + HARD_LIMIT_MARGIN_SECONDS,
 )
 def sync_new_findings_cves(
     self: Any,
     artifact_id: str,
     engagement_id: str,
     scan_id: str,
+    actor: str | None = None,
 ) -> None:
     """Post-scan targeted feed sync & re-enrichment (fire-and-forget).
 
@@ -359,13 +439,18 @@ def sync_new_findings_cves(
 
     Args:
         artifact_id: The ``RawArtifact.artifact_id`` produced by the scan.
-        engagement_id: Parent engagement ID (for audit logging).
+        engagement_id: The scan's engagement (authorization reference).
         scan_id: The scan record ID (for audit context).
+        actor: The scan authorization's ``authorized_by``; audited as the actor.
+            Falls back to ``system:post_scan_enrichment``.
     """
+    audit_actor = actor.strip() if isinstance(actor, str) and actor.strip() else SYSTEM_ACTOR
+    target = f"engagement:{engagement_id}/scan:{scan_id}"
     logger.info(
-        "post_scan_enrichment: task started for scan %s / artifact %s",
+        "post_scan_enrichment: task started for scan %s / artifact %s (actor=%s)",
         scan_id,
         artifact_id,
+        audit_actor,
     )
 
     try:
@@ -374,7 +459,7 @@ def sync_new_findings_cves(
             engagement_id=engagement_id,
             scan_id=scan_id,
         )
-    except Exception as exc:  # noqa: BLE001  — must never bubble up
+    except Exception as exc:  # noqa: BLE001  — must never bubble up (incl. soft time limit)
         logger.error(
             "post_scan_enrichment: unhandled error for scan %s: %s",
             scan_id,
@@ -383,20 +468,24 @@ def sync_new_findings_cves(
         )
         log_audit_event(
             event="post_scan_enrichment.error",
-            actor=SYSTEM_ACTOR,
-            target=artifact_id,
+            actor=audit_actor,
+            target=target,
             engagement_id=engagement_id,
             scanner=AUDIT_SCANNER,
             status="error",
-            details={"scan_id": scan_id, "error": f"{type(exc).__name__}: {exc}"},
+            details={
+                "scan_id": scan_id,
+                "artifact_id": artifact_id,
+                "error": f"{type(exc).__name__}: {exc}",
+            },
         )
         return
 
     event = "post_scan_enrichment.completed" if summary["ok"] else "post_scan_enrichment.partial"
     log_audit_event(
         event=event,
-        actor=SYSTEM_ACTOR,
-        target=artifact_id,
+        actor=audit_actor,
+        target=target,
         engagement_id=engagement_id,
         scanner=AUDIT_SCANNER,
         status="success" if summary["ok"] else "partial",

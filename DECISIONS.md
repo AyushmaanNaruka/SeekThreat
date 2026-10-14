@@ -43,16 +43,36 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-041 — Post-scan sync hardening: engagement-scoped re-enrichment, per-mirror file lock, negative cache, dedicated enrichment worker
+**Date:** 2026-10-12
+**Decided by:** Ayushmaan (review of PR #19)
+**Type:** Divergence
+**Status:** Active — amends D-036
+
+**Decision**
+Post-scan enrichment re-enriches only the scan's own engagement's findings (keyset-paged, 500 rows), and only for CVE IDs that received new records in that run. Per-CVE gaps are computed per source (CVE.org, Vulnrichment, EUVD, NVD) rather than "known to any mirror". Targeted read-merge-write of a mirror runs under a cross-process lock file (`.<mirror>.lock`, `os.open(O_CREAT|O_EXCL)`, pid/host/token inside, 300 s mtime staleness, bounded wait with back-off), never held across network I/O. Upstream not-found results are recorded in `<name>.notfound.json` (`checked_at`) and not re-fetched for 7 days; the mirror format readers parse is unchanged. Each post-scan run sends at most `POST_SCAN_MAX_CVES` (200) distinct CVEs upstream under a time budget inside a Celery soft limit (`POST_SCAN_SOFT_TIME_LIMIT_SECONDS`, 1800 s; hard limit +120 s); the remainder is deferred to the daily beat sync, which now also reads CVE IDs from VULN_CANDIDATE observations. The `enrichment` queue gets its own compose service (`enrichment-worker`, concurrency 1); the scan worker consumes only `scans`. Post-scan audit events carry the scan authorization's `authorized_by` as actor, `engagement:<id>/scan:<id>` as target, and the CVE IDs sent upstream plus per-source results; enqueue failures are audited, and dispatch uses `apply_async(retry=False)` after `scan.completed` is audited.
+
+**Why**
+Review of PR #19 found that a scan in engagement A rewrote engagement B's enriched rows with no authorization reference (D-031/D-032 violation); that concurrent post-scan and beat syncs could drop each other's merged records; that a CVE present in CVE.org was never fetched from NVD/Vulnrichment/EUVD; that unbounded post-scan runs on the shared prefork worker could starve scans; and that a down broker could delay scan completion through kombu publish retries. Rejected: fcntl/msvcrt locks (not portable; do not cover containers on a shared volume uniformly); a Redis lock (couples mirror writes to broker availability and the CLI to Redis); an in-mirror negative marker (would change the reader format).
+
+**Impact on plan**
+New settings `POST_SCAN_MAX_CVES`, `POST_SCAN_SOFT_TIME_LIMIT_SECONDS`. One more compose service. A CVE newly seen in a large scan may wait for the next beat run (02:00 UTC) if it falls outside the per-run cap or time budget. A CVE that upstream reports as not found is retried after 7 days rather than daily.
+
+**Cost if we're wrong**
+Low. The lock, the negative cache and the cap are local to `services/enrichment/sources/sync.py` / `locking.py` and the post-scan task; removing the sidecar file restores the old re-fetch behaviour, and the cap/time limits are configuration.
+
+---
+
 ### D-040 — Finding Ingestion Contract between Track 1 Normalization and Layer 2 Enrichment
 **Date:** 2026-10-11
-**Decided by:** Mayank (Layer 2 owner) & Track 1 Normalization owner
+**Decided by:** Mayank (Layer 2 owner); sign-off pending from Utkarsh (Track 1 owner)
 **Type:** Addition
 **Status:** Active
 
 **Decision**
 We establish and enforce a formal schema and interface contract between Track 1 (`services/normalize`) and Layer 2 (`services/enrichment`):
-1. **`asset_id` standardization:** Normalized to canonical address prefixes (`host:<canonical_ip>`, `host:<canonical_fqdn>`, or `host:mac:<lowercase_mac>`) following deterministic IPv4 > IPv6 > MAC > FQDN precedence. Decoupled fixture prefixes (`asset-*`, `ast-*`) remain valid for offline unit testing.
-2. **`cve_ids` canonicalization & segregation:** All entries must match standard format `CVE-YYYY-\d{4,7}`, are automatically uppercased, and deduplicated in order. Non-CVE identifiers (e.g. GHSA, CWE, scanner-specific template IDs) must never be passed in `cve_ids` and belong in `Observation.attributes` or finding metadata.
+1. **`asset_id` standardization (contract — not yet enforced by a model validator; enforced when Track 1 lands):** Normalized to canonical address prefixes (`host:<canonical_ip>`, `host:<canonical_fqdn>`, or `host:mac:<lowercase_mac>`) following deterministic IPv4 > IPv6 > MAC > FQDN precedence. IPv6 is written unbracketed, compressed and lowercase (`host:2001:db8::10`), matching nmap HOST_UP subjects; FQDN and MAC are lowercase. Decoupled fixture prefixes (`asset-*`, `ast-*`) remain valid for offline unit testing.
+2. **`cve_ids` canonicalization & segregation:** All entries must fully match `CVE-[0-9]{4}-[0-9]{4,7}` (ASCII digits only, `re.ASCII` + `fullmatch`), are automatically uppercased, and deduplicated in order. Non-CVE identifiers (e.g. GHSA, CWE, scanner-specific template IDs) must never be passed in `cve_ids` and belong in `Observation.attributes` or finding metadata.
 3. **Observation provenance requirement:** Every `Finding` must link to at least one valid, stored `observation_id` under the same `engagement_id`, enforced at model construction by Pydantic (`Finding._must_trace_to_observations`) and at the API boundary by `_verify_findings_provenance()`.
 
 **Why**
@@ -66,55 +86,71 @@ Low. The contract aligns directly with the existing Pydantic validation and API 
 
 ---
 
-### D-039 — Settlement of graph path-scoring formula and deprecation of multiplicative heuristic
-**Date:** 2026-10-11
-**Decided by:** Mayank (Layer 2 owner) & Ayushmaan (Graph Engine owner)
-**Type:** Reversal / Addition
-**Status:** Active
+### D-039 — Proposed graph path-scoring formula to replace the multiplicative heuristic
+**Date:** 2026-10-11 (revised 2026-10-12 after PR #19 review)
+**Decided by:** Proposed by Mayank; pending sign-off by Ayushmaan (graph owner)
+**Type:** Reversal
+**Status:** Proposed
 
 **Decision**
-The multiplicative path-scoring formula (`EPSS × exploit_availability × privilege_delta`) described in `services/graph/README.md` and flagged as an open viva risk in `D-029` is formally **deprecated and rejected**. Prior to Layer 3 implementation, we adopt a decoupled two-tier formulation:
-1. **Path Traversal Resistance (Additive Negative Log-Likelihood):** For shortest-path and least-resistance path discovery, edge traversal difficulty is computed additively as $\text{Cost}(e) = -\ln(\max(\text{EPSS}_e, 0.001)) + \text{Barrier}(\text{privilege\_delta}_e)$.
-2. **Path Risk Ranking (Additive Composite of Precomputed ERS):** For SOC triage and LLM path narration ranking, the path risk composite is computed from the precomputed node-level ERS scores (D-028) and target asset criticality:
+Proposal to retire the multiplicative path score (`EPSS × exploit_availability × privilege_delta`) that D-029 flagged as a viva risk, and replace it with two separately defined tiers. The proposal is not settled. D-029 stays Active until the graph owner signs off.
+
+**Scope of cost (Hard Rule 1).** Neither tier creates, removes or infers an edge or a path. The rules engine in `services/graph` first enumerates candidate paths deterministically and exhaustively from observed scan facts and named rules. Tier 1 cost and Tier 2 risk are then used **only to rank that already-enumerated path set**. No search heuristic may prune paths based on cost before enumeration finishes. Ties are broken deterministically: equal cost (or risk) is ordered by path length ascending, then by the lexicographic sequence of edge IDs. The exact edge-ID format is to be fixed when `PathEdge` IDs are defined.
+
+1. **Tier 1 — edge cost (heuristic):**
+   $\text{Cost}(e) = -\ln(\max(\text{EPSS}_e, 0.001)) + \text{Barrier}(\text{privilege\_delta}_e)$, and path cost $= \sum_{e} \text{Cost}(e)$.
+   - **This is still multiplicative in EPSS.** $\sum_e -\ln(\text{EPSS}_e) = -\ln \prod_e \text{EPSS}_e$, so ranking by the EPSS part of the cost is the same as ranking by the product of EPSS values along the path. The log form changes the arithmetic, not the model.
+   - **EPSS is not a per-hop success probability.** EPSS is a CVE-scoped estimate of the probability of exploitation activity in the wild in the next 30 days. It says nothing about whether this attacker succeeds at this hop on this host. Treating it as a hop probability, and multiplying across hops, also assumes the hops are independent. That assumption is stated here, not justified.
+   - The result is a **heuristic ranking cost**, not a likelihood, and must not be called "statistically rigorous" or "statistically valid".
+   - **The 0.001 floor** maps every EPSS at or below 0.001 to the same cost ($-\ln 0.001 \approx 6.91$), so low-EPSS edges are indistinguishable from each other. Whether that is acceptable, or whether the floor should be lower, is open.
+   - **Barrier values (provisional, unjustified):** `0.0` for no privilege change, `1.5` for user-level traversal, `3.0` for kernel/root escalation (taken from `docs/mayank_implementation/task5_level2_work.md`). No rationale or sensitivity analysis exists for these numbers, or for their scale relative to the $-\ln$ EPSS term. They must not be quoted as calibrated.
+   - **Open question: edges without a CVE or without EPSS.** Many edges (credential reuse, network reachability, misconfiguration) carry no CVE, and some CVEs have no EPSS. Their cost is **undefined** in this proposal. Defaulting them to the floor cost or to zero would silently decide rankings. This must be settled before Layer 3 ranking code lands.
+
+2. **Tier 2 — path risk (heuristic composite of stored ERS):**
    $$R(\text{path}) = 0.50 \cdot \max_{e \in \text{path}}(\text{ERS}_e) + 0.30 \cdot C_{\text{target}} + 0.20 \cdot \overline{\text{ERS}}_{\text{path}}$$
-   where $C_{\text{target}} \in [0.0, 10.0]$ is the crown-jewel target criticality.
+   with $C_{\text{target}} \in [0, 10]$ the target criticality, reading the stored `EnrichedFinding.ers.value` (D-028).
+   - **Max ERS is the most-exposed hop, not the "weakest link".** In chain terms the weakest link limits the chain, so it would be the *hardest* hop (min). $\max(\text{ERS})$ rewards a path for its single riskiest vulnerability, whatever the other hops cost.
+   - **Tier 1 and Tier 2 can disagree.** A path with one KEV-listed, high-ERS hop and one very low-EPSS hop scores high on Tier 2 but has a high Tier 1 cost. Which tier drives the displayed order, and how the disagreement is shown to the analyst, is open.
+   - **Weights 0.50 / 0.30 / 0.20 are open.** No rationale or sensitivity analysis has been written. D-027 required both for ERS weights, and the same applies here before these weights are used.
 
 **Why**
-`D-029` noted that while multiplying EPSS by `privilege_delta` avoided CVSS, it was vulnerable in a viva on three counts:
-1. **Spurious Probability:** Multiplying a probability (EPSS) by an ordinal integer (`privilege_delta`) yields an arbitrary number that cannot be interpreted as a probability or a traversability metric.
-2. **Double Counting:** EPSS v4 already incorporates public exploit code availability in its model weights. Multiplying EPSS by `exploit_availability` penalizes or inflates the evidence twice.
-3. **Zero-Factor Vulnerability:** A zero in `exploit_availability` (common for non-public or bespoke zero-days) zeroes the entire path score regardless of critical CVSS or high EPSS evidence.
-
-The decoupled two-tier approach cleanly separates:
-- *Graph Traversal Physics:* Modeled as additive traversal cost using statistically valid negative log-likelihood ($-\ln(P)$), where independent probabilities add in log space.
-- *Operational Risk Prioritization:* Anchored directly on Layer 2's precomputed ERS (D-028), avoiding duplication of enrichment logic and ensuring path risk explanations directly mirror node risk components.
+D-029 found three problems with the multiplicative score: it multiplies a probability by an ordinal (`privilege_delta`), it double-counts exploit availability (EPSS already uses it), and a zero `exploit_availability` zeroes the whole path. This proposal removes the explicit `exploit_availability` factor and keeps `privilege_delta` as an additive barrier instead of a multiplier. It does **not** remove the multiplication of EPSS across hops (see Tier 1), and it adds its own unjustified constants. Rejected: keeping the D-029 product unchanged (the zero-factor and double-counting problems remain).
 
 **Impact on plan**
-`services/graph/README.md` pipeline diagram is updated to replace the multiplicative formula with ERS-anchored path ranking. When Layer 3 path ranking is implemented in November, it will consume the stored `EnrichedFinding.ers.value` according to this formula.
+`services/graph/README.md` describes this as a proposal. Before Layer 3 ranking is implemented (November), the graph owner must sign off or amend, and these items must be closed: barrier rationale and sensitivity, the 0.001 floor, cost for edges without CVE/EPSS, Tier 2 weight rationale and sensitivity, and how Tier 1/Tier 2 disagreement is resolved. Path enumeration is unaffected (Hard Rule 1).
 
 **Cost if we're wrong**
-None. Settling this in October before Layer 3 code is written prevents refactoring in November and eliminates an open viva vulnerability.
+Moderate. No graph code exists yet, so changing the formula is cheap now. The real cost is credibility and correctness: if the heuristic is presented as a probability, or if the open constants are quoted as calibrated, analysts get confident orderings that nothing supports, and the viva exposes it. If cost were ever used to prune enumeration, it would also break the determinism guarantee of Hard Rule 1.
 
 ---
 
-### D-038 — ERS Exploit Corroboration and EPSS Partial Circularity Disclosure
-**Date:** 2026-10-11
+### D-038 — ERS exploit-catalogue corroboration: smoke-level only, with EPSS circularity disclosed
+**Date:** 2026-10-11 (revised 2026-10-12 after PR #19 review)
 **Decided by:** Mayank
 **Type:** Addition
 **Status:** Active
 
 **Decision**
-We empirically validate the Exposure Risk Score (ERS) against independent exploit catalogs (ExploitDB and Rapid7 Metasploit) via `evals/ers_validation.py`. We explicitly acknowledge and document a partial circularity: FIRST EPSS v4 incorporates public exploit evidence in its training data, meaning validating ERS against ExploitDB involves indirect feature overlap. We mitigate and defend this by (1) corroborating against weaponized Metasploit modules, (2) running a comparative control isolating the marginal contribution of EPSS against pure technical severity (CVSS + KEV), and (3) preserving additive auditability without multiplying EPSS by CVSS.
+`evals/ers_validation.py` ranks the golden CVEs by ERS under four weight profiles and checks the share of the top k that have an ExploitDB or Metasploit catalogue entry. This is **smoke-level corroboration, not validation**. The target is not independent of ERS. EPSS (35% of ERS) uses exploit-code availability among its features, **including both ExploitDB entries and Metasploit modules** (D-029). Neither catalogue is an independent check. The earlier "independent Metasploit corroboration" mitigation is withdrawn.
+
+**Result of the one real run (2026-10-11, pre-review harness)**
+- The EPSS marginal gain at top 5 (balanced minus no-EPSS control) is **0.0 pp** (`epss_marginal_precision_gain_pp`). This run gives no evidence that EPSS adds discriminating power.
+- n = 50 hand-picked CVEs. The base rate (random-ranking precision) is 72.0%. Cohort E was selected for exploit presence, and cohort C on KEV membership, which is an ERS input.
+- At top 5, one CVE is 20 pp. The pre-review harness broke ties by dataset input order. The "+20.0 pp vs CVSS-only" figure is one CVE admitted that way, and it is 0.0 pp under the revised tie rule (recomputed from the committed scores; see the reviewer notes in `evals/results/ers_validation_results.md`).
+
+**Method revised in review (rerun pending)**
+Deterministic tie rule (score descending, then `cve_id` ascending), boundary-tie counts and the precision range over tie orders, random-baseline and Metasploit-only precision, and safe output paths. Synthetic fixtures write to `ers_validation_synthetic.*`. Real results are written only to explicitly passed paths, and there is no silent fallback to fixtures. The committed real results come from the pre-review harness and must be regenerated (Mayank's next task).
 
 **Why**
-In D-008, KEV was proposed as an external validator for ERS, which D-027 correctly rejected as circular because KEV is an explicit 25% additive input component. D-027 suggested using ExploitDB and Metasploit instead. However, in an academic viva, evaluators can point out that EPSS (35% of ERS) already uses exploit availability signals in its machine learning model.
-Rather than ignoring this overlap or attempting to hide it, transparent disclosure is a differentiator. ExploitDB and Metasploit are external verification sources for SeekThreat (neither is an input to ERS). Furthermore, the additive design ($0.40 \cdot \text{CVSS} + 0.35 \cdot \text{EPSS} + 0.25 \cdot \text{KEV}$) means each component's contribution is isolated and explained, with zero hidden weights.
+D-008 proposed KEV as the validator. D-027 rejected that as circular (KEV is an ERS input) and moved to ExploitDB/Metasploit, noting the overlap with EPSS. Disclosing the overlap does not remove it. The honest claim is that the check is a smoke-level sanity test on a small, biased set.
+
+ERS stays additive and never multiplies EPSS by CVSS: D-008, and `services/enrichment/README.md` rule 3. (An earlier version cited "Hard Rule 1" for this. Hard Rule 1 is about the LLM never creating graph edges.)
 
 **Impact on plan**
-`evals/ers_validation.py` is established as the formal empirical validation harness. It produces reproducible precision and recall tables across top ranking tiers and compares Balanced ERS against a No-EPSS control and CVSS-only baseline.
+Closes D-027's open follow-up "ERS validation has not been run": it has now been run once, on real mirrors, at smoke level, with the method revised and a rerun pending. Real validation would need a larger set with a documented selection rule, and a target that EPSS does not use.
 
 **Cost if we're wrong**
-Low. The scoring engine and weights are unchanged; this decision provides formal viva defensibility and methodological transparency.
+Low for code, since weights and the scorer are unchanged. The cost is credibility if any number from this harness is presented as validation of ERS or of EPSS.
 
 ---
 
@@ -166,6 +202,8 @@ Low. If whole-catalog coverage is needed (e.g. for eval cohorts not in enriched_
 
 **Decision**
 Enrichment coverage is evaluated offline by running SeekThreat's multi-source fusion engine and an NVD-only baseline engine over the CVE list in `evals/golden/enrichment_baseline.json` (50 CVEs, five hypothesised cohorts). The headline metric counts four intelligence fields: CVSS, CWE, description and EPSS. KEV membership and exploit availability are reported separately as "mirror loaded" plus positive-hit rate: a loaded mirror gives every CVE a definite True/False, so counting False as "filled" would only measure whether the file exists. Placeholders are excluded by provenance (`Source.DERIVED` / `Confidence.LOW`), never by value.
+
+> **Update 2026-10-12:** coverage has since been measured once on real mirrors dated 2026-10-11 (`evals/results/enrichment_coverage_real.md`). Per field, CVSS, CWE and description coverage were identical to the NVD-only baseline (+0.0 pp excluding EPSS). The four-field +25.0 pp is entirely EPSS, which the baseline does not load. The harness now reports the three-field headline excluding EPSS automatically. The paragraph below describes the state on 2026-10-05.
 
 **No coverage number has been measured yet.** The only committed run (`evals/results/`) is against the hand-authored fixtures in `tests/fixtures/enrichment/` (every file `_synthetic: true`) and is labelled as a synthetic smoke test of the harness. Its numbers describe which CVEs the fixtures happen to contain, not the platform.
 
@@ -302,7 +340,9 @@ Low to undo, with one open risk. A loaded but stale mirror still produces confid
 **Date:** 2026-10-05
 **Decided by:** Mayank
 **Type:** Divergence
-**Status:** Superseded by D-039
+**Status:** Active
+
+> **Update 2026-10-12:** D-039 proposes replacing the multiplicative score with a two-tier additive/log-space formulation. D-039 is *Proposed*, pending sign-off by the graph owner, so this entry stays Active until then. Note that D-039's Tier 1 is still multiplicative in EPSS (a sum of −ln EPSS is the log of a product).
 
 **Decision**
 `services/graph/README.md` describes a path score of `EPSS × exploit_availability × privilege_delta`. This multiplication does not break the letter of `services/enrichment/README.md` rule 3 ("Never multiply EPSS by CVSS"), because neither of the other factors is CVSS. That is the only claim this entry makes. **Whether the product is a sound score is an open question and a known viva risk** (see below).
@@ -409,6 +449,8 @@ D-008 originally said KEV "validates" the ranking. With KEV now a 25% component 
 D-008's original sentence "KEV membership is used to *validate* the resulting ranking, not as a training target" is amended: KEV is an *input* to ERS. Validation uses ExploitDB/Metasploit corroboration, with the caveat above. The "not as a training target" clause is unchanged.
 
 **Open follow-up:** this entry originally said the ExploitDB/Metasploit validation "will be measured in the Level 4 eval". It was not. Level 4 (`evals/enrichment_coverage.py`, D-035) measures enrichment coverage only and does not rank anything by ERS. ERS validation has not been run and remains open.
+
+**Update 2026-10-12 (see D-038):** the ExploitDB/Metasploit corroboration has now been run once, on real mirrors dated 2026-10-11 (`evals/ers_validation.py`). It is smoke-level only (n=50, biased selection, 72.0% base rate). The EPSS marginal gain was 0.0 pp. The method was revised in review (deterministic ties, random baseline, Metasploit-only precision), and a rerun is pending. The EPSS overlap noted above applies to Metasploit as well as ExploitDB.
 
 **Impact on plan**
 No weight or code changes. `evals/ers_sensitivity.py` reproduces the sensitivity table. ERS validation against exploit corroboration is an open follow-up, with the EPSS overlap above to be addressed in its design.

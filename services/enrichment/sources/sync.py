@@ -18,6 +18,17 @@ Two sync modes:
   the existing mirror keyed by CVE ID. Mirroring those catalogs whole is hundreds of
   thousands of records the platform never looks up.
 
+Targeted sync bookkeeping:
+- Read-merge-write of a per-CVE mirror runs under a cross-process lock
+  (``locking.MirrorLock``): post-scan tasks, the beat sync and the CLI can merge into
+  the same file at once, and without the lock the later writer drops the earlier
+  writer's additions. The lock is never held across network I/O.
+- A CVE the upstream does not have (HTTP 404, or no exact match) is recorded in a
+  ``<name>.notfound.json`` sidecar with ``checked_at`` and is not fetched again for
+  ``NOT_FOUND_TTL_SECONDS``. The mirror file the readers parse is unchanged.
+- An optional time budget stops starting new lookups once spent; the rest are
+  reported as deferred and picked up by the next run.
+
 Upstream URLs and record shapes were checked against live responses; captured,
 trimmed examples live in ``tests/fixtures/enrichment/upstream/``.
 """
@@ -36,14 +47,19 @@ import time
 import zlib
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import httpx
 
 from packages.schema.models.provenance import Source
-from services.enrichment.sources.base import meta_path, read_mirror_meta
+from services.enrichment.sources.base import meta_path, parse_feed_date, read_mirror_meta
+from services.enrichment.sources.locking import (
+    DEFAULT_LOCK_TIMEOUT_SECONDS,
+    MirrorLock,
+    MirrorLockTimeout,
+)
 from services.enrichment.sources.secondary import exploitdb_cve_map, metasploit_cve_map
 
 logger = logging.getLogger(__name__)
@@ -55,7 +71,9 @@ USER_AGENT = f"SeekThreat-feed-sync/{SYNC_VERSION} (+https://github.com/Ayushmaa
 #: this too, so the sync job (writer) and the API/worker (readers) agree.
 DEFAULT_CACHE_DIR = Path("data") / "enrichment_cache"
 
-CVE_ID = re.compile(r"CVE-(\d{4})-(\d{4,7})", re.IGNORECASE)
+#: ASCII digits only: ``\d`` would also accept other Unicode digits, and these IDs
+#: are interpolated into upstream URL paths.
+CVE_ID = re.compile(r"CVE-([0-9]{4})-([0-9]{4,7})", re.IGNORECASE | re.ASCII)
 
 # Upstream URLs (all https; FeedSyncer refuses anything else).
 DEFAULT_CISA_KEV_URL = (
@@ -107,6 +125,9 @@ NVD_DELAY_WITH_KEY_SECONDS = 0.6
 #: A new full mirror must keep at least this fraction of the previous record count.
 MIN_RETAINED_FRACTION = 0.5
 
+#: A CVE an upstream reported as not found is not asked for again for this long.
+NOT_FOUND_TTL_SECONDS = 7 * 24 * 3600
+
 #: Short names used by the CLI, the Celery task and summaries.
 SOURCE_NAMES: dict[Source, str] = {
     Source.KEV: "kev",
@@ -121,6 +142,7 @@ SOURCE_NAMES: dict[Source, str] = {
 FULL_SOURCES = ("kev", "epss", "exploitdb", "metasploit")
 TARGETED_SOURCES = ("cve_org", "vulnrichment", "euvd", "nvd")
 ALL_SOURCES = FULL_SOURCES + TARGETED_SOURCES
+_SOURCE_BY_NAME: dict[str, Source] = {name: src for src, name in SOURCE_NAMES.items()}
 
 #: Mirror file name for each source inside a cache directory. Shared by
 #: ``SourceSynchronizer`` (writer) and ``FusionEngine(cache_dir=...)`` (reader)
@@ -150,8 +172,11 @@ __all__ = [
     "get_default_cache_dir",
     "meta_path",
     "mirror_path",
+    "missing_cve_ids_by_source",
     "normalize_cve_ids",
+    "not_found_path",
     "read_mirror_meta",
+    "read_not_found",
     "vulnrichment_path",
 ]
 
@@ -173,6 +198,8 @@ class SyncResult:
     source_url: str | None = None
     sha256: str | None = None
     note: str | None = None
+    #: Targeted sync only: CVE IDs whose record this run fetched and wrote.
+    cve_ids_synced: tuple[str, ...] = ()
 
     @property
     def key(self) -> str:
@@ -213,6 +240,7 @@ class SyncReport:
                     "target_path": str(r.target_path),
                     "synced_at": r.synced_at.isoformat(),
                     "sha256": r.sha256,
+                    "cve_ids_synced": list(r.cve_ids_synced),
                 }
                 for r in self.results
             },
@@ -222,6 +250,80 @@ class SyncReport:
 def mirror_path(cache_dir: Path | str, source: Source) -> Path:
     """Return the mirror file path for ``source`` inside ``cache_dir``."""
     return Path(cache_dir) / MIRROR_FILENAMES.get(source, f"{source.value}.json")
+
+
+def not_found_path(mirror_file: Path | str) -> Path:
+    """Not-found sidecar for a mirror: ``nvd.json`` -> ``nvd.notfound.json``."""
+    mirror_file = Path(mirror_file)
+    return mirror_file.with_name(f"{mirror_file.stem}.notfound.json")
+
+
+def _read_not_found_entries(mirror_file: Path | str) -> dict[str, dict[str, Any]]:
+    try:
+        with open(not_found_path(mirror_file), encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, UnicodeDecodeError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {
+        str(k).upper(): v
+        for k, v in data.items()
+        if isinstance(v, dict) and not str(k).startswith("_")
+    }
+
+
+def read_not_found(
+    mirror_file: Path | str,
+    *,
+    now: datetime | None = None,
+    ttl_seconds: float = NOT_FOUND_TTL_SECONDS,
+) -> set[str]:
+    """CVE IDs recorded as not found upstream within the last ``ttl_seconds``."""
+    cutoff = (now or datetime.now(UTC)) - timedelta(seconds=ttl_seconds)
+    fresh: set[str] = set()
+    for cve, entry in _read_not_found_entries(mirror_file).items():
+        checked = parse_feed_date(entry.get("checked_at"))
+        if checked is not None and checked > cutoff:
+            fresh.add(cve)
+    return fresh
+
+
+def _mirror_keys(mirror_file: Path) -> set[str]:
+    if not mirror_file.exists():
+        return set()
+    try:
+        with open(mirror_file, encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        logger.warning("feed_sync: mirror %s unreadable; treating as empty: %s", mirror_file, exc)
+        return set()
+    if not isinstance(data, dict):
+        return set()
+    return {str(k).upper() for k in data if not str(k).startswith("_")}
+
+
+def missing_cve_ids_by_source(
+    cache_dir: Path | str,
+    cve_ids: Iterable[str],
+    *,
+    now: datetime | None = None,
+    ttl_seconds: float = NOT_FOUND_TTL_SECONDS,
+) -> dict[str, list[str]]:
+    """For each targeted source, the CVE IDs it has no record of yet.
+
+    Computed per source: a record in the CVE.org mirror says nothing about whether
+    NVD, Vulnrichment or EUVD have been asked. IDs the source reported as not found
+    within ``ttl_seconds`` are not missing (asking again would return 404 again).
+    """
+    ids = normalize_cve_ids(cve_ids)
+    out: dict[str, list[str]] = {}
+    for name in TARGETED_SOURCES:
+        source = _SOURCE_BY_NAME[name]
+        target = mirror_path(cache_dir, source)
+        known = _mirror_keys(target) | read_not_found(target, now=now, ttl_seconds=ttl_seconds)
+        out[name] = [cve for cve in ids if cve not in known]
+    return out
 
 
 def get_default_cache_dir() -> Path:
@@ -313,7 +415,7 @@ class SourceSynchronizer:
         except (OSError, UnicodeDecodeError, json.JSONDecodeError):
             return None  # an unreadable mirror is not worth protecting
 
-    def _write_atomic(self, target: Path, data: Any) -> str:
+    def write_atomic(self, target: Path, data: Any) -> str:
         """Write ``data`` as compact JSON to ``target`` atomically; return its sha256."""
         tmp_path: Path | None = None
         try:
@@ -374,7 +476,7 @@ class SourceSynchronizer:
                 )
 
         try:
-            digest = self._write_atomic(target, data)
+            digest = self.write_atomic(target, data)
             meta = {
                 "source": source.value,
                 "synced_at": now.isoformat(),
@@ -383,7 +485,7 @@ class SourceSynchronizer:
                 "sha256": digest,
                 "sync_version": SYNC_VERSION,
             }
-            self._write_atomic(meta_path(target), meta)
+            self.write_atomic(meta_path(target), meta)
         except Exception as exc:  # report, never raise: one source must not stop others
             return failure(f"writing {target.name} failed: {type(exc).__name__}: {exc}")
 
@@ -437,7 +539,22 @@ class FeedSyncer:
         allow_shrink: bool = False,
         max_bytes: Mapping[Source, int] | None = None,
         max_seconds: float = DEFAULT_MAX_SECONDS,
+        not_found_ttl_seconds: float = NOT_FOUND_TTL_SECONDS,
+        lock_timeout_seconds: float = DEFAULT_LOCK_TIMEOUT_SECONDS,
+        time_budget_seconds: float | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
+        """See the class docstring. Targeted-sync bookkeeping:
+
+        Args:
+            not_found_ttl_seconds: How long a CVE recorded as not found upstream is
+                skipped before it is asked for again.
+            lock_timeout_seconds: How long a targeted sync waits for the mirror lock
+                before reporting the source as failed.
+            time_budget_seconds: Once this much time (by ``clock``) has passed since
+                construction, targeted syncs start no new lookups and report the
+                rest as deferred. None means no budget.
+        """
         self.cache_dir = Path(cache_dir) if cache_dir else get_default_cache_dir()
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._synchronizer = SourceSynchronizer(cache_dir=self.cache_dir, allow_shrink=allow_shrink)
@@ -455,6 +572,13 @@ class FeedSyncer:
         self._sleep = sleep
         self._max_bytes = {**DEFAULT_MAX_BYTES, **(max_bytes or {})}
         self._max_seconds = max_seconds
+        self._not_found_ttl = not_found_ttl_seconds
+        self._lock_timeout = lock_timeout_seconds
+        self._clock = clock
+        self._deadline = clock() + time_budget_seconds if time_budget_seconds is not None else None
+
+    def _budget_spent(self) -> bool:
+        return self._deadline is not None and self._clock() >= self._deadline
 
     # ------------------------------------------------------------------ HTTP
 
@@ -685,6 +809,33 @@ class FeedSyncer:
             else {}
         )
 
+    def _update_not_found(
+        self, target: Path, not_found: Iterable[str], found: Iterable[str], now: datetime
+    ) -> None:
+        """Record ``not_found`` with ``checked_at``; drop ``found`` and expired entries.
+
+        Caller holds the mirror lock. Best effort: a failure here only means a CVE is
+        asked for again next run.
+        """
+        cutoff = now - timedelta(seconds=self._not_found_ttl)
+        entries: dict[str, dict[str, Any]] = {}
+        for cve, entry in _read_not_found_entries(target).items():
+            checked = parse_feed_date(entry.get("checked_at"))
+            if checked is not None and checked > cutoff:
+                entries[cve] = entry
+        for cve in found:
+            entries.pop(cve, None)
+        for cve in not_found:
+            entries[cve] = {"checked_at": now.isoformat()}
+        path = not_found_path(target)
+        try:
+            if entries:
+                self._synchronizer.write_atomic(path, dict(sorted(entries.items())))
+            else:
+                path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.warning("feed_sync: could not update %s: %s", path.name, exc)
+
     def _targeted_sync(
         self,
         source: Source,
@@ -705,12 +856,18 @@ class FeedSyncer:
                 note="no CVE IDs to sync; mirror left unchanged",
             )
 
+        skipped = read_not_found(target, ttl_seconds=self._not_found_ttl)
+        to_fetch = [cve for cve in ids if cve not in skipped]
         fetched: dict[str, Any] = {}
         errors: list[str] = []
-        not_found = 0
+        not_found: list[str] = []
+        deferred: list[str] = []
         try:
             with self._client() as client:
-                for index, cve in enumerate(ids):
+                for index, cve in enumerate(to_fetch):
+                    if self._budget_spent():
+                        deferred = to_fetch[index:]
+                        break
                     if index and delay_seconds:
                         self._sleep(delay_seconds)
                     try:
@@ -719,25 +876,41 @@ class FeedSyncer:
                         errors.append(f"{cve}: {type(exc).__name__}: {exc}")
                         continue
                     if record is None:
-                        not_found += 1
+                        not_found.append(cve)
                     else:
                         fetched[cve] = record
         except Exception as exc:
             return self._failure(source, exc, base_url)
 
         note = (
-            f"{len(fetched)} fetched, {not_found} not found upstream, "
+            f"{len(fetched)} fetched, {len(not_found)} not found upstream, "
+            f"{len(ids) - len(to_fetch)} skipped (not found within "
+            f"{self._not_found_ttl / 86400:g}d), {len(deferred)} deferred (time budget), "
             f"{len(errors)} failed, of {len(ids)} requested"
         )
-        sha256: str | None = None
-        if fetched:
-            merged = {**self._existing_mirror(source), **fetched}
-            written = self._synchronizer.sync_from_data(
-                source, merged, len(merged), source_url=base_url
+        if deferred:
+            logger.warning(
+                "feed_sync: %s time budget spent; %d CVE lookups deferred to the next run",
+                SOURCE_NAMES[source],
+                len(deferred),
             )
-            if not written.success:
-                return written
-            sha256 = written.sha256
+        sha256: str | None = None
+        if fetched or not_found:
+            try:
+                # Read-merge-write under the mirror lock, so a concurrent targeted sync
+                # of the same mirror cannot drop this run's additions (or vice versa).
+                with MirrorLock(target, timeout=self._lock_timeout):
+                    if fetched:
+                        merged = {**self._existing_mirror(source), **fetched}
+                        written = self._synchronizer.sync_from_data(
+                            source, merged, len(merged), source_url=base_url
+                        )
+                        if not written.success:
+                            return written
+                        sha256 = written.sha256
+                    self._update_not_found(target, not_found, fetched, datetime.now(UTC))
+            except MirrorLockTimeout as exc:
+                return self._failure(source, exc, base_url)
 
         error = None
         if errors:
@@ -752,6 +925,7 @@ class FeedSyncer:
             source_url=base_url,
             sha256=sha256,
             note=note,
+            cve_ids_synced=tuple(sorted(fetched)),
         )
 
     def _json(self, body: bytes | None) -> Any | None:
@@ -842,15 +1016,35 @@ class FeedSyncer:
 
         return self._targeted_sync(Source.NVD, cve_ids, self._nvd_url, fetch_one, delay)
 
+    def _targeted_methods(self) -> dict[str, Callable[[Iterable[str]], SyncResult]]:
+        return {
+            "cve_org": self.sync_cve_org,
+            "vulnrichment": self.sync_vulnrichment,
+            "euvd": self.sync_euvd,
+            "nvd": self.sync_nvd,
+        }
+
     def sync_cve_records(self, cve_ids: Iterable[str]) -> list[SyncResult]:
         """Targeted sync of every record-oriented source for ``cve_ids``."""
         ids = normalize_cve_ids(cve_ids)
-        return [
-            self.sync_cve_org(ids),
-            self.sync_vulnrichment(ids),
-            self.sync_euvd(ids),
-            self.sync_nvd(ids),
-        ]
+        return [method(ids) for method in self._targeted_methods().values()]
+
+    def sync_missing_cve_records(self, missing: Mapping[str, Iterable[str]]) -> list[SyncResult]:
+        """Targeted sync of each source for only its own CVE IDs.
+
+        ``missing`` maps a targeted source name to the IDs that source lacks (see
+        ``missing_cve_ids_by_source``). Sources with no IDs are not contacted.
+        """
+        unknown = [name for name in missing if name not in TARGETED_SOURCES]
+        if unknown:
+            raise ValueError(f"not targeted sources: {unknown}; expected {list(TARGETED_SOURCES)}")
+        methods = self._targeted_methods()
+        results: list[SyncResult] = []
+        for name in TARGETED_SOURCES:
+            ids = normalize_cve_ids(missing.get(name, ()))
+            if ids:
+                results.append(methods[name](ids))
+        return results
 
     # ------------------------------------------------------------------ all
 
@@ -875,12 +1069,7 @@ class FeedSyncer:
             "exploitdb": self.sync_exploitdb,
             "metasploit": self.sync_metasploit,
         }
-        targeted: dict[str, Callable[[Iterable[str]], SyncResult]] = {
-            "cve_org": self.sync_cve_org,
-            "vulnrichment": self.sync_vulnrichment,
-            "euvd": self.sync_euvd,
-            "nvd": self.sync_nvd,
-        }
+        targeted = self._targeted_methods()
         results: list[SyncResult] = []
         for name in ALL_SOURCES:
             if name not in selected:

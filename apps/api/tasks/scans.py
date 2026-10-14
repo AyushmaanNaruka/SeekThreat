@@ -48,14 +48,23 @@ from services.scanners.nmap_xml import NmapParseError
 from services.scanners.nuclei_adapter import NucleiAdapter
 from services.scanners.nuclei_json import NucleiParseError
 
+#: Audit ``scanner`` field for post-scan enrichment events raised from here.
+POST_SCAN_AUDIT_SCANNER = "post_scan_enrichment"
 
-# Import lazily resolved at call time to avoid a circular import at module
-# load; post_scan_enrichment imports celery_app which also lives in worker.
-def _dispatch_post_scan_enrichment(artifact_id: str, engagement_id: str, scan_id: str) -> None:
+
+def _dispatch_post_scan_enrichment(
+    artifact_id: str, engagement_id: str, scan_id: str, actor: str
+) -> None:
     """Fire-and-forget: dispatch the post-scan enrichment task.
 
-    Any failure to enqueue (e.g. Redis unavailable) is caught and logged;
-    it must never propagate back to the scan result.
+    Called after the scan row is committed and ``scan.completed`` is audited.
+    ``retry=False``: kombu otherwise retries a failed publish (by default up to 3
+    times with back-off), so a down broker would hold the scan task open. Any
+    failure to enqueue is audited and logged and never propagates to the scan; the
+    daily beat sync picks up the scan's CVE IDs from its observations instead.
+
+    The task module is imported lazily: it imports ``celery_app`` from
+    ``apps.api.worker``, which imports this module at load time.
     """
     try:
         from apps.api.tasks.post_scan_enrichment import sync_new_findings_cves  # noqa: PLC0415
@@ -65,7 +74,9 @@ def _dispatch_post_scan_enrichment(artifact_id: str, engagement_id: str, scan_id
                 "artifact_id": artifact_id,
                 "engagement_id": engagement_id,
                 "scan_id": scan_id,
-            }
+                "actor": actor,
+            },
+            retry=False,
         )
         logger.info(
             "post_scan_enrichment: enqueued for scan %s / artifact %s",
@@ -73,11 +84,21 @@ def _dispatch_post_scan_enrichment(artifact_id: str, engagement_id: str, scan_id
             artifact_id,
         )
     except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
         logger.warning(
             "post_scan_enrichment: failed to enqueue for scan %s: %s "
-            "— enrichment will run at next beat",
+            "— its CVEs will be synced by the next beat run",
             scan_id,
-            exc,
+            error,
+        )
+        log_audit_event(
+            event="post_scan_enrichment.enqueue_failed",
+            actor=actor,
+            target=f"engagement:{engagement_id}/scan:{scan_id}",
+            engagement_id=engagement_id,
+            scanner=POST_SCAN_AUDIT_SCANNER,
+            status="error",
+            details={"scan_id": scan_id, "artifact_id": artifact_id, "error": error},
         )
 
 
@@ -180,15 +201,6 @@ def run_scan(
         )
         db.commit()
 
-        # Dispatch post-scan enrichment off the request path (fire-and-forget).
-        # This is the integration point for Task 6 (D-036): the scan itself is
-        # already committed; a failure to enqueue must not roll it back.
-        _dispatch_post_scan_enrichment(
-            artifact_id=scan_result.artifact.artifact_id,
-            engagement_id=engagement_id,
-            scan_id=scan_id,
-        )
-
         celery_task_id = (
             getattr(task.request, "id", None)
             if task is not None and hasattr(task, "request")
@@ -208,6 +220,17 @@ def run_scan(
                 "observation_count": len(scan_result.observations),
                 "celery_task_id": celery_task_id,
             },
+        )
+
+        # Dispatch post-scan enrichment off the request path (fire-and-forget),
+        # after the scan is committed and its completion audited (Task 6, D-036).
+        # The dispatcher never raises, so it cannot turn a completed scan into a
+        # failed one.
+        _dispatch_post_scan_enrichment(
+            artifact_id=scan_result.artifact.artifact_id,
+            engagement_id=engagement_id,
+            scan_id=scan_id,
+            actor=actor,
         )
 
     except Exception as exc:

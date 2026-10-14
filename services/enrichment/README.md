@@ -76,20 +76,20 @@ All intelligence feeds ingested into SeekThreat are subject to their respective 
 
 1. **National Vulnerability Database (NVD API 2.0):**
    *Data produced by the National Institute of Standards and Technology (NIST).*
-   > *Disclaimer:* **"This product uses the NVD API but is not endorsed or certified by the NVD."**
+   > *Requested notice* ([NVD Terms of Use](https://nvd.nist.gov/developers/terms-of-use)): **"This product uses the NVD API but is not endorsed or certified by the NVD."** SeekThreat must not imply NVD endorsement.
    *Rate limits:* 5 requests per rolling 30 seconds without an API key; 50 requests per rolling 30 seconds with an API key. Automatic rate-limiting back-off with exponential retry is enforced by `FeedSyncer`.
 
 2. **FIRST Exploit Prediction Scoring System (EPSS v4):**
    *EPSS is a community-driven initiative governed by the Forum of Incident Response and Security Teams (FIRST) EPSS Special Interest Group (SIG).*
-   Attribution is given to the FIRST EPSS SIG and Empirical Security.
+   Attribution is given to the FIRST EPSS SIG and Empirical Security (FIRST requests attribution; see [EPSS data](https://www.first.org/epss/data_stats) and the [EPSS FAQ](https://www.first.org/epss/faq)). Academic citation: Jacobs et al., "Exploit Prediction Scoring System (EPSS)", *Digital Threats: Research and Practice* 2(3), 2021.
 
 3. **European Vulnerability Database (ENISA EUVD):**
    *Managed by the European Union Agency for Cybersecurity (ENISA).*
-   Published under Creative Commons Attribution 4.0 International (CC BY 4.0) per Decision 2011/833/EU. Data reused with attribution to ENISA.
+   [ENISA Legal Notice](https://www.enisa.europa.eu/about-enisa/legal-notice): reuse permitted with source acknowledgement; an EUVD-specific licence is unconfirmed (*TO VERIFY* in `THIRD_PARTY.md`). An earlier "CC BY 4.0 per Decision 2011/833/EU" claim was not supported by the notice and was withdrawn. Data reused with attribution to ENISA.
 
 4. **CVE Program (CVE.org):**
    *Managed by The MITRE Corporation.*
-   Used in accordance with the CVE Program Terms of Use.
+   Used in accordance with the [CVE Program Terms of Use](https://www.cve.org/Legal/TermsOfUse).
 
 5. **CISA Known Exploited Vulnerabilities (KEV) & Vulnrichment:**
    *Cybersecurity and Infrastructure Security Agency (CISA).*

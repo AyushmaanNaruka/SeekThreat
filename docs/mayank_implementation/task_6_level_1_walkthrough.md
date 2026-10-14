@@ -9,7 +9,7 @@
 
 ## 1. Goal
 
-Expand the deliberately vulnerable test network from 2 containers to a comprehensive **10-host multi-tier network** partitioned across 3 isolated subnets (`dmz`, `internal`, `data`), and produce the authoritative [`lab/ground_truth.yaml`](file:///e:/SeekThreat/SeekThreat/lab/ground_truth.yaml) to serve as the evaluation baseline denominator for Track A (accuracy, precision, recall, F1) and Track B (attack path validity) metrics.
+Expand the deliberately vulnerable test network from 2 containers to a comprehensive **10-host multi-tier network** partitioned across 3 isolated subnets (`dmz`, `internal`, `data`), and produce the authoritative [`lab/ground_truth.yaml`](../../lab/ground_truth.yaml) to serve as the evaluation baseline denominator for Track A (accuracy, precision, recall, F1) and Track B (attack path validity) metrics.
 
 ---
 
@@ -17,12 +17,12 @@ Expand the deliberately vulnerable test network from 2 containers to a comprehen
 
 | File | Type | Purpose |
 |---|:---:|---|
-| [`lab/docker-compose.yml`](file:///e:/SeekThreat/SeekThreat/lab/docker-compose.yml) | Modified | 10 vulnerable target containers + 1 auditor scanner container across 3 isolated subnets (`dmz`, `internal`, `data`). |
-| [`lab/ground_truth.yaml`](file:///e:/SeekThreat/SeekThreat/lab/ground_truth.yaml) | New | Authoritative ground truth denominator recording 10 hosts, 10 CVEs with CVSS, 3 multi-hop attack paths, and false positives. |
-| [`tests/unit/test_ground_truth.py`](file:///e:/SeekThreat/SeekThreat/tests/unit/test_ground_truth.py) | New | 11 unit tests verifying schema, CIDRs, 8–12 host count, and cross-consistency with compose. |
-| [`DECISIONS.md`](file:///e:/SeekThreat/SeekThreat/DECISIONS.md) | Modified | Added ADR **D-016** documenting lab topology, multi-hop chains, and ground truth schema. |
-| [`docs/mayank_implementation/build.md`](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/build.md) | Modified | Task 6 marked complete; checklist updated to 175/175 tests. |
-| [`docs/mayank_implementation/level_1_status.md`](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level_1_status.md) | Modified | Task 6 marked complete and test counts synchronized. |
+| [`lab/docker-compose.yml`](../../lab/docker-compose.yml) | Modified | 10 vulnerable target containers + 1 auditor scanner container across 3 isolated subnets (`dmz`, `internal`, `data`). |
+| [`lab/ground_truth.yaml`](../../lab/ground_truth.yaml) | New | Authoritative ground truth denominator recording 10 hosts, 10 CVEs with CVSS, 3 multi-hop attack paths, and false positives. |
+| [`tests/unit/test_ground_truth.py`](../../tests/unit/test_ground_truth.py) | New | 11 unit tests verifying schema, CIDRs, 8–12 host count, and cross-consistency with compose. |
+| [`DECISIONS.md`](../../DECISIONS.md) | Modified | Added ADR **D-016** documenting lab topology, multi-hop chains, and ground truth schema. |
+| [`docs/mayank_implementation/build.md`](build.md) | Modified | Task 6 marked complete; checklist updated to 175/175 tests. |
+| [`docs/mayank_implementation/level_1_status.md`](level_1_status.md) | Modified | Task 6 marked complete and test counts synchronized. |
 
 ---
 
