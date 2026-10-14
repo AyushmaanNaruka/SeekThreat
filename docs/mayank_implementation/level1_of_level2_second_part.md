@@ -23,8 +23,8 @@ No runtime code changed. CI must stay green before this level is considered done
 
 Before any design work, two files had mixed CRLF/LF line endings that caused `ruff format --check` to report 2 files would be reformatted:
 
-- [`apps/api/routers/__init__.py`](file:///e:/SeekThreat/SeekThreat/apps/api/routers/__init__.py)
-- [`apps/api/tasks/__init__.py`](file:///e:/SeekThreat/SeekThreat/apps/api/tasks/__init__.py)
+- [`apps/api/routers/__init__.py`](../../apps/api/routers/__init__.py)
+- [`apps/api/tasks/__init__.py`](../../apps/api/tasks/__init__.py)
 
 Fixed by running `python -m ruff format` on both files. After fix: `ruff format --check` reports `144 files already formatted`.
 
@@ -32,7 +32,7 @@ Fixed by running `python -m ruff format` on both files. After fix: `ruff format 
 
 ## Decisions logged
 
-Six new decisions were added to [`DECISIONS.md`](file:///e:/SeekThreat/SeekThreat/DECISIONS.md) (newest first, D-032 down to D-027):
+Six new decisions were added to [`DECISIONS.md`](../../DECISIONS.md) (newest first, D-032 down to D-027):
 
 ---
 
@@ -140,7 +140,7 @@ D-008's "not as a training target" clause unchanged. Only the "validates the ran
 
 ## Code changes made
 
-### 1. [`services/enrichment/ers.py`](file:///e:/SeekThreat/SeekThreat/services/enrichment/ers.py) — docstring update
+### 1. [`services/enrichment/ers.py`](../../services/enrichment/ers.py) — docstring update
 
 - Removed "provisional" qualifier from weight comments.
 - Updated module docstring: references D-027 for rationale, correctly describes KEV as an *input* not a *validator*.
@@ -148,11 +148,11 @@ D-008's "not as a training target" clause unchanged. Only the "validates the ran
 
 No logic, no weights, no function signatures changed.
 
-### 2. [`apps/api/routers/__init__.py`](file:///e:/SeekThreat/SeekThreat/apps/api/routers/__init__.py) — CRLF fix
+### 2. [`apps/api/routers/__init__.py`](../../apps/api/routers/__init__.py) — CRLF fix
 
 Mixed CRLF/LF line ending normalized. `ruff format` applied.
 
-### 3. [`apps/api/tasks/__init__.py`](file:///e:/SeekThreat/SeekThreat/apps/api/tasks/__init__.py) — CRLF fix
+### 3. [`apps/api/tasks/__init__.py`](../../apps/api/tasks/__init__.py) — CRLF fix
 
 Same CRLF normalization. `ruff format` applied.
 

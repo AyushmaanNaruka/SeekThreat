@@ -1,9 +1,12 @@
 # Enrichment Coverage Evaluation Metric Specification
 
-> **Status:** the harness exists; the metric has **not been measured**. The committed output in
-> `evals/results/` is a synthetic smoke test on hand-authored fixtures
-> (`tests/fixtures/enrichment/`, every file `_synthetic: true`). No real-world coverage number
-> exists yet.
+> **Status:** measured once on real mirrors 2026-10-11 (see
+> `evals/results/enrichment_coverage_real.md` and its caveats: the four-field gain is entirely
+> EPSS, excluding EPSS the gain is +0.0 pp, and the 50 CVEs are hand-picked with batch-attested
+> labels). `evals/results/enrichment_coverage_results.*` is a separate synthetic smoke test on
+> hand-authored fixtures (`tests/fixtures/enrichment/`, every file `_synthetic: true`). The
+> harness also reports a three-field "excluding EPSS" headline, because the baseline never
+> loads EPSS.
 
 ## 1. Overview and Objective
 
@@ -88,9 +91,12 @@ missing KEV signal is therefore a property of this harness, not of NVD, and is r
 
 ## 4. Evaluation Dataset
 
-`evals/golden/enrichment_baseline.json` lists 50 CVE IDs in five cohorts. The cohort labels
-are **unverified hypotheses** (`"verification": "unverified — ..."`); nobody has checked them
-against live NVD/CVE.org/KEV/EPSS data. The harness reads only `cve_id` and `cohort`.
+`evals/golden/enrichment_baseline.json` lists 50 hand-picked CVE IDs in five cohorts. The
+entries are batch-attested (one `verified_by` / `verified_at` stamp, no per-CVE evidence) and the
+cohort labels are **hypotheses**: `cohort_labels_verified` is `false`, and the 2026-10-11 real
+run contradicts cohorts B and D (NVD supplied CVSS for all 50). The harness reads only `cve_id`
+and `cohort` per item, plus the dataset-level `verification` and `cohort_labels_verified`
+fields.
 
 1. **Cohort A: NVD control** — hypothesised to have complete NVD analysis.
 2. **Cohort B: NVD gap** — hypothesised to lack NVD analysis while CVE.org / Vulnrichment / EUVD
@@ -111,7 +117,8 @@ Per `evals/README.md`:
 2. **Synthetic detection is by content.** A run is synthetic when any loaded mirror file is a
    JSON object with a truthy `_synthetic` key. Synthetic reports open with the banner
    *"SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not
-   measurements of the platform; no real-world coverage number exists yet."*
+   measurements of the platform. The real-mirror run is
+   evals/results/enrichment_coverage_real.md."*
 3. **Real-mirror provenance.** In non-synthetic mode the report records each mirror file's
    sha256, mtime and `synced_at` (from a `<name>.meta.json` sidecar when present), plus a
    `generated_at` timestamp.

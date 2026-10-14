@@ -1,12 +1,12 @@
 # Enrichment Coverage Evaluation Results
 
-> **SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not measurements of the platform; no real-world coverage number exists yet.**
+> **SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not measurements of the platform. The real-mirror run is evals/results/enrichment_coverage_real.md.**
 
 **Mode:** Synthetic fixtures  
 **Dataset:** `evals/golden/enrichment_baseline.json` (50 CVEs)  
-**Dataset verification:** unverified — cohort assignments are hypotheses, not checked against live NVD  
+**Dataset verification:** batch-attested by Mayank Narang 2026-10-11; no per-CVE evidence records yet; cohort labels B (nvd_gap) and D (high_epss_no_nvd) are contradicted by the measured data (NVD supplied CVSS for all)  
 **Source cache:** `tests/fixtures/enrichment`  
-**Fusion chain order:** cve.org -> cisa.vulnrichment -> nvd -> enisa.euvd -> derived  
+**Fusion chain order (`_CHAIN_ORDER`):** cve.org -> cisa.vulnrichment -> nvd -> enisa.euvd (then the derived placeholder fallback)  
 
 ## Mirror files
 
@@ -26,6 +26,9 @@
 | Metric | NVD-only baseline | Multi-source | Difference |
 |---|---|---|---|
 | Overall | 6.0% (12/200) | 17.0% (34/200) | +11.0 pp |
+| Excluding `epss_score` | 8.0% (12/150) | 18.0% (27/150) | +10.0 pp |
+
+The NVD-only baseline never loads EPSS, so `epss_score` adds a definitional gain to the four-field headline. The row excluding `epss_score` is the like-for-like comparison of fusion against NVD.
 
 | Field | NVD-only baseline | Multi-source | Difference |
 |---|---|---|---|
@@ -56,7 +59,7 @@ A loaded mirror answers every lookup with a definite True/False, so these are re
 ## Limitations
 
 - Baseline engine parses only NVD CVSS, CWE and description via NVDSource. NVD API 2.0 KEV fields (cisaExploitAdd etc.) are not parsed; EPSS, KEV and exploit sources are not loaded in the baseline.
-- Cohort labels come from the dataset and are unverified hypotheses; see `evals/golden/README.md`.
+- Cohort labels come from the dataset and are not verified (the dataset does not set `cohort_labels_verified: true`); see `evals/golden/README.md`.
 - Every mirror marked synthetic above is a hand-authored fixture covering a handful of CVEs. Coverage here reflects which CVEs the fixtures happen to contain, not the platform.
 
 ---

@@ -8,7 +8,7 @@
 
 ## 1. Overview & Objective
 
-In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_status.md#L103) and the foundational rules of [services/enrichment/README.md](file:///e:/SeekThreat/SeekThreat/services/enrichment/README.md#L32), **Task 2** implements the client architecture and local mirror storage for our threat intelligence sources.
+In accordance with [level2_status.md](level2_status.md#L103) and the foundational rules of [services/enrichment/README.md](../../services/enrichment/README.md#L32), **Task 2** implements the client architecture and local mirror storage for our threat intelligence sources.
 
 ### Core Constraints & Design Decisions
 
@@ -25,7 +25,7 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 ## 2. What Was Built
 
 ### A. Source Base Contract & Record Models
-* **[services/enrichment/sources/base.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/base.py)**:
+* **[services/enrichment/sources/base.py](../../services/enrichment/sources/base.py)**:
   * `BaseSourceRecord`: Common Pydantic v2 base model holding `cve_id`, `source: Source`, `confidence: Confidence`, `retrieved_at: datetime`, and `raw_payload`.
     * Provides `to_attributed(value, note=...)` to automatically package values into `Attributed[EnrichmentValue]` with immutable `Provenance`.
   * `BaseEnrichmentSource[RecordT]`: Abstract base class managing local cache loading (`load()`), cached lookups (`lookup(cve_id)`), index count (`count()`), and cache clearing (`clear()`).
@@ -34,7 +34,7 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 ---
 
 ### B. MVP Source Clients
-* **[services/enrichment/sources/cve_org.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/cve_org.py)** (`CVEOrgSource`):
+* **[services/enrichment/sources/cve_org.py](../../services/enrichment/sources/cve_org.py)** (`CVEOrgSource`):
   * **Priority:** 1 (Primary source per README).
   * **Parser:** Ingests official CVE Services v5.1 JSON records.
   * **Extracted Attributes:**
@@ -44,14 +44,14 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
   * **Attributed Helpers:** `get_attributed_cvss()`, `get_attributed_vector()`, `get_attributed_cwe()`, and `get_attributed_description()`.
   * **Features:** Case-insensitive lookups, flexible loading (accepts either a CVE map `{"CVE-XXXX": {...}}` or lists/single records).
 
-* **[services/enrichment/sources/cisa_kev.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/cisa_kev.py)** (`CISAKevSource`):
+* **[services/enrichment/sources/cisa_kev.py](../../services/enrichment/sources/cisa_kev.py)** (`CISAKevSource`):
   * **Priority:** 3 (Confirmed active exploitation).
   * **Parser:** Ingests CISA Known Exploited Vulnerabilities catalog JSON.
   * **Extracted Attributes:** `is_in_kev: bool`, `vendor_project`, `product`, `vulnerability_name`, `date_added`, `required_action`, `due_date`, and `known_ransomware_campaign_use`.
   * **Affirmative Negative Record:** When a CVE is not in the KEV catalog, `lookup()` returns a valid `CISAKevRecord` with `is_in_kev=False` and `Confidence.HIGH`.
   * **Attributed Helpers:** `get_attributed_is_in_kev()`, `get_attributed_date_added()`, and `get_attributed_ransomware_use()`.
 
-* **[services/enrichment/sources/epss.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/epss.py)** (`FirstEPSSSource`):
+* **[services/enrichment/sources/epss.py](../../services/enrichment/sources/epss.py)** (`FirstEPSSSource`):
   * **Priority:** 4 (Exploitation probability).
   * **Parser:** Ingests FIRST EPSS v4 scoring feed JSON.
   * **Extracted Attributes:** `epss: float` (probability between 0.0 and 1.0), `percentile: float` (percentile ranking between 0.0 and 1.0), and calculation `date`.
@@ -60,7 +60,7 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 ---
 
 ### C. Background Synchronization Coordinator
-* **[services/enrichment/sources/sync.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/sync.py)**:
+* **[services/enrichment/sources/sync.py](../../services/enrichment/sources/sync.py)**:
   * `SourceSynchronizer`: Atomically writes an already-fetched feed payload to its local mirror file (`MIRROR_FILENAMES`). It does **not** download feeds, and no scheduled job invokes it yet.
   * `sync_from_data(source, data, count)`: Writes feed data to a temporary file (`.tmp`) and performs an atomic filesystem replace, preventing race conditions or corrupted cache files if an update is interrupted.
   * `get_source_path(source)`: Generates standardized cache file paths (`cve_org.json`, `cisa_kev.json`, `epss_v4.json`).
@@ -68,7 +68,7 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 ---
 
 ### D. Secondary Source Stubs
-* **[services/enrichment/sources/secondary.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/secondary.py)**:
+* **[services/enrichment/sources/secondary.py](../../services/enrichment/sources/secondary.py)**:
   * Clean, typed stubs defining the roadmap for secondary sources in exact priority order:
     1. `VulnrichmentSource` (Priority 2) - CISA SSVC decision points, CWE, CVSS.
     2. `NVDSource` (Priority 5) - NVD 2.0 fallback.
@@ -81,7 +81,7 @@ In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/maya
 ---
 
 ### E. Package Export Interface
-* **[services/enrichment/sources/__init__.py](file:///e:/SeekThreat/SeekThreat/services/enrichment/sources/__init__.py)**:
+* **[services/enrichment/sources/__init__.py](../../services/enrichment/sources/__init__.py)**:
   * Clean exports for all client classes, record models, and synchronizer utilities.
 
 ---

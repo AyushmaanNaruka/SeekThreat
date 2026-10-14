@@ -2,7 +2,7 @@
 
 **Current Local Date:** September 2026  
 **Milestone Focus:** Layer 1 — Collection (Scheduled for Month 1 / September)  
-**"Done When" Criterion:** *A scan produces stored, provenanced observations.* ([docs/02-architecture.md](file:///e:/SeekThreat/SeekThreat/docs/02-architecture.md#L339))
+**"Done When" Criterion:** *A scan produces stored, provenanced observations.* ([docs/02-architecture.md](../02-architecture.md#L339))
 
 ---
 
@@ -20,7 +20,7 @@ This document details what has already been built and verified, and what tasks r
 - [x] **Immutable Fact Models (`packages/schema/models/observation.py`)**:
   - `RawArtifact`: Verbatim tool output with content-addressed ID (`sha256`), content type, scanner name, and UTC capture timestamp.
   - `Observation`: Append-only, frozen record containing `observation_id`, `engagement_id`, `scanner`, `kind` (`HOST_UP`, `PORT_OPEN`, `SERVICE_VERSION`), `subject`, `attributes`, and `provenance`.
-  - `ScanResult`: Immutable container returned by adapters holding `{artifact: RawArtifact, observations: tuple[Observation, ...]}` ([DECISIONS.md D-011](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L114)).
+  - `ScanResult`: Immutable container returned by adapters holding `{artifact: RawArtifact, observations: tuple[Observation, ...]}` ([DECISIONS.md D-011](../../DECISIONS.md#L114)).
 - [x] **Authorization & Engagement Models (`packages/schema/models/engagement.py`)**:
   - `Authorization`: Scoped by `engagement_id`, authorizer, time window (`valid_from`, `valid_to`), and allowlist.
   - Target matching logic: Fully supports IPv4/IPv6 CIDR ranges (e.g. `172.20.0.0/16`) and wildcard domains (e.g. `*.lab.internal`). Fails closed on any unauthorized target.
@@ -28,7 +28,7 @@ This document details what has already been built and verified, and what tasks r
 - [x] **Downstream Schema Foundations**:
   - `Asset`, `Service`, `Finding`, and `EnrichedFinding` models (`packages/schema/models/asset.py`, `finding.py`).
   - `Attributed[T]` provenance wrapper (`packages/schema/models/provenance.py`) enforcing that no enriched field can be constructed without attribution.
-  - `ExposureRiskScore` (`packages/schema/models/scoring.py`) with self-explaining additive components ([DECISIONS.md D-008](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L202)).
+  - `ExposureRiskScore` (`packages/schema/models/scoring.py`) with self-explaining additive components ([DECISIONS.md D-008](../../DECISIONS.md#L202)).
 
 ### B. Scanner Framework (`services/scanners`)
 - [x] **Base Adapter Contract (`services/scanners/base.py`)**:
@@ -40,9 +40,9 @@ This document details what has already been built and verified, and what tasks r
   - Subprocess execution (`nmap -sV -oX -`) with binary output capture (preventing newline translation errors).
   - Pure function parsing delegating to `services/scanners/nmap_xml.py`.
 - [x] **Nmap XML Parser (`services/scanners/nmap_xml.py`)**:
-  - Custom parser using stdlib `xml.etree.ElementTree` guarded against Billion-Laughs DoS and XXE ([DECISIONS.md D-013](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L50)).
+  - Custom parser using stdlib `xml.etree.ElementTree` guarded against Billion-Laughs DoS and XXE ([DECISIONS.md D-013](../../DECISIONS.md#L50)).
   - Emits `HOST_UP`, `PORT_OPEN`, and `SERVICE_VERSION` observations.
-  - Omits `method="table"` guesses from `SERVICE_VERSION` to prevent false-positive CVE matching downstream ([DECISIONS.md D-012](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L82)).
+  - Omits `method="table"` guesses from `SERVICE_VERSION` to prevent false-positive CVE matching downstream ([DECISIONS.md D-012](../../DECISIONS.md#L82)).
   - Sanitizes banner text by stripping control characters and enforcing length limits.
 
 ### C. Testing, Fixtures & Architecture Guards (`tests/`)
@@ -72,7 +72,7 @@ To bring Layer 1 to completion and satisfy the September milestone, the followin
 * **Action:** Updated test instantiation to use `Attributed[EnrichmentValue]`. Entire unit test suite is 100% green (119/119 passing).
 
 ### Task 2: Database Persistence & Migrations (Postgres + Alembic)
-* **Status:** ✅ Complete — see [Task 2 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_2_level_1_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 2 Walkthrough](task_2_level_1_walkthrough.md)
 * **Requirements:**
   1. Configure Alembic in the repository root or under `apps/api`. (Implemented at root with `alembic.ini` and `alembic/`)
   2. Create SQLAlchemy ORM models for:
@@ -100,7 +100,7 @@ To bring Layer 1 to completion and satisfy the September milestone, the followin
   3. Update `infra/docker-compose.yml`: Add `api` and `worker` services to the `core` profile (currently marked as `TODO`).
 
 ### Task 5: Second Core Scanner — Nuclei Adapter
-* **Status:** ✅ Complete — see [Task 5 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_5_level_1_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 5 Walkthrough](task_5_level_1_walkthrough.md)
 * **Delivered:**
   1. `services/scanners/nuclei_adapter.py`: Nuclei scanner adapter with `-jsonl -silent` execution.
   2. `services/scanners/nuclei_json.py`: Deterministic NDJSON parser emitting `VULN_CANDIDATE` observations.
@@ -108,7 +108,7 @@ To bring Layer 1 to completion and satisfy the September milestone, the followin
   4. Automatic coverage via `tests/architecture/test_authorization_gate.py`.
 
 ### Task 6: Lab Expansion & Ground Truth Baseline (`lab/`)
-* **Status:** ✅ Complete — see [Task 6 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_6_level_1_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 6 Walkthrough](task_6_level_1_walkthrough.md)
 * **Delivered:**
   1. `lab/docker-compose.yml`: Expanded to 10 vulnerable targets across 3 isolated subnets (`dmz`, `internal`, `data`) with realistic multi-hop pivot points.
   2. `lab/ground_truth.yaml`: Authoritative ground truth denominator recording 10 hosts, expected CVEs with CVSS, 3 multi-hop attack paths, and known false positives.

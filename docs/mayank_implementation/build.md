@@ -11,46 +11,46 @@
 In SeekThreat's 4-layer architecture, **Layer 1 (Collection)** is responsible for running vulnerability and discovery scanners behind a single interface, strictly enforcing authorization before any scan begins, retaining raw tool outputs verbatim, and emitting immutable, provenance-tagged `Observation` facts.
 
 - **Milestone Focus:** Layer 1 — Collection (Scheduled for Month 1 / September)
-- **"Done When" Criterion:** *A scan produces stored, provenanced observations.* ([docs/02-architecture.md](file:///e:/SeekThreat/SeekThreat/docs/02-architecture.md#L339))
+- **"Done When" Criterion:** *A scan produces stored, provenanced observations.* ([docs/02-architecture.md](../02-architecture.md#L339))
 
 ---
 
 ## 2. What Has Been Achieved (Completed)
 
 ### A. Data Schema & Immutability Invariants (`packages/schema`)
-- [x] **Immutable Fact Models ([packages/schema/models/observation.py](file:///e:/SeekThreat/SeekThreat/packages/schema/models/observation.py))**:
+- [x] **Immutable Fact Models ([packages/schema/models/observation.py](../../packages/schema/models/observation.py))**:
   - `RawArtifact`: Verbatim tool output with content-addressed ID (`sha256`), content type, scanner name, and UTC capture timestamp.
   - `Observation`: Append-only, frozen record containing `observation_id`, `engagement_id`, `scanner`, `kind` (`HOST_UP`, `PORT_OPEN`, `SERVICE_VERSION`), `subject`, `attributes`, and `provenance`.
-  - `ScanResult`: Immutable container returned by adapters holding `{artifact: RawArtifact, observations: tuple[Observation, ...]}` ([DECISIONS.md D-011](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L114)).
-- [x] **Authorization & Engagement Models ([packages/schema/models/engagement.py](file:///e:/SeekThreat/SeekThreat/packages/schema/models/engagement.py))**:
+  - `ScanResult`: Immutable container returned by adapters holding `{artifact: RawArtifact, observations: tuple[Observation, ...]}` ([DECISIONS.md D-011](../../DECISIONS.md#L114)).
+- [x] **Authorization & Engagement Models ([packages/schema/models/engagement.py](../../packages/schema/models/engagement.py))**:
   - `Authorization`: Scoped by `engagement_id`, authorizer, time window (`valid_from`, `valid_to`), and allowlist.
   - Target matching logic: Fully supports IPv4/IPv6 CIDR ranges (e.g. `172.20.0.0/16`) and wildcard domains (e.g. `*.lab.internal`). Fails closed on any unauthorized target.
   - `ScanRequest`: Pydantic model passing target, authorization record, and scanner options.
 - [x] **Downstream Schema Foundations**:
   - `Asset`, `Service`, `Finding`, and `EnrichedFinding` models (`packages/schema/models/asset.py`, `finding.py`).
   - `Attributed[T]` provenance wrapper (`packages/schema/models/provenance.py`) enforcing that no enriched field can be constructed without attribution.
-  - `ExposureRiskScore` (`packages/schema/models/scoring.py`) with self-explaining additive components ([DECISIONS.md D-008](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L202)).
+  - `ExposureRiskScore` (`packages/schema/models/scoring.py`) with self-explaining additive components ([DECISIONS.md D-008](../../DECISIONS.md#L202)).
 
 ### B. Scanner Framework (`services/scanners`)
-- [x] **Base Adapter Contract ([services/scanners/base.py](file:///e:/SeekThreat/SeekThreat/services/scanners/base.py))**:
+- [x] **Base Adapter Contract ([services/scanners/base.py](../../services/scanners/base.py))**:
   - Abstract base class `ScannerAdapter`.
   - Enforces authorization check in `scan()` **before** `_execute()` is invoked.
   - Automatically calculates content hash and creates `RawArtifact`.
   - Provides overridable `_captured_at()` hook to ensure `_parse` remains a deterministic, replayable pure function.
-- [x] **Reference Scanner: Nmap Adapter ([services/scanners/nmap_adapter.py](file:///e:/SeekThreat/SeekThreat/services/scanners/nmap_adapter.py))**:
+- [x] **Reference Scanner: Nmap Adapter ([services/scanners/nmap_adapter.py](../../services/scanners/nmap_adapter.py))**:
   - Subprocess execution (`nmap -sV -oX -`) with binary output capture (preventing newline translation errors).
   - Pure function parsing delegating to `services/scanners/nmap_xml.py`.
-- [x] **Nmap XML Parser ([services/scanners/nmap_xml.py](file:///e:/SeekThreat/SeekThreat/services/scanners/nmap_xml.py))**:
-  - Custom parser using stdlib `xml.etree.ElementTree` guarded against Billion-Laughs DoS and XXE ([DECISIONS.md D-013](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L50)).
+- [x] **Nmap XML Parser ([services/scanners/nmap_xml.py](../../services/scanners/nmap_xml.py))**:
+  - Custom parser using stdlib `xml.etree.ElementTree` guarded against Billion-Laughs DoS and XXE ([DECISIONS.md D-013](../../DECISIONS.md#L50)).
   - Emits `HOST_UP`, `PORT_OPEN`, and `SERVICE_VERSION` observations.
-  - Omits `method="table"` guesses from `SERVICE_VERSION` to prevent false-positive CVE matching downstream ([DECISIONS.md D-012](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L82)).
+  - Omits `method="table"` guesses from `SERVICE_VERSION` to prevent false-positive CVE matching downstream ([DECISIONS.md D-012](../../DECISIONS.md#L82)).
   - Sanitizes banner text by stripping control characters and enforcing length limits.
 
 ### C. Testing, Fixtures & Architecture Guards (`tests/`)
-- [x] **Architecture Guards ([tests/architecture/](file:///e:/SeekThreat/SeekThreat/tests/architecture/))**:
+- [x] **Architecture Guards ([tests/architecture/](../../tests/architecture))**:
   - `test_authorization_gate.py`: Uses reflection to discover every `ScannerAdapter` subclass and asserts that unauthorized targets raise `AuthorizationError` before `_execute` runs.
   - `test_import_firewall.py`: AST-level test verifying that LLM assistant code cannot import scanner or graph internals.
-- [x] **Offline Test Fixtures ([tests/fixtures/](file:///e:/SeekThreat/SeekThreat/tests/fixtures/))**:
+- [x] **Offline Test Fixtures ([tests/fixtures/](../../tests/fixtures))**:
   - Baseline nmap XML captured from lab targets (`tests/fixtures/nmap/lab_baseline.xml`).
   - Edge-case synthetic XML fixtures (down hosts, missing timestamps, dual-stack, malformed banners, DOCTYPE attacks).
   - Parsed baseline facts stored in `tests/fixtures/observations/lab_baseline.json`, enabling Layers 2–4 to run unit and integration tests without active containers.
@@ -73,7 +73,7 @@ To bring Layer 1 to completion and satisfy the September milestone, the followin
 * **Action:** Updated test instantiation to use `Attributed[EnrichmentValue]`. Entire unit test suite is 100% green (119/119 passing).
 
 ### Task 2: Database Persistence & Migrations (Postgres + Alembic)
-* **Status:** ✅ Complete — see [Task 2 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_2_level_1_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 2 Walkthrough](task_2_level_1_walkthrough.md)
 * **Requirements:**
   1. Configure Alembic in the repository root or under `apps/api`. (Implemented at root with `alembic.ini` and `alembic/`)
   2. Create SQLAlchemy ORM models for:

@@ -591,6 +591,54 @@ def test_local_fallback_happy_path_completes(engine, seeded_scan, monkeypatch) -
     assert completed_events[0]["details"]["celery_task_id"] is None
 
 
+def test_post_scan_enrichment_dispatched_after_completion_audit(
+    engine, seeded_scan, monkeypatch, _no_real_post_scan_dispatch
+) -> None:
+    """Dispatch follows the scan.completed audit, carries the authorizer, never retries."""
+    from apps.api.tasks import scans as task_module
+    from packages.schema.models.observation import RawArtifact, ScanResult
+
+    scan_id, auth_dict = seeded_scan
+    monkeypatch.setattr(task_module, "SessionLocal", get_session_factory(engine))
+    fake_artifact = RawArtifact(
+        artifact_id="sha256-" + "c" * 58,
+        scanner="nmap",
+        content=b"<nmaprun/>",
+        content_type="application/xml",
+        captured_at=datetime.now(UTC),
+    )
+    mock_adapter = MagicMock()
+    mock_adapter.is_available.return_value = True
+    mock_adapter.scan.return_value = ScanResult(artifact=fake_artifact, observations=())
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: mock_adapter)
+
+    events_at_dispatch: list[str] = []
+    _no_real_post_scan_dispatch.side_effect = lambda **_kw: events_at_dispatch.extend(
+        e["event"] for e in get_audit_log()
+    )
+
+    task_module.run_scan(
+        scan_id=scan_id,
+        engagement_id="eng-celery-test",
+        scanner="nmap",
+        target="172.20.1.50",
+        options={},
+        authorization_dict=auth_dict,
+        task=None,
+    )
+
+    assert _no_real_post_scan_dispatch.call_count == 1
+    assert "scan.completed" in events_at_dispatch
+    kwargs = _no_real_post_scan_dispatch.call_args.kwargs
+    assert kwargs["retry"] is False
+    assert kwargs["kwargs"] == {
+        "artifact_id": fake_artifact.artifact_id,
+        "engagement_id": "eng-celery-test",
+        "scan_id": scan_id,
+        "actor": "test-operator",
+    }
+
+
 # ---------------------------------------------------------------------------
 # Retry classification and broker redelivery
 # ---------------------------------------------------------------------------

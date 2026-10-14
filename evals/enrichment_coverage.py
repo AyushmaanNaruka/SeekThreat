@@ -15,6 +15,10 @@ What is measured
   loaded mirror answers every lookup with a definite True/False, so "has a definite
   value" just means "the mirror file exists". They are reported separately as
   "mirror loaded" plus the positive-hit rate.
+* **Headline excluding EPSS** is reported alongside the headline. The baseline never
+  loads EPSS by design, so the EPSS field alone contributes a definitional gain of up to
+  25 pp to the four-field headline. The three-field figure (``cvss_score``, ``cwe_ids``,
+  ``summary``) is the like-for-like comparison of fusion against NVD.
 
 Known limitation of the baseline
 --------------------------------
@@ -65,11 +69,14 @@ from services.enrichment.sources.secondary import (
 )
 
 HEADLINE_FIELDS = ("cvss_score", "cwe_ids", "summary", "epss_score")
+# Fields the NVD-only baseline can in principle fill; EPSS is unloaded there by design.
+LIKE_FOR_LIKE_FIELDS = tuple(f for f in HEADLINE_FIELDS if f != "epss_score")
 SIGNAL_FIELDS = ("in_kev", "exploit_availability")
 
 SYNTHETIC_BANNER = (
     "SYNTHETIC SMOKE TEST — harness validation on hand-authored fixtures. These are not "
-    "measurements of the platform; no real-world coverage number exists yet."
+    "measurements of the platform. The real-mirror run is "
+    "evals/results/enrichment_coverage_real.md."
 )
 
 # Mirror base names searched in the cache dir, in report order.
@@ -265,6 +272,15 @@ def build_engines(
     return baseline_engine, multi_engine
 
 
+def cohort_labels_verified(raw_dataset: dict[str, Any]) -> bool:
+    """True only when the dataset explicitly records that its cohort labels were verified.
+
+    Reads ``cohort_labels_verified`` (a boolean) next to the dataset's ``verification``
+    field. Anything other than a literal ``True`` counts as unverified.
+    """
+    return raw_dataset.get("cohort_labels_verified") is True
+
+
 def _pct(count: int, total: int) -> float:
     return round(count / total * 100.0, 1) if total else 0.0
 
@@ -383,11 +399,18 @@ def run_evaluation(
             "improvement_pp": round(c_m - c_b, 1),
         }
 
+    like_total = n_items * len(LIKE_FOR_LIKE_FIELDS)
+    like_base = sum(filled["baseline"][f] for f in LIKE_FOR_LIKE_FIELDS)
+    like_multi = sum(filled["multi_source"][f] for f in LIKE_FOR_LIKE_FIELDS)
+    like_base_pct = _pct(like_base, like_total)
+    like_multi_pct = _pct(like_multi, like_total)
+
     metadata: dict[str, Any] = {
         "banner": SYNTHETIC_BANNER if synthetic else None,
         "sample_mode": "synthetic_fixtures" if synthetic else "real_mirrors",
         "dataset_path": _rel_posix(dataset_path),
         "dataset_verification": raw_dataset.get("verification"),
+        "cohort_labels_verified": cohort_labels_verified(raw_dataset),
         "cache_dir": _rel_posix(cache_dir),
         "fusion_chain_order": [s.value for s in _CHAIN_ORDER],
         "headline_fields": list(HEADLINE_FIELDS),
@@ -412,6 +435,15 @@ def run_evaluation(
             "baseline_overall_coverage_pct": base_pct,
             "multi_overall_coverage_pct": multi_pct,
             "coverage_improvement_pp": round(multi_pct - base_pct, 1),
+        },
+        "summary_excluding_epss": {
+            "fields": list(LIKE_FOR_LIKE_FIELDS),
+            "total_instances": like_total,
+            "baseline_filled": like_base,
+            "multi_filled": like_multi,
+            "baseline_coverage_pct": like_base_pct,
+            "multi_coverage_pct": like_multi_pct,
+            "coverage_improvement_pp": round(like_multi_pct - like_base_pct, 1),
         },
         "per_field": per_field_out,
         "signals": signals_out,
@@ -451,7 +483,10 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
     if meta.get("dataset_verification"):
         md.append(f"**Dataset verification:** {meta['dataset_verification']}  ")
     md.append(f"**Source cache:** `{meta['cache_dir']}`  ")
-    md.append(f"**Fusion chain order:** {' -> '.join(meta['fusion_chain_order'])} -> derived  ")
+    md.append(
+        f"**Fusion chain order (`_CHAIN_ORDER`):** {' -> '.join(meta['fusion_chain_order'])}"
+        " (then the derived placeholder fallback)  "
+    )
     if meta.get("generated_at"):
         md.append(f"**Generated at:** {meta['generated_at']}  ")
 
@@ -484,6 +519,27 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
             f"{summary['multi_overall_coverage_pct']}% "
             f"({summary['multi_filled']}/{meta['total_headline_instances']}) | "
             f"{_signed_pp(summary['coverage_improvement_pp'])} |",
+        ]
+    )
+    excl = results.get("summary_excluding_epss")
+    if excl is not None:
+        md.append(
+            f"| Excluding `epss_score` | {excl['baseline_coverage_pct']}% "
+            f"({excl['baseline_filled']}/{excl['total_instances']}) | "
+            f"{excl['multi_coverage_pct']}% "
+            f"({excl['multi_filled']}/{excl['total_instances']}) | "
+            f"{_signed_pp(excl['coverage_improvement_pp'])} |"
+        )
+        md.extend(
+            [
+                "",
+                "The NVD-only baseline never loads EPSS, so `epss_score` adds a definitional "
+                "gain to the four-field headline. The row excluding `epss_score` is the "
+                "like-for-like comparison of fusion against NVD.",
+            ]
+        )
+    md.extend(
+        [
             "",
             "| Field | NVD-only baseline | Multi-source | Difference |",
             "|---|---|---|---|",
@@ -535,10 +591,18 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
             "## Limitations",
             "",
             f"- {meta['baseline_limitation']}",
-            "- Cohort labels come from the dataset and are unverified hypotheses; see "
-            "`evals/golden/README.md`.",
         ]
     )
+    if meta.get("cohort_labels_verified"):
+        md.append(
+            "- Cohort labels are recorded as verified by the dataset "
+            "(`cohort_labels_verified: true`); see `evals/golden/README.md`."
+        )
+    else:
+        md.append(
+            "- Cohort labels come from the dataset and are not verified (the dataset does "
+            "not set `cohort_labels_verified: true`); see `evals/golden/README.md`."
+        )
     if is_synthetic:
         md.append(
             "- Every mirror marked synthetic above is a hand-authored fixture covering a "
@@ -626,6 +690,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Headline (NVD-only):     {summary['baseline_overall_coverage_pct']}%")
         print(f"Headline (multi-source): {summary['multi_overall_coverage_pct']}%")
         print(f"Difference:              {_signed_pp(summary['coverage_improvement_pp'])}")
+        excl = results["summary_excluding_epss"]
+        print(
+            f"Excluding EPSS:          {excl['baseline_coverage_pct']}% -> "
+            f"{excl['multi_coverage_pct']}% ({_signed_pp(excl['coverage_improvement_pp'])})"
+        )
         print("-" * 72)
         for fid, fs in results["per_field"].items():
             print(

@@ -8,7 +8,7 @@
 
 ## 1. Overview & Objective
 
-In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_status.md#L221), [services/enrichment/README.md](file:///e:/SeekThreat/SeekThreat/services/enrichment/README.md), and [DECISIONS.md D-008](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L633), **Task 7** establishes a comprehensive regression harness guarding all non-negotiable architectural invariants and research contributions of SeekThreat's multi-source vulnerability enrichment engine.
+In accordance with [level2_status.md](level2_status.md#L221), [services/enrichment/README.md](../../services/enrichment/README.md), and [DECISIONS.md D-008](../../DECISIONS.md#L633), **Task 7** establishes a comprehensive regression harness guarding all non-negotiable architectural invariants and research contributions of SeekThreat's multi-source vulnerability enrichment engine.
 
 In a viva defense and automated continuous integration, architectural guarantees must not simply be documented—they must be mathematically, structurally, and behaviorally proven through automated regression tests.
 
@@ -36,7 +36,7 @@ Task 7 implements and consolidates **6 dedicated test suites** comprising **47 i
 ---
 
 ### Invariant 1: Provenance Completeness (Rule 1)
-* **File:** [tests/unit/test_enrichment_provenance.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_enrichment_provenance.py)
+* **File:** [tests/unit/test_enrichment_provenance.py](../../tests/unit/test_enrichment_provenance.py)
 * **Guarantees:**
   * Every single field in `EnrichedFinding.fields` is wrapped in `Attributed[EnrichmentValue]`. Unattributed data is structurally unrepresentable.
   * Every field carries a non-null `Provenance` containing valid `Source`, `Confidence`, and a timezone-aware UTC `retrieved_at` datetime.
@@ -44,7 +44,7 @@ Task 7 implements and consolidates **6 dedicated test suites** comprising **47 i
   * Serializing an `EnrichedFinding` to JSON and restoring via `model_validate()` retains byte-identical provenance attributes.
 
 ### Invariant 2: Priority Fallback Chain (Rule 2)
-* **File:** [tests/unit/test_enrichment_fallback.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_enrichment_fallback.py)
+* **File:** [tests/unit/test_enrichment_fallback.py](../../tests/unit/test_enrichment_fallback.py)
 * **Guarantees:**
   * Enforces the deterministic priority fallback chain: **CVE.org $\to$ CISA Vulnrichment $\to$ ENISA EUVD $\to$ Derived**.
   * When primary sources lack severity scores (e.g. recent unenriched CVEs), the engine traverses fallbacks gracefully.
@@ -52,7 +52,7 @@ Task 7 implements and consolidates **6 dedicated test suites** comprising **47 i
   * Multi-CVE findings select maximum technical severity across constituent vulnerabilities.
 
 ### Invariant 3: Anti-Multiplication Regression Guard (Rule 3)
-* **File:** [tests/unit/test_ers_invariants.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_ers_invariants.py)
+* **File:** [tests/unit/test_ers_invariants.py](../../tests/unit/test_ers_invariants.py)
 * **Guarantees:**
   * Explicitly tests that $\text{ERS} \ne \text{EPSS} \times \text{CVSS}$ across all baseline findings.
   * Enforces FIRST EPSS SIG guidance that multiplying probability by ordinal severity is mathematically invalid.
@@ -60,7 +60,7 @@ Task 7 implements and consolidates **6 dedicated test suites** comprising **47 i
   * Enforces normalization of weights ($\sum w_i = 1.0$) and rejects invalid configurations.
 
 ### Invariant 4: KEV Validates; It Does Not Train (Rule 4 & D-008)
-* **File:** [tests/unit/test_kev_scoring.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_kev_scoring.py)
+* **File:** [tests/unit/test_kev_scoring.py](../../tests/unit/test_kev_scoring.py)
 * **Guarantees:**
   * CISA KEV membership provides an additive validation boost ($+2.5$ points under default weights: $10.0 \times 0.25$).
   * KEV presence does **not** arbitrarily peg scores to 10.0 or critical; a low-severity finding on KEV remains bounded ($< 4.0$).
@@ -68,14 +68,14 @@ Task 7 implements and consolidates **6 dedicated test suites** comprising **47 i
   * Component breakdown provides human-readable explanations explaining KEV status.
 
 ### Invariant 5: Offline Request-Path Isolation (Rule 5)
-* **File:** [tests/unit/test_offline_mirror.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_offline_mirror.py)
+* **File:** [tests/unit/test_offline_mirror.py](../../tests/unit/test_offline_mirror.py)
 * **Guarantees:**
   * Blocks all low-level `socket.socket.connect`, `socket.create_connection`, `urllib.request.urlopen`, and HTTP client libraries (`requests`, `httpx`).
   * Enriches all baseline findings through `EnrichmentService` and `FusionEngine` under this strict network isolation fixture.
   * Proves that enrichment executes with **zero outbound network calls**, strictly querying pre-mirrored local databases.
 
 ### Invariant 6: Strict Persistence Idempotency
-* **File:** [tests/unit/test_enriched_finding_persistence.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_enriched_finding_persistence.py)
+* **File:** [tests/unit/test_enriched_finding_persistence.py](../../tests/unit/test_enriched_finding_persistence.py)
 * **Guarantees:**
   * Executing an upsert $N$ times with identical finding data yields exactly 1 database row.
   * Re-enriching existing findings overwrites data in-place without generating duplicates or throwing primary key collisions.
@@ -158,10 +158,10 @@ Task 7 adds the invariant test suite. Track 2 is **not** complete. What is done 
 
 Task walkthroughs:
 
-* **Task 1 (Fixtures & Baseline):** [Task 1 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_1_level_2_walkthrough.md) — Finding fixtures and feed sample caches.
-* **Task 2 (Source Clients & Local Cache):** [Task 2 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_2_level_2_walkthrough.md) — Base cache contracts, CVE.org, CISA KEV, FIRST EPSS v4 clients, and background sync job.
-* **Task 3 (Multi-Source Fusion Engine):** [Task 3 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_3_level_2_walkthrough.md) — Deterministic priority fallback chain and provenance wrapping.
-* **Task 4 (Exposure Risk Score Engine):** [Task 4 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_4_level_2_walkthrough.md) — Additive ERS scoring, anti-multiplication guards, and component explanations.
-* **Task 5 (Database Persistence & Idempotency):** [Task 5 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_5_level_2_walkthrough.md) — `EnrichedFindingModel`, migration `0004`, and `EnrichedFindingRepository`.
-* **Task 6 (Pipeline Coordinator & Worker Integration):** [Task 6 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_6_level_2_walkthrough.md) — `EnrichmentService`, async Celery task, and `/findings` REST API.
-* **Task 7 (Invariant Tests & Regression Suite):** [Task 7 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_7_level_2_walkthrough.md) — 47 automated invariant tests enforcing all non-negotiable project rules.
+* **Task 1 (Fixtures & Baseline):** [Task 1 Walkthrough](task_1_level_2_walkthrough.md) — Finding fixtures and feed sample caches.
+* **Task 2 (Source Clients & Local Cache):** [Task 2 Walkthrough](task_2_level_2_walkthrough.md) — Base cache contracts, CVE.org, CISA KEV, FIRST EPSS v4 clients, and background sync job.
+* **Task 3 (Multi-Source Fusion Engine):** [Task 3 Walkthrough](task_3_level_2_walkthrough.md) — Deterministic priority fallback chain and provenance wrapping.
+* **Task 4 (Exposure Risk Score Engine):** [Task 4 Walkthrough](task_4_level_2_walkthrough.md) — Additive ERS scoring, anti-multiplication guards, and component explanations.
+* **Task 5 (Database Persistence & Idempotency):** [Task 5 Walkthrough](task_5_level_2_walkthrough.md) — `EnrichedFindingModel`, migration `0004`, and `EnrichedFindingRepository`.
+* **Task 6 (Pipeline Coordinator & Worker Integration):** [Task 6 Walkthrough](task_6_level_2_walkthrough.md) — `EnrichmentService`, async Celery task, and `/findings` REST API.
+* **Task 7 (Invariant Tests & Regression Suite):** [Task 7 Walkthrough](task_7_level_2_walkthrough.md) — 47 automated invariant tests enforcing all non-negotiable project rules.

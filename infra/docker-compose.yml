@@ -93,7 +93,7 @@ services:
       # (localhost, via the published ports below) and compose alike.
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
       REDIS_URL: redis://redis:6379/0
-      # Feed mirrors: written by the sync task (worker), read by api and worker.
+      # Feed mirrors: written by the sync tasks (enrichment-worker), read by api and workers.
       # One named volume at one path, so the writer and the readers agree.
       ENRICHMENT_CACHE_DIR: /data/enrichment_cache
     volumes: [enrichmentcache:/data/enrichment_cache]
@@ -127,11 +127,38 @@ services:
         condition: service_started
       migrate:
         condition: service_completed_successfully
-    command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans,enrichment
+    command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=scans
+
+  # Feed sync and enrichment: the daily beat sync and the post-scan targeted sync
+  # (both on the `enrichment` queue) can spend many minutes on rate-limited upstream
+  # lookups, so they run here, not on the scan worker. One slot (concurrency 1):
+  # they run one at a time, never hammer an upstream in parallel, and never hold a
+  # scan worker process. Mirror writes are still locked per file, for the CLI.
+  enrichment-worker:
+    profiles: ["core"]
+    build:
+      context: ..
+      dockerfile: apps/api/Dockerfile
+    env_file:
+      - path: ../.env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
+      REDIS_URL: redis://redis:6379/0
+      ENRICHMENT_CACHE_DIR: /data/enrichment_cache
+    volumes: [enrichmentcache:/data/enrichment_cache]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    command: celery -A apps.api.worker.celery_app worker --loglevel=info --queues=enrichment --concurrency=1 --hostname=enrichment@%h
 
   # Celery beat: the scheduler that enqueues the daily feed sync (02:00 UTC,
-  # apps/api/worker.py). Run exactly one. It only enqueues; the worker above runs
-  # the task and is the only process that reaches the network for feeds.
+  # apps/api/worker.py). Run exactly one. It only enqueues; enrichment-worker above
+  # runs the task and is the only process that reaches the network for feeds.
   beat:
     profiles: ["core"]
     build:

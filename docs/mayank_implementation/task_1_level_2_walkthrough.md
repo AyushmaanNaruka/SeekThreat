@@ -8,9 +8,9 @@
 
 ## 1. Overview & Objective
 
-In accordance with [level2_status.md](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_status.md#L79), **Task 1** establishes the foundation for **Track 2 (Enrichment)** in `services/enrichment/`.
+In accordance with [level2_status.md](level2_status.md#L79), **Task 1** establishes the foundation for **Track 2 (Enrichment)** in `services/enrichment/`.
 
-Because Track 1 (Collection) and Track 2 (Enrichment) run in parallel, Track 2 cannot wait for live scanner pipelines to emit findings. Following the precedent established during Layer 1 (where the observations endpoint and dashboard were parallelized against snapshotted observation fixtures), Track 2 is built and tested against hand-crafted [Finding](file:///e:/SeekThreat/SeekThreat/packages/schema/models/finding.py#L22) domain objects and offline intelligence feeds.
+Because Track 1 (Collection) and Track 2 (Enrichment) run in parallel, Track 2 cannot wait for live scanner pipelines to emit findings. Following the precedent established during Layer 1 (where the observations endpoint and dashboard were parallelized against snapshotted observation fixtures), Track 2 is built and tested against hand-crafted [Finding](../../packages/schema/models/finding.py#L22) domain objects and offline intelligence feeds.
 
 This task delivered:
 1. **Realistic, schema-compliant `Finding` fixtures** covering all critical vulnerability archetypes (single-CVE, multi-CVE, NVD-unenriched recent CVEs, non-KEV vulnerabilities, and scanner heuristics without CVEs).
@@ -22,8 +22,8 @@ This task delivered:
 ## 2. What Was Built
 
 ### A. Hand-Built Finding Fixtures
-* **[tests/fixtures/findings/baseline_findings.py](file:///e:/SeekThreat/SeekThreat/tests/fixtures/findings/baseline_findings.py)**:
-  * Emits typed [Finding](file:///e:/SeekThreat/SeekThreat/packages/schema/models/finding.py#L22) objects satisfying all Pydantic v2 invariants:
+* **[tests/fixtures/findings/baseline_findings.py](../../tests/fixtures/findings/baseline_findings.py)**:
+  * Emits typed [Finding](../../packages/schema/models/finding.py#L22) objects satisfying all Pydantic v2 invariants:
     * Non-empty `observation_ids` (enforced by `@field_validator`).
     * Timezone-aware UTC `detected_at` timestamps (enforced by `require_aware`).
   * Representative test fixtures:
@@ -38,14 +38,14 @@ This task delivered:
 ---
 
 ### B. Offline Intelligence Sample Feeds
-* **[tests/fixtures/enrichment/cve_org_sample.json](file:///e:/SeekThreat/SeekThreat/tests/fixtures/enrichment/cve_org_sample.json)**:
+* **[tests/fixtures/enrichment/cve_org_sample.json](../../tests/fixtures/enrichment/cve_org_sample.json)**:
   * Structured in official **CVE Services v5.1 / cvelistV5** JSON format.
   * Maps CVE IDs to container records including `cveMetadata`, CNA `title`, `descriptions`, `metrics` (CVSS v3.1 `baseScore`, `vectorString`, and `baseSeverity`), and `problemTypes` (`cweId`).
-* **[tests/fixtures/enrichment/cisa_kev_sample.json](file:///e:/SeekThreat/SeekThreat/tests/fixtures/enrichment/cisa_kev_sample.json)**:
+* **[tests/fixtures/enrichment/cisa_kev_sample.json](../../tests/fixtures/enrichment/cisa_kev_sample.json)**:
   * Structured in official **CISA Known Exploited Vulnerabilities (KEV)** catalog JSON format (`catalogVersion: "2024.09.20"`).
   * Includes positive KEV entries (`CVE-2021-44228`, `CVE-2021-41773`, `CVE-2022-22947`, `CVE-2024-23897`) with `dateAdded`, `requiredAction`, `dueDate`, and `knownRansomwareCampaignUse`.
   * Omits non-KEV vulnerabilities (`CVE-2020-7699`, `CVE-2020-15778`) to provide negative test cases.
-* **[tests/fixtures/enrichment/epss_v4_sample.json](file:///e:/SeekThreat/SeekThreat/tests/fixtures/enrichment/epss_v4_sample.json)**:
+* **[tests/fixtures/enrichment/epss_v4_sample.json](../../tests/fixtures/enrichment/epss_v4_sample.json)**:
   * Structured in official **FIRST EPSS v4** API response format (`version: "v4"`).
   * Covers the full spectrum of probability tiers:
     * Very High probability: Log4Shell (`0.97543`, 99.9th percentile).
@@ -56,7 +56,7 @@ This task delivered:
 ---
 
 ### C. Automated Test Suite
-* **[tests/unit/test_enrichment_fixtures.py](file:///e:/SeekThreat/SeekThreat/tests/unit/test_enrichment_fixtures.py)**:
+* **[tests/unit/test_enrichment_fixtures.py](../../tests/unit/test_enrichment_fixtures.py)**:
   * `TestBaselineFindingFixtures`:
     * Validates all 6 baseline findings against Pydantic schema requirements.
     * Verifies non-empty `observation_ids` and timezone-aware `detected_at`.

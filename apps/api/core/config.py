@@ -85,6 +85,27 @@ class Settings(BaseSettings):
         ),
     )
 
+    post_scan_max_cves: int = Field(
+        default=200,
+        ge=1,
+        description=(
+            "POST_SCAN_MAX_CVES: most distinct CVE IDs one post-scan enrichment run sends "
+            "upstream. The rest are logged as deferred and picked up by the daily beat "
+            "sync, which reads CVE IDs from VULN_CANDIDATE observations too. Bounds how "
+            "long one large scan can hold the enrichment worker."
+        ),
+    )
+    post_scan_soft_time_limit_seconds: int = Field(
+        default=1800,
+        ge=120,
+        description=(
+            "POST_SCAN_SOFT_TIME_LIMIT_SECONDS: Celery soft time limit of the post-scan "
+            "enrichment task (the hard limit is 120 s more). The targeted sync gets a time "
+            "budget inside it and defers what it cannot reach. 1800 s covers the default "
+            "200-CVE cap against NVD without an API key (6 s per lookup)."
+        ),
+    )
+
     @field_validator("database_url", mode="after")
     @classmethod
     def _apply_psycopg_driver(cls, value: str) -> str:

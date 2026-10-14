@@ -5,7 +5,11 @@ service in ``infra/docker-compose.yml``) and runnable on demand. One run syncs:
 
 - full mirrors: CISA KEV, FIRST EPSS (bulk CSV), ExploitDB and Metasploit metadata;
 - targeted per-CVE records from CVE.org, CISA Vulnrichment, ENISA EUVD and NVD for
-  every CVE ID in ``enriched_findings`` plus any IDs passed in.
+  every CVE ID in ``enriched_findings`` and in ``VULN_CANDIDATE`` observations, plus
+  any IDs passed in. Observations are included so CVEs a scan found but that no
+  finding carries yet -- e.g. ones the post-scan task deferred over its per-run cap
+  or failed to fetch -- are still retried. IDs an upstream recently reported as not
+  found are skipped for a TTL (``FeedSyncer``'s ``<name>.notfound.json``).
 
 Network is ONLY allowed in this task (and the equivalent CLI) — never on the
 enrichment request path.
@@ -34,9 +38,10 @@ from sqlalchemy.orm import Session
 
 from apps.api.core.audit import log_audit_event
 from apps.api.core.config import settings
-from apps.api.db.models import EnrichedFindingModel
+from apps.api.db.models import EnrichedFindingModel, ObservationModel
 from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
+from packages.schema.models.observation import ObservationKind
 from services.enrichment.sources.sync import FeedSyncer, SyncReport, normalize_cve_ids
 
 logger = logging.getLogger(__name__)
@@ -51,13 +56,30 @@ class FeedSyncError(RuntimeError):
     """At least one feed failed to sync; raised after the failure is audited."""
 
 
+#: Rows read per round trip when collecting CVE IDs from the database.
+_YIELD_PER = 1000
+
+
 def _known_cve_ids(session: Session) -> list[str]:
-    """Every CVE ID referenced by an enriched finding, normalized and sorted."""
+    """Every CVE ID in an enriched finding or a VULN_CANDIDATE observation, sorted.
+
+    Observations carry CVE IDs as a comma-separated ``attributes["cve_ids"]`` string.
+    """
     ids: set[str] = set()
-    for finding_data in session.execute(select(EnrichedFindingModel.finding_data)).scalars():
+    findings = select(EnrichedFindingModel.finding_data).execution_options(yield_per=_YIELD_PER)
+    for finding_data in session.execute(findings).scalars():
         cves = finding_data.get("cve_ids") if isinstance(finding_data, dict) else None
         if isinstance(cves, list):
             ids.update(c for c in cves if isinstance(c, str))
+    observations = (
+        select(ObservationModel.attributes)
+        .where(ObservationModel.kind == ObservationKind.VULN_CANDIDATE.value)
+        .execution_options(yield_per=_YIELD_PER)
+    )
+    for attributes in session.execute(observations).scalars():
+        raw = attributes.get("cve_ids") if isinstance(attributes, dict) else None
+        if isinstance(raw, str):
+            ids.update(c.strip() for c in raw.split(",") if c.strip())
     return normalize_cve_ids(ids)
 
 
@@ -70,7 +92,7 @@ def _gather_cve_ids(explicit: Iterable[str] | None) -> tuple[list[str], str | No
             ids.update(_known_cve_ids(session))
     except SQLAlchemyError as exc:
         db_error = f"{type(exc).__name__}: {exc}"
-        logger.error("feed_sync: could not read CVE IDs from enriched_findings: %s", db_error)
+        logger.error("feed_sync: could not read CVE IDs from the database: %s", db_error)
     return normalize_cve_ids(ids), db_error
 
 
@@ -106,7 +128,7 @@ def sync_feeds(
 
     Args:
         cve_ids: Extra CVE IDs for the targeted sources, on top of every CVE ID
-            in ``enriched_findings``.
+            in ``enriched_findings`` and in VULN_CANDIDATE observations.
         sources: Restrict the run to these short source names (``kev``, ``epss``,
             ``exploitdb``, ``metasploit``, ``cve_org``, ``vulnrichment``, ``euvd``,
             ``nvd``). None syncs all of them. Retries pass only the failed ones.

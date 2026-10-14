@@ -827,6 +827,28 @@ export default function EnrichedFindingsView({
           )}
         </div>
       )}
+
+      {/* Upstream Intelligence Attribution & Legal Disclaimers */}
+      <footer
+        className="ef-disclaimer-bar"
+        style={{
+          marginTop: "1.5rem",
+          padding: "0.85rem 1.1rem",
+          borderRadius: "8px",
+          background: "rgba(255, 255, 255, 0.02)",
+          border: "1px solid rgba(255, 255, 255, 0.06)",
+          fontSize: "0.72rem",
+          color: "var(--text-muted, #9ca3af)",
+          lineHeight: 1.5,
+        }}
+      >
+        <div style={{ fontWeight: 600, color: "var(--text-secondary, #d1d5db)", marginBottom: "0.25rem" }}>
+          Upstream Intelligence Sources &amp; Disclaimers
+        </div>
+        <div>
+          This product uses the NVD API but is not endorsed or certified by the NVD. EPSS exploit predictions provided by the FIRST EPSS Special Interest Group. EUVD data from the European Union Agency for Cybersecurity (ENISA), reused with source acknowledgement. CVE records provided under the CVE Program Terms of Use (The MITRE Corporation). KEV data provided by CISA (Public Domain, CC0 1.0). ExploitDB and Metasploit references provided for correlation only.
+        </div>
+      </footer>
     </div>
   );
 }

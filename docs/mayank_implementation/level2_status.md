@@ -1,9 +1,9 @@
 # Track 2 (Enrichment) Status & Roadmap
 
 **Current Local Date:** September / October 2026  
-**Milestone Focus:** Layer 2 — Enrichment & Multi-Source Intelligence Fusion ([docs/02-architecture.md](file:///e:/SeekThreat/SeekThreat/docs/02-architecture.md#L361))  
-**"Done When" Criterion:** *A raw [Finding](file:///e:/SeekThreat/SeekThreat/packages/schema/models/finding.py#L22) is turned into an [EnrichedFinding](file:///e:/SeekThreat/SeekThreat/packages/schema/models/finding.py#L48) with fused, attributed, scored intelligence across canonical sources with measured coverage against an NVD-only baseline.*  
-**Primary Architecture Reference:** [services/enrichment/README.md](file:///e:/SeekThreat/SeekThreat/services/enrichment/README.md)
+**Milestone Focus:** Layer 2 — Enrichment & Multi-Source Intelligence Fusion ([docs/02-architecture.md](../02-architecture.md#L361))  
+**"Done When" Criterion:** *A raw [Finding](../../packages/schema/models/finding.py#L22) is turned into an [EnrichedFinding](../../packages/schema/models/finding.py#L48) with fused, attributed, scored intelligence across canonical sources with measured coverage against an NVD-only baseline.*  
+**Primary Architecture Reference:** [services/enrichment/README.md](../../services/enrichment/README.md)
 
 ---
 
@@ -17,7 +17,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 
 ### The Non-Negotiable Invariants
 
-1. **Every fused field carries an `Attributed[T]` wrapper:** An unattributed value is unrepresentable, not just discouraged ([packages/schema/models/provenance.py](file:///e:/SeekThreat/SeekThreat/packages/schema/models/provenance.py#L62)).
+1. **Every fused field carries an `Attributed[T]` wrapper:** An unattributed value is unrepresentable, not just discouraged ([packages/schema/models/provenance.py](../../packages/schema/models/provenance.py#L62)).
 2. **Deterministic fallback chain:** `CVE.org -> CISA Vulnrichment -> ENISA EUVD -> derived`. Derived values must be explicitly labeled with `Source.DERIVED`.
 3. **Never multiply EPSS × CVSS:** FIRST is explicit that the mathematical product of EPSS (probability) and CVSS (severity) is meaningless.
 4. **Additive, explainable ERS (D-008):** Hand-tuned, documented weights. Every score renders its own `ScoreComponent` breakdown — no opaque risk numbers.
@@ -78,7 +78,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 ---
 
 ### Task 1: Fixtures & Baseline Test Harness
-* **Status:** ✅ Complete — see [Task 1 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_1_level_2_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 1 Walkthrough](task_1_level_2_walkthrough.md)
 * **Objective:** Enable independent, parallel development of Track 2 without waiting for Track 1 collection pipelines, by constructing offline test fixtures representing findings and source feeds.
 * **Scope & Deliverables:**
   1. Create hand-built `Finding` test fixtures in `tests/fixtures/findings/`:
@@ -102,7 +102,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 ---
 
 ### Task 2: Source Client Architecture & Offline Local Cache (`sources/`)
-* **Status:** ✅ Complete — see [Task 2 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_2_level_2_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 2 Walkthrough](task_2_level_2_walkthrough.md)
 * **Objective:** Build local-first source clients for the 3 MVP intelligence feeds (CVE.org, CISA KEV, FIRST EPSS v4) with caching and local disk mirroring.
 * **Scope & Deliverables:**
   1. Base Source Contract (`services/enrichment/sources/base.py`):
@@ -130,7 +130,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 ---
 
 ### Task 3: Fusion Engine & Fallback Chain (`fusion.py`)
-* **Status:** ✅ Complete — see [Task 3 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_3_level_2_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 3 Walkthrough](task_3_level_2_walkthrough.md)
 * **Objective:** Fuse multi-source intelligence into standardized finding fields, implementing priority fallback logic and mandatory provenance encapsulation.
 * **Scope & Deliverables:**
   1. Implement Fallback Chain (`services/enrichment/fusion.py`):
@@ -139,7 +139,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
      - When CVE.org is missing metrics, fallback to `Source.VULNRICHMENT` or `Source.EUVD` (`Confidence.MEDIUM`).
      - When all external sources lack CVSS, synthesize a heuristic fallback labeled `Source.DERIVED` and `Confidence.LOW`.
   2. Provenance Attribution Guarantee:
-     - Every fused attribute is wrapped in `Attributed[EnrichmentValue]` ([packages/schema/models/provenance.py](file:///e:/SeekThreat/SeekThreat/packages/schema/models/provenance.py#L62)).
+     - Every fused attribute is wrapped in `Attributed[EnrichmentValue]` ([packages/schema/models/provenance.py](../../packages/schema/models/provenance.py#L62)).
      - Unattributed values are completely unrepresentable.
      - Standard field names: `cvss_score`, `cvss_vector`, `cwe_ids`, `epss_score`, `epss_percentile`, `in_kev`, `kev_date_added`, `ransomware_use`, `summary`.
   3. Multi-CVE Aggregation:
@@ -153,11 +153,11 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 ---
 
 ### Task 4: Exposure Risk Score (ERS) Engine (`ers.py` & D-008)
-* **Status:** ✅ Complete — see [Task 4 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_4_level_2_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 4 Walkthrough](task_4_level_2_walkthrough.md)
 * **Objective:** Implement the composite Exposure Risk Score with additive, hand-tuned weights, transparent explanations, and zero-opaque-number guarantees.
 * **Scope & Deliverables:**
   1. Additive Formula Implementation (`services/enrichment/ers.py`):
-     - Strict adherence to [DECISIONS.md D-008](file:///e:/SeekThreat/SeekThreat/DECISIONS.md#L633).
+     - Strict adherence to [DECISIONS.md D-008](../../DECISIONS.md#L633).
      - Component inputs normalized to 0.0–10.0 scale:
        * **CVSS Base Severity** (`weight: 0.40`).
        * **EPSS Exploit Likelihood** (`weight: 0.35`).
@@ -167,7 +167,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
      - **NEVER multiply EPSS × CVSS**: Explicit regression guard asserting `ers.value != (epss * cvss)`.
      - **KEV validates; it does not train**: KEV presence provides an additive validation boost (+2.5 ERS points), but never solely dictates the score.
   3. Self-Explaining Output:
-     - Output constructed as `ExposureRiskScore` ([packages/schema/models/scoring.py](file:///e:/SeekThreat/SeekThreat/packages/schema/models/scoring.py#L40)).
+     - Output constructed as `ExposureRiskScore` ([packages/schema/models/scoring.py](../../packages/schema/models/scoring.py#L40)).
      - Every component renders a non-empty human-readable explanation and valid `Provenance`.
   4. Integration with `FusionEngine.fuse_to_enriched_finding()`:
      - Automatically attaches verified `ExposureRiskScore` to `EnrichedFinding`.
@@ -180,7 +180,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 ---
 
 ### Task 5: Database Persistence & Idempotent Upsert (`apps/api/db`)
-* **Status:** ✅ Complete — see [Task 5 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_5_level_2_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 5 Walkthrough](task_5_level_2_walkthrough.md)
 * **Objective:** Store `EnrichedFinding` in PostgreSQL with idempotent upserts to ensure repeat enrichment runs never duplicate or corrupt records.
 * **Scope & Deliverables:**
   1. SQLAlchemy ORM Model:
@@ -201,7 +201,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 ---
 
 ### Task 6: Enrichment Pipeline Coordinator & Worker Integration
-* **Status:** ✅ Complete — see [Task 6 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_6_level_2_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 6 Walkthrough](task_6_level_2_walkthrough.md)
 * **Objective:** Provide a clean coordinator service that accepts `Finding` objects, queries local source mirrors, runs fusion, evaluates ERS, and persists results.
 * **Scope & Deliverables:**
   1. Pipeline Orchestrator:
@@ -219,7 +219,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 ---
 
 ### Task 7: Comprehensive Invariant Tests & Regression Suite
-* **Status:** ✅ Complete — see [Task 7 Walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/task_7_level_2_walkthrough.md)
+* **Status:** ✅ Complete — see [Task 7 Walkthrough](task_7_level_2_walkthrough.md)
 * **Objective:** Guard all project rules with dedicated unit and architecture tests that prevent future regressions.
 * **Scope & Deliverables:**
   1. **Fallback Chain Tests (`tests/unit/test_enrichment_fallback.py`)**:
@@ -258,7 +258,7 @@ Any legacy vulnerability management tool relying solely on NVD for CVSS scores n
 | Multi-Source Fusion & Fallback Chain | `services/enrichment/fusion.py` | ✅ Complete | Mayank |
 | Additive Exposure Risk Score (ERS) | `services/enrichment/ers.py` | ⚠️ Partial — weights lack D-008 rationale and sensitivity analysis | Mayank |
 | Secondary sources: Vulnrichment, EUVD | `services/enrichment/sources/secondary.py` | ❌ Stubs — load no data | Mayank |
-| Coverage vs NVD-only baseline | `evals/` | ❌ Not measured | Mayank |
+| Coverage vs NVD-only baseline | `evals/` | ⚠️ Measured once on real mirrors 2026-10-11 (see `evals/results/enrichment_coverage_real.md` and caveats: gain is entirely EPSS, +0.0 pp excluding EPSS) | Mayank |
 | EnrichedFinding ORM Model & Migration | `apps/api/db/models.py`, `alembic/versions/` | ✅ Complete | Mayank |
 | Idempotent EnrichedFinding Repository | `apps/api/db/repositories.py` | ✅ Complete | Mayank |
 | Enrichment Pipeline Coordinator | `services/enrichment/service.py`, `apps/api/tasks/enrichment.py`, `apps/api/routers/findings.py` | ✅ Complete | Mayank |
@@ -282,7 +282,7 @@ Track 2 is not complete. What is done and what is not, stated plainly:
 * No download or sync job is scheduled. `SourceSynchronizer` only writes a payload it is handed; nothing fetches upstream feeds yet, so a fresh deployment has no mirror and KEV status is reported as unknown.
 * CISA Vulnrichment and ENISA EUVD are stubs that load no data, so the fallback chain beyond CVE.org is untested against real records.
 * ERS weights (0.40 / 0.35 / 0.25) are provisional: D-008 requires documented rationale and a sensitivity analysis, neither of which exists yet.
-* Coverage against an NVD-only baseline (the Layer 2 "done when" criterion) has not been measured. All fixture values are synthetic.
+* Coverage against an NVD-only baseline (the Layer 2 "done when" criterion) was measured once on real mirrors 2026-10-11 (see `evals/results/enrichment_coverage_real.md` and caveats). The +25.0 pp four-field gain is entirely EPSS, which the baseline does not load; excluding EPSS the gain is +0.0 pp. Fixture-based values elsewhere remain synthetic.
 
 ---
 

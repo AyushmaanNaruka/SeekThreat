@@ -33,5 +33,16 @@
     "cwe_ids": ["CWE-79"],
     "description": "CISA Vulnrichment fallback record for recent unreviewed vulnerability.",
     "updated_at": "2025-02-01T15:00:00Z"
+  },
+  "CVE-2024-21893": {
+    "cveId": "CVE-2024-21893",
+    "ssvc_decision": "Attend",
+    "cvss_score": 8.2,
+    "cvss_vector": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N",
+    "cvss_version": "3.1",
+    "base_severity": "HIGH",
+    "cwe_ids": ["CWE-918"],
+    "description": "CISA Vulnrichment record for Ivanti SSRF vulnerability.",
+    "updated_at": "2024-05-01T15:00:00Z"
   }
 }

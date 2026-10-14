@@ -402,11 +402,11 @@ interface EnrichedFindingListResponse {
 
 | Level | Description | Status | PR |
 |-------|-------------|--------|----|
-| **1** | Decisions & ERS Analysis | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level1_of_level2_second_part.md) | D-027–D-032 in DECISIONS.md |
-| **2** | Feed Sync Job | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level2_of_level2_second_part.md) | D-033; FeedSyncer + Celery Beat + CLI |
-| **3** | Real Source Implementations | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level3_of_level2_second_part.md) | D-034; VulnrichmentSource + EUVDSource + ExploitDBSource + MetasploitSource + FeedSyncer secondary sync |
-| **4** | NVD-Only Baseline Eval | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level4_of_level2_second_part.md) | D-035; metric spec + golden dataset + offline harness + results |
-| **5** | Dashboard: Enriched Findings UI | ✅ Done (2026-10-05) — see [walkthrough](file:///e:/SeekThreat/SeekThreat/docs/mayank_implementation/level5_of_level2_second_part.md) | EnrichedFindingsView + api.ts + ERS breakdown + field provenance |
+| **1** | Decisions & ERS Analysis | ✅ Done (2026-10-05) — see [walkthrough](level1_of_level2_second_part.md) | D-027–D-032 in DECISIONS.md |
+| **2** | Feed Sync Job | ✅ Done (2026-10-05) — see [walkthrough](level2_of_level2_second_part.md) | D-033; FeedSyncer + Celery Beat + CLI |
+| **3** | Real Source Implementations | ✅ Done (2026-10-05) — see [walkthrough](level3_of_level2_second_part.md) | D-034; VulnrichmentSource + EUVDSource + ExploitDBSource + MetasploitSource + FeedSyncer secondary sync |
+| **4** | NVD-Only Baseline Eval | ✅ Done (2026-10-05) — see [walkthrough](level4_of_level2_second_part.md) | D-035; metric spec + golden dataset + offline harness + results |
+| **5** | Dashboard: Enriched Findings UI | ✅ Done (2026-10-05) — see [walkthrough](level5_of_level2_second_part.md) | EnrichedFindingsView + api.ts + ERS breakdown + field provenance |
 
 ---
 

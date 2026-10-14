@@ -245,6 +245,43 @@ same ids, which is what lets `tests/fixtures/observations/` stand in for a scan.
 
 ---
 
+## The Finding Ingestion Contract (Track 1 Normalization -> Layer 2 Enrichment)
+
+`services/normalize` (Track 1) takes raw scanner `Observation` records and converts them into
+de-duplicated `Finding` records. Layer 2 (`services/enrichment`) takes those findings and
+computes intelligence fusion, CVSS/EPSS lookups, and Exposure Risk Scores (ERS).
+
+To prevent data drift and guarantee cross-scanner joinability, the two tracks adhere to this
+formal contract:
+
+### 1. Canonical `asset_id` Structure — contract (not yet enforced; enforced when Track 1 lands)
+`Finding.asset_id` is a plain string today: no validator checks this format, and adding a
+strict one before `services/normalize` exists would reject the synthetic fixtures. The
+format below is what Track 1 must emit; the validator lands with Track 1.
+
+To link host facts (from Nmap) with vulnerability candidates (from Nuclei), `asset_id` is
+`host:` + the host part of the nmap `HOST_UP` observation subject
+(`services/scanners/nmap_xml.py`), by deterministic address priority IPv4 > IPv6 > MAC > FQDN:
+- **IPv4:** `host:<dotted-quad>` (e.g. `host:172.20.1.10`)
+- **IPv6:** `host:<compressed>`, unbracketed, lowercase hex, exactly as
+  `ipaddress.IPv6Address(...).compressed` prints it and as nmap `HOST_UP` subjects carry it
+  (e.g. `host:2001:db8::10`). Brackets belong only to port subjects (`[2001:db8::10]:443/tcp`).
+- **Layer 2 MAC Fallback:** `host:mac:<mac>`, lowercase, colon-separated (e.g. `host:mac:aa:bb:cc:dd:ee:ff`)
+- **DNS/Hostname Target:** `host:<fqdn>`, lowercase, trailing dot removed (e.g. `host:dvwa.lab.local`)
+- **Unit Test Fixtures:** Synthetic prefixes `asset-*` or `ast-*` remain permissible for isolated fixtures.
+
+### 2. `cve_ids` Normalization & Segregation
+- **Uppercase Standard Format:** `cve_ids` entries are strictly validated with `fullmatch` against `CVE-[0-9]{4}-[0-9]{4,7}` (`re.ASCII`).
+- **Automatic Uppercasing:** Lowercase scanner outputs (`cve-2021-44228`) are automatically normalized to uppercase `CVE-2021-44228`.
+- **Deduplication:** Multiple scanner matches on the same CVE for an asset are deduplicated while preserving discovery order.
+- **Segregation of Non-CVE Identifiers:** Non-CVE identifiers (GHSA IDs, CWE identifiers, scanner template IDs, Bugtraq IDs) must **never** be placed into `cve_ids`. They belong in `Observation.attributes` (e.g. `template_id`, `type`, `tags`), keeping `cve_ids` clean for exact feed mirror queries.
+
+### 3. Provenance & Observation Traceability
+- Every `Finding` must link to at least one stored `observation_id` (`observation_ids` must not be empty).
+- The referenced observations must exist in the fact store under the same `engagement_id` — enforced at ingestion time by `_verify_findings_provenance()` in `apps/api/routers/findings.py`. Untraceable findings are rejected with HTTP 422.
+
+---
+
 ## Decisions
 
 Full reasoning in `DECISIONS.md`.

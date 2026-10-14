@@ -15,12 +15,14 @@ import pytest
 
 from evals.enrichment_coverage import (
     HEADLINE_FIELDS,
+    LIKE_FOR_LIKE_FIELDS,
     SIGNAL_FIELDS,
     SYNTHETIC_BANNER,
     _find_fixture_or_mirror,
     _is_filled,
     _signal_state,
     build_engines,
+    cohort_labels_verified,
     describe_mirrors,
     generate_markdown_report,
     run_evaluation,
@@ -167,6 +169,41 @@ class TestRunEvaluation:
         }
         assert results["summary"]["baseline_filled"] == 12
         assert results["summary"]["multi_filled"] == 34
+
+    def test_headline_excluding_epss(self, results: dict[str, Any]) -> None:
+        excl = results["summary_excluding_epss"]
+        assert tuple(excl["fields"]) == LIKE_FOR_LIKE_FIELDS
+        assert "epss_score" not in excl["fields"]
+        assert excl["total_instances"] == 50 * len(LIKE_FOR_LIKE_FIELDS)
+        per_field = results["per_field"]
+        assert excl["baseline_filled"] == sum(
+            per_field[f]["baseline_count"] for f in LIKE_FOR_LIKE_FIELDS
+        )
+        assert excl["multi_filled"] == sum(
+            per_field[f]["multi_count"] for f in LIKE_FOR_LIKE_FIELDS
+        )
+        # Pinned on the synthetic fixtures (harness check, not a platform measurement).
+        assert (excl["baseline_filled"], excl["multi_filled"]) == (12, 27)
+        assert excl["baseline_coverage_pct"] == 8.0
+        assert excl["multi_coverage_pct"] == 18.0
+        assert excl["coverage_improvement_pp"] == 10.0
+        assert "| Excluding `epss_score` | 8.0% (12/150) | 18.0% (27/150) | +10.0 pp |" in (
+            generate_markdown_report(results)
+        )
+
+    def test_cohort_label_limitation_follows_dataset_flag(self, results: dict[str, Any]) -> None:
+        assert cohort_labels_verified({"cohort_labels_verified": True}) is True
+        assert cohort_labels_verified({"cohort_labels_verified": "yes"}) is False
+        assert cohort_labels_verified({}) is False
+        assert results["metadata"]["cohort_labels_verified"] is False
+        assert "Cohort labels come from the dataset and are not verified" in (
+            generate_markdown_report(results)
+        )
+        tampered = json.loads(json.dumps(results))
+        tampered["metadata"]["cohort_labels_verified"] = True
+        report = generate_markdown_report(tampered)
+        assert "Cohort labels are recorded as verified" in report
+        assert "not verified" not in report
 
     def test_pinned_signal_counts(self, results: dict[str, Any]) -> None:
         sig = results["signals"]

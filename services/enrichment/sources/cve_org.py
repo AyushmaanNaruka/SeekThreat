@@ -7,6 +7,7 @@ Priority 1 source per services/enrichment/README.md:
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any
 
 from pydantic import Field
@@ -68,15 +69,15 @@ class CVEOrgSource(BaseEnrichmentSource[CVEOrgRecord]):
     priority = 1
 
     def load(self) -> None:
-        """Load and index local CVE.org mirror JSON data."""
-        if not self.cache_file or not self.cache_file.exists():
-            self._cache.clear()
-            self._loaded = True
-            return
+        """Load and index local CVE.org mirror JSON data (process-cached)."""
+        self._load_cached(self._index_file)
 
-        with open(self.cache_file, encoding="utf-8") as f:
-            data = json.load(f)
+    def _index_file(self, path: Path) -> dict[str, Any]:
+        with open(path, encoding="utf-8") as f:
+            return dict(self._index(json.load(f)))
 
+    def _index(self, data: Any) -> dict[str, CVEOrgRecord]:
+        """Index a CVE.org mirror: ``{CVE-ID: record}``, one CVE_RECORD, or a list."""
         records: dict[str, CVEOrgRecord] = {}
 
         if isinstance(data, dict):
@@ -97,9 +98,7 @@ class CVEOrgSource(BaseEnrichmentSource[CVEOrgRecord]):
                     record = self._parse_cve_v5_record(raw_record)
                     if record:
                         records[record.cve_id] = record
-
-        self._cache = records
-        self._loaded = True
+        return records
 
     def _parse_cve_v5_record(
         self, record_dict: dict[str, Any], fallback_id: str | None = None

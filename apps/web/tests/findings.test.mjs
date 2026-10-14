@@ -10,6 +10,8 @@ import {
   formatCvss,
   formatEpss,
   ERS_BAND_THRESHOLDS,
+  PROVENANCE_SOURCES,
+  CONFIDENCE_LEVELS,
 } from "../lib/findings.ts";
 
 // Fixture mirrors the JSON the backend serializes for
@@ -207,5 +209,67 @@ describe("display helpers", () => {
     const item = normalizeEnrichedFinding(backendFinding());
     assert.deepEqual(distinctSources([item]), ["cisa.kev", "cve.org", "exploitdb", "first.epss"]);
     assert.deepEqual(distinctSources([]), []);
+  });
+});
+
+describe("provenance contract & parity", () => {
+  it("enforces exact parity with backend packages.schema.models.provenance.Source", () => {
+    const expectedSources = [
+      "cve.org",
+      "cisa.vulnrichment",
+      "cisa.kev",
+      "first.epss",
+      "nvd",
+      "enisa.euvd",
+      "osv.dev",
+      "github.advisories",
+      "exploitdb",
+      "metasploit",
+      "bron",
+      "derived",
+      "scanner",
+    ];
+    assert.deepEqual(Array.from(PROVENANCE_SOURCES).sort(), expectedSources.slice().sort());
+    assert.equal(new Set(PROVENANCE_SOURCES).size, PROVENANCE_SOURCES.length, "no duplicate sources");
+  });
+
+  it("enforces confidence levels contract", () => {
+    assert.deepEqual(Array.from(CONFIDENCE_LEVELS).sort(), ["high", "low", "medium"]);
+    assert.equal(new Set(CONFIDENCE_LEVELS).size, CONFIDENCE_LEVELS.length, "no duplicate confidence levels");
+  });
+
+  it("normalizes every valid source without throwing", () => {
+    for (const source of PROVENANCE_SOURCES) {
+      const parsed = normalizeProvenance(
+        {
+          source,
+          confidence: "high",
+          retrieved_at: "2026-10-05T12:00:00Z",
+          note: null,
+        },
+        "test"
+      );
+      assert.equal(parsed.source, source);
+      assert.equal(parsed.confidence, "high");
+    }
+  });
+
+  it("rejects unauthorized sources and malformed confidence", () => {
+    assert.throws(
+      () =>
+        normalizeProvenance(
+          { source: "unregistered.feed", confidence: "high", retrieved_at: "2026-10-05T12:00:00Z" },
+          "ctx"
+        ),
+      /unknown provenance source/
+    );
+    assert.throws(
+      () =>
+        normalizeProvenance(
+          { source: "nvd", confidence: "VERY_HIGH", retrieved_at: "2026-10-05T12:00:00Z" },
+          "ctx"
+        ),
+      /unknown confidence/
+    );
   });
 });
