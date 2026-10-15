@@ -17,6 +17,9 @@ services:
 
   juiceshop:
     image: bkimminich/juice-shop
+    # Node runs out of heap (exit 139) when Nikto and Nuclei hit it at once; come back
+    # up instead of silently leaving 172.20.1.11 down for every later scan.
+    restart: unless-stopped
     networks:
       dmz: { ipv4_address: 172.20.1.11 }
 

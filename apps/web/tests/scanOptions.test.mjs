@@ -6,7 +6,7 @@ import {
   buildNiktoRequest,
   buildSshAuditRequest,
   scannerTitle,
-  NUCLEI_TEMPLATE,
+  isTargetInScope,
 } from "../lib/scanOptions.ts";
 
 describe("splitHostPortScheme", () => {
@@ -37,14 +37,14 @@ describe("splitHostPortScheme", () => {
 });
 
 describe("nuclei request (behaviour unchanged, D-025)", () => {
-  it("sends bare host, scheme, port and the template", () => {
+  it("sends bare host, scheme and port, and no fixture template", () => {
     assert.deepEqual(buildNucleiRequest("http://localhost:8080"), {
       target: "localhost",
-      options: { template: NUCLEI_TEMPLATE, scheme: "http", port: "8080" },
+      options: { scheme: "http", port: "8080" },
     });
   });
   it("omits port when none given", () => {
-    assert.deepEqual(buildNucleiRequest("localhost").options, { template: NUCLEI_TEMPLATE, scheme: "http" });
+    assert.deepEqual(buildNucleiRequest("localhost").options, { scheme: "http" });
   });
 });
 
@@ -93,5 +93,35 @@ describe("scannerTitle", () => {
     assert.equal(scannerTitle("nuclei"), "Nuclei Vulnerability Scan");
     assert.equal(scannerTitle("nikto"), "Nikto Web Server Scan");
     assert.equal(scannerTitle("ssh-audit"), "SSH Audit");
+  });
+});
+
+describe("isTargetInScope (mirrors the server gate; the server stays authoritative)", () => {
+  const lab = ["172.20.0.0/16", "web.lab.local", "*.corp.lab"];
+  it("matches inside an IPv4 CIDR, including host:port and URL input", () => {
+    assert.equal(isTargetInScope("172.20.3.50", lab), true);
+    assert.equal(isTargetInScope("172.20.1.10:8080", lab), true);
+    assert.equal(isTargetInScope("http://172.20.1.10/x", lab), true);
+  });
+  it("rejects an address that only shares a prefix string", () => {
+    assert.equal(isTargetInScope("172.21.0.1", lab), false);
+    assert.equal(isTargetInScope("172.200.1.1", ["172.20.0.0/16"]), false);
+    assert.equal(isTargetInScope("10.0.0.1", ["10.0.0.0/30"]), true);
+    assert.equal(isTargetInScope("10.0.0.4", ["10.0.0.0/30"]), false);
+  });
+  it("refuses a range target, like the server gate: one scan, one host", () => {
+    assert.equal(isTargetInScope("172.20.1.0/24", lab), false);
+    assert.equal(isTargetInScope("172.20.1.0/24", ["172.20.1.0/24"]), false);
+  });
+  it("matches exact hosts and *.domain subdomains but not the apex", () => {
+    assert.equal(isTargetInScope("WEB.lab.local", lab), true);
+    assert.equal(isTargetInScope("a.corp.lab", lab), true);
+    assert.equal(isTargetInScope("corp.lab", lab), false);
+    assert.equal(isTargetInScope("evil.com", lab), false);
+  });
+  it("refuses scoped IPv6 like the gate, and defers other IPv6 ranges to the server", () => {
+    assert.equal(isTargetInScope("fd00::1%x,10.9.9.9", ["fd00::/8"]), false);
+    assert.equal(isTargetInScope("fd00::1", ["fd00::/8"]), null);
+    assert.equal(isTargetInScope("fd00::1", ["fd00::1"]), true);
   });
 });

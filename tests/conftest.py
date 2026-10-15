@@ -22,3 +22,14 @@ def _no_real_post_scan_dispatch(monkeypatch: pytest.MonkeyPatch) -> Iterator[Mag
     mock = MagicMock(name="sync_new_findings_cves.apply_async")
     monkeypatch.setattr(sync_new_findings_cves, "apply_async", mock)
     yield mock
+
+
+@pytest.fixture(autouse=True)
+def _no_real_interim_findings_dispatch(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
+    """Same as above for the interim findings bridge (D-044): a completed scan with
+    vuln_candidate observations dispatches ``enrich_findings.apply_async``."""
+    from apps.api.tasks.enrichment import enrich_findings
+
+    mock = MagicMock(name="enrich_findings.apply_async")
+    monkeypatch.setattr(enrich_findings, "apply_async", mock)
+    yield mock

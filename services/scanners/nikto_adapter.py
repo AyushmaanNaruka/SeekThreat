@@ -176,7 +176,9 @@ def _nikto_target_args(request: ScanRequest) -> list[str]:
         # ipaddress accepts any text after '%' as an IPv6 scope id, and nikto splits -host
         # on commas (treating a readable path as a host file), so a scope could smuggle in
         # a second host. Same guard as ssh_audit_adapter; the gate refuses these too.
-        raise ValueError(f"Nikto target {target!r} has an IPv6 scope id; scoped targets are refused")
+        raise ValueError(
+            f"Nikto target {target!r} has an IPv6 scope id; scoped targets are refused"
+        )
 
     try:
         ipaddress.ip_address(target)

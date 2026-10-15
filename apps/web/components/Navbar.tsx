@@ -1,17 +1,66 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import Link from "next/link";
 
-export default function Navbar({ onGetStarted }: { onGetStarted?: () => void }) {
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+
+type ApiStatus = "checking" | "online" | "offline";
+
+const STATUS_STYLE: Record<ApiStatus, { label: string; color: string }> = {
+  checking: { label: "Checking API…", color: "#94a3b8" },
+  online: { label: "API online", color: "#22c55e" },
+  offline: { label: "API offline", color: "#ef4444" },
+};
+
+// Section ids that exist on the landing page (app/page.tsx).
+const NAV_LINKS = [
+  { label: "Home", target: "home" },
+  { label: "Features", target: "features" },
+];
+
+export default function Navbar() {
   const [activeNav, setActiveNav] = useState("Home");
+  const [apiStatus, setApiStatus] = useState<ApiStatus>("checking");
 
-  const navLinks = ["Home", "Features", "Solutions", "Docs", "About"];
+  // One real health check against the API on mount. No polling.
+  useEffect(() => {
+    const controller = new AbortController();
+    // A request that hangs for 5s counts as offline.
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    let unmounted = false;
+
+    fetch(`${API_BASE_URL}/health`, { signal: controller.signal, cache: "no-store" })
+      .then((res) => {
+        if (!unmounted) setApiStatus(res.ok ? "online" : "offline");
+      })
+      .catch(() => {
+        if (!unmounted) setApiStatus("offline");
+      })
+      .finally(() => clearTimeout(timeout));
+
+    return () => {
+      unmounted = true;
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, []);
+
+  const scrollTo = (target: string) => {
+    if (target === "home") {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  const status = STATUS_STYLE[apiStatus];
 
   return (
     <header className="navbar-container">
       <div className="navbar-inner">
         {/* Brand / Logo */}
-        <a href="#home" className="navbar-brand">
+        <Link href="/" className="navbar-brand" aria-label="SeekThreat home">
           <div className="logo-badge">
             <svg
               className="logo-icon"
@@ -63,44 +112,55 @@ export default function Navbar({ onGetStarted }: { onGetStarted?: () => void }) 
             <span className="nav-seek">SEEK</span>
             <span className="nav-threat">THREAT</span>
           </span>
-        </a>
+        </Link>
 
-        {/* Center Navigation Links */}
+        {/* Center Navigation Links: each scrolls to a real section */}
         <nav className="navbar-nav">
-          {navLinks.map((item) => {
-            const isActive = activeNav === item;
+          {NAV_LINKS.map((item) => {
+            const isActive = activeNav === item.label;
             return (
               <a
-                key={item}
-                href={`#${item.toLowerCase()}`}
+                key={item.label}
+                href={`#${item.target}`}
                 onClick={(e) => {
                   e.preventDefault();
-                  setActiveNav(item);
+                  setActiveNav(item.label);
+                  scrollTo(item.target);
                 }}
                 className={`nav-link ${isActive ? "active" : ""}`}
               >
-                <span>{item}</span>
+                <span>{item.label}</span>
                 {isActive && <div className="active-indicator"></div>}
               </a>
             );
           })}
+          <Link href="/dashboard" className="nav-link">
+            <span>Dashboard</span>
+          </Link>
         </nav>
 
-        {/* Right Section: System Online + Get Started */}
+        {/* Right Section: real API health + Get Started */}
         <div className="navbar-actions">
-          {/* Status Indicator */}
-          <div className="system-status">
-            <span className="status-dot"></span>
-            <span className="status-text">System Online</span>
+          <div
+            className="system-status"
+            title={`GET ${API_BASE_URL}/health`}
+            role="status"
+            aria-live="polite"
+          >
+            <span
+              className="status-dot"
+              style={{
+                backgroundColor: status.color,
+                boxShadow: `0 0 10px ${status.color}, 0 0 18px ${status.color}`,
+                animation: apiStatus === "online" ? undefined : "none",
+              }}
+            ></span>
+            <span className="status-text">{status.label}</span>
           </div>
 
-          {/* CTA Button */}
-          <button
-            onClick={onGetStarted}
-            className="btn-get-started"
-          >
+          <Link href="/dashboard" className="btn-get-started">
             <span>Get Started</span>
-          </button>
+          </Link>
         </div>
       </div>
     </header>

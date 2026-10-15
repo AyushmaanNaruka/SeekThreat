@@ -43,6 +43,65 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-044 — Interim observation→Finding bridge so scans reach enrichment and the UI
+**Date:** 2026-10-15
+**Decided by:** Ayushmaan
+**Type:** Addition (interim; to be replaced by Track 1)
+**Status:** Active
+
+**Decision**
+Add `services/normalize/interim_bridge.py`. After every completed scan, `run_scan` turns each
+distinct `vuln_candidate` observation into a `Finding` and enqueues it on the existing
+`seekthreat.enrichment.enrich` task, ahead of the D-041 post-scan CVE sync. The bridge is
+deliberately minimal:
+- **`asset_id`:** follows D-040 (`host:<canonical ip>` / `host:<lowercase fqdn>`), taken from
+  the observation's nmap-style `endpoint`.
+- **`cve_ids`:** only the canonical CVE IDs the scanner itself reported.
+- **`finding_id`:** a hash of what was found (scanner, asset, endpoint, the scanner's identity
+  keys), so a re-scan upserts rather than duplicates.
+
+No cross-scanner deduplication or asset joining; that remains Track 1's scope.
+
+Same change set, found while driving the dashboard end to end against the lab:
+- **The dashboard's Nuclei option stops forcing the test-fixture template.** It now runs the
+  pinned template set with the adapter's existing exclusions (dos, intrusive, fuzz, rce,
+  bruteforce, default-login).
+- **nmap's default port list now covers every service port in `lab/ground_truth.yaml`**
+  (adds 2222, 3000, 5432, 6379, 8090). The old list found nothing on half the lab.
+- **`lab/docker-compose.yml` gives Juice Shop `restart: unless-stopped`.** It runs out of
+  Node heap (exit 139) when Nikto and Nuclei hit it at once.
+- **Frontend: everything that did not work, or presented made-up data, was removed or wired up.**
+  - Removed: the fake landing-page auth form and "Watch Demo" transcript, the frozen "Live"
+    threat feed, the globe callouts with an invented IP and CVE, and the claims about an AI
+    assistant, a knowledge graph, attack paths, OpenVAS and ZAP. On the dashboard, the dead
+    Observations nav item and the four "Coming Soon" items.
+  - Wired up: the dashboard nav scrolls to real sections, and the API badge comes from
+    `/health`.
+  - Fixed: scans are scoped to the selected engagement, and the client-side scope check
+    mirrors the server gate.
+
+**Why**
+Nothing turned observations into findings (`services/normalize` did not exist), so every
+scan left the Findings view empty and enrichment had nothing to enrich. Track 1 is owned by
+Utkarsh and not yet landed; this unblocks the end-to-end flow without pre-empting it.
+Verified live on 2026-10-15 from the dashboard against the lab:
+- All four scanners were launched side by side.
+- ssh-audit's CVE-2023-48795 on the bastion was enriched with CVSS 5.9 (CISA Vulnrichment),
+  EPSS 93.5% and KEV status, giving ERS 5.6.
+- 24 no-CVE findings (weak SSH algorithms, Nikto and Nuclei checks) are shown with their
+  placeholder fields labelled as estimates.
+
+**Impact on plan**
+Track 1 should replace `findings_from_observations` wholesale; its only caller is
+`_dispatch_interim_findings` in `apps/api/tasks/scans.py`. Findings created by the bridge
+are ordinary `enriched_findings` rows keyed by `(engagement_id, finding_id)`.
+
+**Cost if we're wrong**
+Low. One module, one dispatch call, and a conftest stub. Removing the dispatch call
+restores the previous behaviour exactly.
+
+---
+
 ### D-043 — Add Nikto and ssh-audit adapters, restricted to non-destructive checks
 **Date:** 2026-10-12
 **Decided by:** Ayushmaan

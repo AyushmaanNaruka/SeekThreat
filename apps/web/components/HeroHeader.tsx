@@ -4,13 +4,12 @@ import React from "react";
 
 interface HeroHeaderProps {
   onExplore: () => void;
-  onWatchDemo: () => void;
 }
 
-export default function HeroHeader({ onExplore, onWatchDemo }: HeroHeaderProps) {
+export default function HeroHeader({ onExplore }: HeroHeaderProps) {
   return (
     <div className="hero-header-content">
-      {/* Top AI Badge */}
+      {/* Top Badge */}
       <div className="hero-badge">
         <div className="badge-icon">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -18,7 +17,7 @@ export default function HeroHeader({ onExplore, onWatchDemo }: HeroHeaderProps) 
             <circle cx="12" cy="11" r="2" fill="currentColor" />
           </svg>
         </div>
-        <span className="badge-text">AI-POWERED CYBER THREAT INTELLIGENCE</span>
+        <span className="badge-text">VULNERABILITY DETECTION &amp; ENRICHMENT PLATFORM</span>
       </div>
 
       {/* Main Large Title: SEEK in White, THREAT in Electric Purple */}
@@ -32,9 +31,10 @@ export default function HeroHeader({ onExplore, onWatchDemo }: HeroHeaderProps) 
         </div>
       </div>
 
-      {/* Subtitle description */}
+      {/* Subtitle description: only what the platform does today */}
       <p className="hero-description">
-        From hidden vulnerabilities to complex attack paths, SeekThreat turns scattered data into clear, actionable intelligence — <span className="text-highlight-cyan">before the threat becomes a breach.</span>
+        Authorized scans with Nmap, Nuclei, Nikto and ssh-audit, fused with CVSS, EPSS, CISA KEV and exploit data —{" "}
+        <span className="text-highlight-cyan">every field sourced, every risk score explained.</span>
       </p>
 
       {/* Action Buttons */}
@@ -45,15 +45,6 @@ export default function HeroHeader({ onExplore, onWatchDemo }: HeroHeaderProps) 
             <line x1="5" y1="12" x2="19" y2="12"></line>
             <polyline points="12 5 19 12 12 19"></polyline>
           </svg>
-        </button>
-
-        <button onClick={onWatchDemo} className="btn-watch-demo">
-          <div className="play-icon-wrap">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor">
-              <polygon points="5 3 19 12 5 21 5 3"></polygon>
-            </svg>
-          </div>
-          <span>Watch Demo</span>
         </button>
       </div>
     </div>

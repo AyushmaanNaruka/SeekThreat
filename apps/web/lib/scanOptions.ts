@@ -71,6 +71,54 @@ function splitHostPort(s: string): { host: string; port: string | null } {
   return { host, port: port || null };
 }
 
+function ipv4ToInt(s: string): number | null {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(s);
+  if (!m) return null;
+  const octets = m.slice(1).map(Number);
+  if (octets.some((o) => o > 255)) return null;
+  return ((octets[0] << 24) >>> 0) + (octets[1] << 16) + (octets[2] << 8) + octets[3];
+}
+
+/**
+ * Client-side preview of the API's allowlist gate (packages/schema/models/
+ * engagement.py `target_matches`): exact host, `*.domain` (subdomains, not the
+ * apex) and IPv4 CIDR. Returns `null` when the browser cannot decide (IPv6
+ * ranges), so the UI defers to the server instead of guessing. The server is
+ * always the authority; this only spares the operator a 403 round trip.
+ */
+export function isTargetInScope(input: string, allowlist: string[]): boolean | null {
+  const raw = input.trim();
+  if (raw.includes("%")) return false;
+  const host = splitHostPortScheme(raw).host.replace(/^\[|\]$/g, "").toLowerCase();
+  if (!host) return false;
+  // The gate only accepts a single host: a range target (172.20.1.0/24) never
+  // matches, even inside an allowed range, so one scan always means one host.
+  if (host.includes("/")) return false;
+  const hostInt = ipv4ToInt(host);
+  let undecided = false;
+  for (const entry of allowlist) {
+    const pattern = entry.trim().toLowerCase();
+    if (!pattern) continue;
+    if (pattern === host || pattern === raw.toLowerCase()) return true;
+    if (pattern.startsWith("*.")) {
+      if (hostInt === null && host.endsWith(pattern.slice(1))) return true;
+      continue;
+    }
+    if (pattern.includes("/")) {
+      const [base, bitsStr] = pattern.split("/");
+      const baseInt = ipv4ToInt(base);
+      const bits = Number(bitsStr);
+      if (baseInt !== null && hostInt !== null && Number.isInteger(bits) && bits >= 0 && bits <= 32) {
+        const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
+        if (((hostInt & mask) >>> 0) === ((baseInt & mask) >>> 0)) return true;
+      } else if (base.includes(":") && host.includes(":")) {
+        undecided = true;
+      }
+    }
+  }
+  return undecided ? null : false;
+}
+
 function withTimeout(
   options: Record<string, unknown>,
   timeoutSeconds?: number | null,
@@ -80,12 +128,14 @@ function withTimeout(
   }
 }
 
-export const NUCLEI_TEMPLATE = "tests/fixtures/nuclei/test_http_detect.yaml";
-
-/** Nuclei: bare host + `scheme` (+ `port` when given) + the fixture template. */
+/**
+ * Nuclei: bare host + `scheme` (+ `port` when given). No template is sent, so
+ * the worker runs its pinned template set with intrusive, DoS, fuzz, RCE,
+ * brute-force and default-login templates excluded (nuclei_adapter.py).
+ */
 export function buildNucleiRequest(input: string): BuiltScanRequest {
   const { host, scheme, port } = splitHostPortScheme(input);
-  const options: Record<string, unknown> = { template: NUCLEI_TEMPLATE, scheme };
+  const options: Record<string, unknown> = { scheme };
   if (port) options.port = port;
   return { target: host, options };
 }

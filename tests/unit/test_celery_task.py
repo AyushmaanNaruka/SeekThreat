@@ -731,3 +731,81 @@ def test_broker_visibility_timeout_outlasts_the_longest_allowed_scan() -> None:
     assert celery_app.conf.task_acks_late is True
     options = celery_app.conf.broker_transport_options or {}
     assert options.get("visibility_timeout", 3600) > MAX_TIMEOUT_SECONDS
+
+
+def test_completed_scan_dispatches_interim_findings_before_post_scan_sync(
+    engine,
+    seeded_scan,
+    monkeypatch,
+    _no_real_post_scan_dispatch,
+    _no_real_interim_findings_dispatch,
+) -> None:
+    """D-044: vuln_candidate observations become findings and are queued for
+    enrichment, ahead of the post-scan CVE sync; other kinds produce nothing."""
+    from apps.api.tasks import scans as task_module
+    from packages.schema.models.observation import (
+        Observation,
+        ObservationKind,
+        RawArtifact,
+        ScanResult,
+    )
+    from packages.schema.models.provenance import Confidence, Provenance, Source
+
+    scan_id, auth_dict = seeded_scan
+    monkeypatch.setattr(task_module, "SessionLocal", get_session_factory(engine))
+    now = datetime.now(UTC)
+    artifact = RawArtifact(
+        artifact_id="sha256-" + "d" * 58,
+        scanner="nikto",
+        content=b"[]",
+        content_type="application/json",
+        captured_at=now,
+    )
+
+    def obs(obs_id: str, kind: ObservationKind) -> Observation:
+        return Observation(
+            observation_id=obs_id,
+            engagement_id="eng-celery-test",
+            scanner="nikto",
+            kind=kind,
+            subject="172.20.1.50:80/tcp",
+            attributes={"endpoint": "172.20.1.50:80/tcp", "nikto_id": "1", "msg": "m"},
+            artifact_id=artifact.artifact_id,
+            observed_at=now,
+            provenance=Provenance(
+                source=Source.SCANNER, confidence=Confidence.MEDIUM, retrieved_at=now
+            ),
+        )
+
+    mock_adapter = MagicMock()
+    mock_adapter.is_available.return_value = True
+    mock_adapter.scan.return_value = ScanResult(
+        artifact=artifact,
+        observations=(
+            obs("o-port", ObservationKind.PORT_OPEN),
+            obs("o-vuln", ObservationKind.VULN_CANDIDATE),
+        ),
+    )
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: mock_adapter)
+
+    order: list[str] = []
+    _no_real_interim_findings_dispatch.side_effect = lambda **_kw: order.append("findings")
+    _no_real_post_scan_dispatch.side_effect = lambda **_kw: order.append("cve_sync")
+
+    task_module.run_scan(
+        scan_id=scan_id,
+        engagement_id="eng-celery-test",
+        scanner="nmap",
+        target="172.20.1.50",
+        options={},
+        authorization_dict=auth_dict,
+        task=None,
+    )
+
+    assert order == ["findings", "cve_sync"]
+    kwargs = _no_real_interim_findings_dispatch.call_args.kwargs
+    assert kwargs["retry"] is False
+    sent = kwargs["kwargs"]["findings_data"]
+    assert [f["observation_ids"] for f in sent] == [["o-vuln"]]
+    assert sent[0]["asset_id"] == "host:172.20.1.50"
+    assert kwargs["kwargs"]["actor"] == "test-operator"

@@ -103,6 +103,16 @@ function EstimateTag({ label = ESTIMATE_LABEL, title }: { label?: string; title?
   );
 }
 
+/**
+ * Row label. A CVE finding shows its fused summary (the CVE description); a
+ * finding without a CVE shows the scanner's title, because its "summary" is just
+ * the scanner's free-text description and loses what was actually found.
+ */
+function rowLabel(item: EnrichedFindingItem): string {
+  const summary = item.description?.value || "";
+  return (item.cve_ids.length > 0 ? summary || item.title : item.title || summary) || item.finding_id;
+}
+
 export default function EnrichedFindingsView({
   activeEngagement,
   onSelectEngagementPrompt,
@@ -255,10 +265,10 @@ export default function EnrichedFindingsView({
         {onSelectEngagementPrompt && (
           <button
             onClick={onSelectEngagementPrompt}
-            className="db-btn db-btn-primary"
+            className="db-btn-create-eng"
             style={{ margin: "0 auto" }}
           >
-            Select or Create Engagement
+            Create Engagement
           </button>
         )}
       </div>
@@ -294,7 +304,11 @@ export default function EnrichedFindingsView({
                 borderRadius: "12px",
               }}
             >
-              {total !== null ? `Showing ${findings.length} of ${total}` : `${findings.length} loaded`}
+              {filtersActive
+                ? `${filteredFindings.length} of ${findings.length} match filters`
+                : total !== null
+                ? `Showing ${findings.length} of ${total}`
+                : `${findings.length} loaded`}
             </span>
           </div>
           <span style={{ fontSize: "0.85rem", color: "#A7B2B5" }}>
@@ -544,9 +558,9 @@ export default function EnrichedFindingsView({
                                 textOverflow: "ellipsis",
                                 whiteSpace: "nowrap",
                               }}
-                              title={item.description?.value || item.title || item.finding_id}
+                              title={rowLabel(item)}
                             >
-                              {item.description?.value || item.title || item.finding_id}
+                              {rowLabel(item)}
                             </div>
                           </div>
                         </td>
