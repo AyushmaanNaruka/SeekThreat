@@ -105,6 +105,123 @@ def _pct(count: int, total: int) -> float:
     return round(count / total * 100.0, 1) if total > 0 else 0.0
 
 
+# ---------------------------------------------------------------------------
+# Full-ranking metrics: AP, AUC-ROC, and bootstrap CIs
+# ---------------------------------------------------------------------------
+
+def _average_precision(ranked_labels: list[bool]) -> float:
+    """Compute Average Precision (AP) over the full ranked list.
+
+    AP = Σ_k [P(k) × rel(k)] / |positives|
+    where P(k) is precision at rank k (1-indexed) and rel(k) is 1 when the
+    k-th item is a positive, 0 otherwise.  Returns 0.0 when there are no
+    positives in the list (the harness reports it with a warning).
+    """
+    n_pos = sum(ranked_labels)
+    if n_pos == 0:
+        return 0.0
+    ap = 0.0
+    hits = 0
+    for k, label in enumerate(ranked_labels, start=1):
+        if label:
+            hits += 1
+            ap += hits / k
+    return ap / n_pos
+
+
+def _auc_roc(ranked_labels: list[bool]) -> float:
+    """Compute AUC-ROC for the ranking using the trapezoidal rule.
+
+    Equivalent to the Wilcoxon–Mann–Whitney statistic:
+    P(score of a random positive > score of a random negative).
+    Complexity O(n*pos); adequate for n ≤ 50.
+    Returns 0.5 (random) when there are no positives or no negatives.
+    """
+    n_pos = sum(ranked_labels)
+    n_neg = len(ranked_labels) - n_pos
+    if n_pos == 0 or n_neg == 0:
+        return 0.5  # degenerate: no discrimination possible
+    # Positions are in *ranked* order (rank 0 = highest score).
+    # Rank in ascending-score order for standard WMW: reverse the list.
+    ascending = list(reversed(ranked_labels))
+    rank_sum_pos = 0
+    for i, label in enumerate(ascending):
+        if label:
+            rank_sum_pos += i + 1  # 1-indexed rank
+    # AUC = (U_statistic) / (n_pos * n_neg)
+    # U = rank_sum_pos - n_pos*(n_pos+1)/2
+    u_stat = rank_sum_pos - n_pos * (n_pos + 1) / 2
+    return u_stat / (n_pos * n_neg)
+
+
+def _bootstrap_ci(
+    ranked_labels: list[bool],
+    metric_fn,  # callable(labels: list[bool]) -> float
+    n_resamples: int = 2000,
+    confidence: float = 0.95,
+    seed: int = 20261011,
+) -> tuple[float, float]:
+    """Bootstrap percentile confidence interval for *metric_fn* on *ranked_labels*.
+
+    Resamples (with replacement) the full list of {label, position} pairs and
+    re-ranks by position, then evaluates the metric.  Returns (lower, upper).
+    """
+    import random
+    rng = random.Random(seed)
+    n = len(ranked_labels)
+    boot_vals: list[float] = []
+    for _ in range(n_resamples):
+        # Resample *items* (each keeps its label), then re-rank by original position.
+        # Because we only have labels (already sorted by score), resampling with
+        # replacement from the index set and re-sorting gives the bootstrap distribution.
+        idxs = sorted(rng.choices(range(n), k=n))
+        sample = [ranked_labels[i] for i in idxs]
+        boot_vals.append(metric_fn(sample))
+    boot_vals.sort()
+    alpha = 1.0 - confidence
+    lo_idx = int(n_resamples * alpha / 2)
+    hi_idx = int(n_resamples * (1 - alpha / 2)) - 1
+    return round(boot_vals[lo_idx], 4), round(boot_vals[max(0, hi_idx)], 4)
+
+
+def compute_ranking_metrics(
+    scored_items: list[dict[str, Any]],
+    score_key: str,
+    n_bootstrap: int = 2000,
+    bootstrap_seed: int = 20261011,
+) -> dict[str, Any]:
+    """Compute AP, AUC-ROC, and 95% bootstrap CIs for the ranked *scored_items*.
+
+    The *has_exploit* flag is the positive class.  Returns a dict with:
+      average_precision, ap_ci_95, auc_roc, auc_roc_ci_95, n_positives,
+      n_items, random_baseline_auc.
+    """
+    ranked = rank_items(scored_items, score_key)
+    labels: list[bool] = [bool(x["has_exploit"]) for x in ranked]
+    ap = round(_average_precision(labels), 4)
+    auc = round(_auc_roc(labels), 4)
+    ap_ci = _bootstrap_ci(labels, _average_precision, n_bootstrap, seed=bootstrap_seed)
+    auc_ci = _bootstrap_ci(labels, _auc_roc, n_bootstrap, seed=bootstrap_seed)
+    n_pos = sum(labels)
+    return {
+        "score_key": score_key,
+        "n_items": len(labels),
+        "n_positives": n_pos,
+        "average_precision": ap,
+        "ap_ci_95": list(ap_ci),
+        "auc_roc": auc,
+        "auc_roc_ci_95": list(auc_ci),
+        "random_baseline_auc": 0.5,
+        "n_bootstrap_resamples": n_bootstrap,
+        "bootstrap_seed": bootstrap_seed,
+        "_note": (
+            "AP and AUC are computed against the has_exploit label (ExploitDB or Metasploit "
+            "catalogue entry). See harness docstring for caveats — the corroboration target "
+            "is NOT independent of ERS (EPSS leakage, D-029)."
+        ),
+    }
+
+
 def evaluate_ranking(
     scored_items: list[dict[str, Any]],
     score_key: str,
@@ -242,6 +359,12 @@ def run_ers_validation(
         for pname in PROFILES
     }
 
+    # Full-ranking metrics: AP, AUC-ROC, 95% bootstrap CIs (Task A-5)
+    ranking_metrics: dict[str, dict[str, Any]] = {
+        pname: compute_ranking_metrics(scored_items, f"score_{pname}")
+        for pname in PROFILES
+    }
+
     top_k = slice_sizes[0]
     balanced_top = profile_evals["balanced"][f"top_{top_k}"]
     control_top = profile_evals["no_epss_control"][f"top_{top_k}"]
@@ -264,6 +387,11 @@ def run_ers_validation(
             balanced_top["precision_pct"] - cvss_top["precision_pct"], 1
         ),
         "balanced_vs_random_precision_gain_pp": round(balanced_top["precision_pct"] - base_rate, 1),
+        # Full-ranking summary for the balanced profile
+        "balanced_ap": ranking_metrics["balanced"]["average_precision"],
+        "balanced_ap_ci_95": ranking_metrics["balanced"]["ap_ci_95"],
+        "balanced_auc_roc": ranking_metrics["balanced"]["auc_roc"],
+        "balanced_auc_roc_ci_95": ranking_metrics["balanced"]["auc_roc_ci_95"],
     }
 
     metadata: dict[str, Any] = {
@@ -286,6 +414,7 @@ def run_ers_validation(
     return {
         "metadata": metadata,
         "profiles": profile_evals,
+        "ranking_metrics": ranking_metrics,
         "comparison": comparison,
         "items": rank_items(scored_items, "score_balanced"),
     }
@@ -367,10 +496,41 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
                 f"({sdata['tied_outside_top_k']}) | {sdata['min_score_in_top_k']} |"
             )
 
+    # --- Section 3: Full-ranking metrics (AP / AUC-ROC) ---
+    rm = results.get("ranking_metrics", {})
+    if rm:
+        lines.extend(
+            [
+                "",
+                "## 3. Full-ranking metrics (AP and AUC-ROC with 95% bootstrap CIs)",
+                "",
+                "> Positive class: CVE has an ExploitDB or Metasploit catalogue entry.  ",
+                "> Bootstrap: percentile CIs, n=2,000 resamples, seed=20261011.  ",
+                "> **Caveat:** the corroboration target is NOT independent of ERS "
+                "(EPSS uses exploit-code availability among its features — D-029).",
+                "",
+                "| Profile | Weights (CVSS/EPSS/KEV) | AP | AP 95% CI | AUC-ROC | AUC-ROC 95% CI | Positives / n |",
+                "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
+            ]
+        )
+        for pname, (label, w_str) in _PROFILE_DESCRIPTIONS.items():
+            m = rm.get(pname, {})
+            if m:
+                ap_lo, ap_hi = m.get("ap_ci_95", [None, None])
+                auc_lo, auc_hi = m.get("auc_roc_ci_95", [None, None])
+                lines.append(
+                    f"| {label} | {w_str} | {m['average_precision']:.4f} | "
+                    f"[{ap_lo:.4f}, {ap_hi:.4f}] | "
+                    f"{m['auc_roc']:.4f} | "
+                    f"[{auc_lo:.4f}, {auc_hi:.4f}] | "
+                    f"{m['n_positives']} / {m['n_items']} |"
+                )
+        lines.extend(["", f"Random baseline AUC: 0.5000.", ""])
+
     lines.extend(
         [
             "",
-            "## 3. Top-ranked CVEs (balanced ERS)",
+            "## 4. Top-ranked CVEs (balanced ERS)",
             "",
             "| Rank | CVE ID | ERS (balanced) | CVSS | EPSS (%) | In KEV | ExploitDB entry | "
             "Metasploit module | Cohort |",
@@ -390,7 +550,7 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "## 4. Limitations & circularity disclosure (D-027, D-038)",
+            "## 5. Limitations & circularity disclosure (D-027, D-038)",
             "",
             "1. **Direct inputs.** ExploitDB and Metasploit are not inputs to "
             "`calculate_ers()`; the inputs are CVSS, EPSS and KEV.",

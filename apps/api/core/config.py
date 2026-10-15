@@ -105,6 +105,18 @@ class Settings(BaseSettings):
             "200-CVE cap against NVD without an API key (6 s per lookup)."
         ),
     )
+    mirror_staleness_threshold_days: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "MIRROR_STALENESS_THRESHOLD_DAYS: Number of days after which a local feed mirror "
+            "is considered stale. When a mirror is stale, negative assertions produced from it "
+            "(in_kev=False, has_public_exploit=False, has_metasploit_module=False) are "
+            "downgraded from Confidence.HIGH to Confidence.MEDIUM in the fusion engine, "
+            "and an explanatory provenance note is attached. Positive hits are never downgraded. "
+            "Default: 7 days. Set via MIRROR_STALENESS_THRESHOLD_DAYS in .env."
+        ),
+    )
 
     @field_validator("database_url", mode="after")
     @classmethod

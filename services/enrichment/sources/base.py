@@ -255,6 +255,35 @@ class BaseEnrichmentSource(ABC, Generic[RecordT]):
                 pass
         return datetime.now(UTC)
 
+    def mirror_age_days(self) -> float | None:
+        """Age of this mirror in fractional days, or None if age cannot be determined.
+
+        Uses the sidecar ``synced_at``. Returns None when the cache file does not
+        exist or when there is no sidecar metadata file (mirror sync age unknown).
+        """
+        if self.cache_file is None:
+            return None
+        synced = self.mirror_synced_at()
+        if synced is not None:
+            delta = datetime.now(UTC) - synced
+            return delta.total_seconds() / 86400.0
+        return None
+
+    def is_stale(self, threshold_days: int | None = None) -> bool:
+        """Return True if the mirror is older than *threshold_days*.
+
+        When ``threshold_days`` is None the default (7 days) is used.
+        A mirror whose age cannot be determined (no sidecar, no file) is
+        considered *not* stale — absence of data should not suppress alerts.
+        """
+        from apps.api.core.config import settings  # local import: avoids circular at module level
+
+        limit = threshold_days if threshold_days is not None else settings.mirror_staleness_threshold_days
+        age = self.mirror_age_days()
+        if age is None:
+            return False
+        return age > limit
+
     def _load_cached(self, index: Callable[[Path], dict[str, Any]]) -> None:
         """Load the mirror through the process cache; ``index`` parses one file.
 

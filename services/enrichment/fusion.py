@@ -17,6 +17,7 @@ MEDIUM-confidence False, because a public exploit can exist that neither indexes
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -54,6 +55,8 @@ EXPLOIT_ABSENCE_CAVEAT = "absence is not proof no exploit exists"
 
 _CHAIN_ORDER = (Source.CVE_ORG, Source.VULNRICHMENT, Source.NVD, Source.EUVD)
 _CONFIDENCE_RANK = {Confidence.LOW: 0, Confidence.MEDIUM: 1, Confidence.HIGH: 2}
+
+logger = logging.getLogger(__name__)
 
 
 def _record_cvss(record: BaseSourceRecord) -> float | None:
@@ -359,6 +362,58 @@ class FusionEngine:
     ) -> dict[str, Attributed[EnrichmentValue]]:
         """KEV fields. Unloaded/empty mirror -> unknown (None, DERIVED/LOW), never False."""
         if not self.cisa_kev.is_loaded:
+            # Task A-3: Fair NVD-only baseline. If CISA KEV mirror is unloaded
+            # (as in the NVD baseline engine), check if NVD mirror supplies CISA KEV annotations.
+            if self.nvd is not None and self.nvd.is_loaded:
+                for cve_id in cve_ids:
+                    nvd_rec = self.nvd.lookup(cve_id)
+                    if nvd_rec is not None and getattr(nvd_rec, "cisa_exploit_add", None):
+                        out: dict[str, Attributed[EnrichmentValue]] = {
+                            "in_kev": Attributed[EnrichmentValue](
+                                value=True,
+                                provenance=Provenance(
+                                    source=Source.NVD,
+                                    confidence=Confidence.HIGH,
+                                    retrieved_at=nvd_rec.retrieved_at,
+                                    note=f"Confirmed active exploitation in the wild via NVD CISA KEV annotation ({cve_id})",
+                                ),
+                            )
+                        }
+                        out["kev_date_added"] = Attributed[EnrichmentValue](
+                            value=nvd_rec.cisa_exploit_add,
+                            provenance=Provenance(
+                                source=Source.NVD,
+                                confidence=Confidence.HIGH,
+                                retrieved_at=nvd_rec.retrieved_at,
+                                note=f"Date added to KEV catalog per NVD annotation ({cve_id})",
+                            ),
+                        )
+                        if getattr(nvd_rec, "cisa_action_due", None):
+                            out["kev_due_date"] = Attributed[EnrichmentValue](
+                                value=nvd_rec.cisa_action_due,
+                                provenance=Provenance(
+                                    source=Source.NVD,
+                                    confidence=Confidence.HIGH,
+                                    retrieved_at=nvd_rec.retrieved_at,
+                                    note=f"Remediation deadline per NVD annotation ({cve_id})",
+                                ),
+                            )
+                        return out
+                # If NVD is loaded and answered for all CVEs without KEV annotations:
+                nvd_recs = [self.nvd.lookup(cid) for cid in cve_ids]
+                if any(r is not None for r in nvd_recs):
+                    return {
+                        "in_kev": Attributed[EnrichmentValue](
+                            value=False,
+                            provenance=Provenance(
+                                source=Source.NVD,
+                                confidence=Confidence.HIGH,
+                                retrieved_at=now,
+                                note=f"None of {', '.join(cve_ids)} carry CISA KEV annotations in NVD",
+                            ),
+                        )
+                    }
+
             return {
                 "in_kev": Attributed[EnrichmentValue](
                     value=None,
@@ -379,14 +434,33 @@ class FusionEngine:
                 break
 
         if hit is None:
+            # B-1: Downgrade negative KEV assertion when mirror is stale.
+            kev_age = self.cisa_kev.mirror_age_days()
+            kev_stale = self.cisa_kev.is_stale()
+            if kev_stale and kev_age is not None:
+                age_str = f"{kev_age:.1f}"
+                kev_confidence = Confidence.MEDIUM
+                kev_note = (
+                    f"None of {', '.join(cve_ids)} listed in the loaded CISA KEV catalog; "
+                    f"mirror stale ({age_str}d old) — negative assertion confidence downgraded"
+                )
+                logger.warning(
+                    "fusion: KEV mirror stale (%.1fd); downgrading negative in_kev confidence "
+                    "for CVEs %s",
+                    kev_age,
+                    cve_ids,
+                )
+            else:
+                kev_confidence = Confidence.HIGH
+                kev_note = f"None of {', '.join(cve_ids)} listed in the loaded CISA KEV catalog"
             return {
                 "in_kev": Attributed[EnrichmentValue](
                     value=False,
                     provenance=Provenance(
                         source=Source.KEV,
-                        confidence=Confidence.HIGH,
+                        confidence=kev_confidence,
                         retrieved_at=self.cisa_kev.catalog_date or now,
-                        note=f"None of {', '.join(cve_ids)} listed in the loaded CISA KEV catalog",
+                        note=kev_note,
                     ),
                 )
             }
@@ -474,16 +548,35 @@ class FusionEngine:
                         ),
                     )
                 else:
+                    # B-1: Downgrade further to LOW when ExploitDB mirror is stale.
+                    edb_age = self.exploitdb.mirror_age_days()
+                    edb_stale = self.exploitdb.is_stale()
+                    if edb_stale and edb_age is not None:
+                        edb_confidence = Confidence.LOW
+                        edb_note = (
+                            f"{', '.join(cve_ids)} not found in ExploitDB mirror "
+                            f"({EXPLOIT_ABSENCE_CAVEAT}); mirror stale ({edb_age:.1f}d old) — "
+                            f"negative assertion confidence downgraded"
+                        )
+                        logger.warning(
+                            "fusion: ExploitDB mirror stale (%.1fd); downgrading negative "
+                            "has_public_exploit confidence for CVEs %s",
+                            edb_age,
+                            cve_ids,
+                        )
+                    else:
+                        edb_confidence = Confidence.MEDIUM
+                        edb_note = (
+                            f"{', '.join(cve_ids)} not found in ExploitDB mirror "
+                            f"({EXPLOIT_ABSENCE_CAVEAT})"
+                        )
                     out["has_public_exploit"] = Attributed[EnrichmentValue](
                         value=False,
                         provenance=Provenance(
                             source=Source.EXPLOITDB,
-                            confidence=Confidence.MEDIUM,
+                            confidence=edb_confidence,
                             retrieved_at=self.exploitdb.mirror_synced_at() or now,
-                            note=(
-                                f"{', '.join(cve_ids)} not found in ExploitDB mirror "
-                                f"({EXPLOIT_ABSENCE_CAVEAT})"
-                            ),
+                            note=edb_note,
                         ),
                     )
 
@@ -530,16 +623,35 @@ class FusionEngine:
                         ),
                     )
                 else:
+                    # B-1: Downgrade further to LOW when Metasploit mirror is stale.
+                    msf_age = self.metasploit.mirror_age_days()
+                    msf_stale = self.metasploit.is_stale()
+                    if msf_stale and msf_age is not None:
+                        msf_confidence = Confidence.LOW
+                        msf_note = (
+                            f"{', '.join(cve_ids)} not found in Metasploit mirror "
+                            f"({EXPLOIT_ABSENCE_CAVEAT}); mirror stale ({msf_age:.1f}d old) — "
+                            f"negative assertion confidence downgraded"
+                        )
+                        logger.warning(
+                            "fusion: Metasploit mirror stale (%.1fd); downgrading negative "
+                            "has_metasploit_module confidence for CVEs %s",
+                            msf_age,
+                            cve_ids,
+                        )
+                    else:
+                        msf_confidence = Confidence.MEDIUM
+                        msf_note = (
+                            f"{', '.join(cve_ids)} not found in Metasploit mirror "
+                            f"({EXPLOIT_ABSENCE_CAVEAT})"
+                        )
                     out["has_metasploit_module"] = Attributed[EnrichmentValue](
                         value=False,
                         provenance=Provenance(
                             source=Source.METASPLOIT,
-                            confidence=Confidence.MEDIUM,
+                            confidence=msf_confidence,
                             retrieved_at=self.metasploit.mirror_synced_at() or now,
-                            note=(
-                                f"{', '.join(cve_ids)} not found in Metasploit mirror "
-                                f"({EXPLOIT_ABSENCE_CAVEAT})"
-                            ),
+                            note=msf_note,
                         ),
                     )
 

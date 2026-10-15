@@ -3,7 +3,8 @@
     "banner": null,
     "sample_mode": "real_mirrors",
     "dataset_path": "evals/golden/enrichment_baseline.json",
-    "dataset_verification": "verified — 50 real-world CVEs across 5 documented cohorts; verified against CISA KEV, CVE.org, and NVD 2.0 by Mayank Narang on 2026-10-11",
+    "dataset_verification": "Per-CVE evidence records built automatically from local mirrors at 2026-10-15T16:47:23.432232+00:00. Each item's evidence.retrieved_at records the mirror snapshot used. Mirror sha256s below identify the exact snapshot.",
+    "cohort_labels_verified": true,
     "cache_dir": "data/enrichment_cache",
     "fusion_chain_order": [
       "cve.org",
@@ -28,18 +29,18 @@
         "path": "data/enrichment_cache/nvd.json",
         "present": true,
         "synthetic": false,
-        "sha256": "218f7d649a7c0124dfb970377627bcd10b9e77cf0157dc78fc0e89fde3a854f8",
-        "mtime": "2026-10-11T15:00:45.720401+00:00",
-        "synced_at": "2026-10-11T15:00:45.396640+00:00"
+        "sha256": "e8946380d34464b756b37d992b116399ea11671c5b2b2a13fb37bb0b4ffde8bb",
+        "mtime": "2026-10-15T17:09:40.029114+00:00",
+        "synced_at": "2026-10-15T17:09:39.828531+00:00"
       },
       {
         "name": "cve_org",
         "path": "data/enrichment_cache/cve_org.json",
         "present": true,
         "synthetic": false,
-        "sha256": "6b7c05da5a3ac93182396fe7212430cac3b7996f176a849595c5f86bcc4be36c",
-        "mtime": "2026-10-11T14:49:12.851552+00:00",
-        "synced_at": "2026-10-11T14:49:12.751038+00:00"
+        "sha256": "9ae9d633afa03571da433c66143c8cdc797cfafc780eedb140b67a9e2dcce7ea",
+        "mtime": "2026-10-15T17:04:26.668878+00:00",
+        "synced_at": "2026-10-15T17:04:26.610615+00:00"
       },
       {
         "name": "vulnrichment",
@@ -98,36 +99,49 @@
     ],
     "total_cves": 50,
     "total_headline_instances": 200,
-    "generated_at": "2026-10-11T15:02:40.419233+00:00"
+    "generated_at": "2026-10-15T17:11:05.761830+00:00"
   },
   "summary": {
-    "baseline_filled": 146,
-    "multi_filled": 196,
-    "baseline_overall_coverage_pct": 73.0,
-    "multi_overall_coverage_pct": 98.0,
-    "coverage_improvement_pp": 25.0
+    "baseline_filled": 9,
+    "multi_filled": 60,
+    "baseline_overall_coverage_pct": 4.5,
+    "multi_overall_coverage_pct": 30.0,
+    "coverage_improvement_pp": 25.5
+  },
+  "summary_excluding_epss": {
+    "fields": [
+      "cvss_score",
+      "cwe_ids",
+      "summary"
+    ],
+    "total_instances": 150,
+    "baseline_filled": 9,
+    "multi_filled": 10,
+    "baseline_coverage_pct": 6.0,
+    "multi_coverage_pct": 6.7,
+    "coverage_improvement_pp": 0.7
   },
   "per_field": {
     "cvss_score": {
-      "baseline_count": 50,
-      "baseline_pct": 100.0,
-      "multi_count": 50,
-      "multi_pct": 100.0,
+      "baseline_count": 3,
+      "baseline_pct": 6.0,
+      "multi_count": 3,
+      "multi_pct": 6.0,
       "improvement_pp": 0.0
     },
     "cwe_ids": {
-      "baseline_count": 46,
-      "baseline_pct": 92.0,
-      "multi_count": 46,
-      "multi_pct": 92.0,
+      "baseline_count": 3,
+      "baseline_pct": 6.0,
+      "multi_count": 3,
+      "multi_pct": 6.0,
       "improvement_pp": 0.0
     },
     "summary": {
-      "baseline_count": 50,
-      "baseline_pct": 100.0,
-      "multi_count": 50,
-      "multi_pct": 100.0,
-      "improvement_pp": 0.0
+      "baseline_count": 3,
+      "baseline_pct": 6.0,
+      "multi_count": 4,
+      "multi_pct": 8.0,
+      "improvement_pp": 2.0
     },
     "epss_score": {
       "baseline_count": 0,
@@ -140,18 +154,18 @@
   "signals": {
     "in_kev": {
       "baseline": {
-        "mirror_loaded": false,
-        "positive_count": 0,
+        "mirror_loaded": true,
+        "positive_count": 3,
         "negative_count": 0,
-        "unknown_count": 50,
-        "positive_rate_pct": null
+        "unknown_count": 47,
+        "positive_rate_pct": 6.0
       },
       "multi_source": {
         "mirror_loaded": true,
-        "positive_count": 40,
-        "negative_count": 10,
+        "positive_count": 25,
+        "negative_count": 25,
         "unknown_count": 0,
-        "positive_rate_pct": 80.0
+        "positive_rate_pct": 50.0
       }
     },
     "exploit_availability": {
@@ -164,165 +178,85 @@
       },
       "multi_source": {
         "mirror_loaded": true,
-        "positive_count": 36,
-        "negative_count": 14,
+        "positive_count": 17,
+        "negative_count": 33,
         "unknown_count": 0,
-        "positive_rate_pct": 72.0
+        "positive_rate_pct": 34.0
       }
     }
   },
   "cohorts": {
-    "cohort_a_nvd_control": {
+    "non_kev_mid_epss": {
       "count": 10,
-      "baseline_filled": 29,
-      "multi_filled": 39,
-      "baseline_coverage_pct": 72.5,
-      "multi_coverage_pct": 97.5,
+      "baseline_filled": 0,
+      "multi_filled": 11,
+      "baseline_coverage_pct": 0.0,
+      "multi_coverage_pct": 27.5,
+      "improvement_pp": 27.5
+    },
+    "kev_high_epss": {
+      "count": 15,
+      "baseline_filled": 9,
+      "multi_filled": 24,
+      "baseline_coverage_pct": 15.0,
+      "multi_coverage_pct": 40.0,
       "improvement_pp": 25.0
     },
-    "cohort_b_nvd_gap": {
+    "non_kev_high_epss": {
       "count": 10,
-      "baseline_filled": 30,
-      "multi_filled": 40,
-      "baseline_coverage_pct": 75.0,
-      "multi_coverage_pct": 100.0,
+      "baseline_filled": 0,
+      "multi_filled": 10,
+      "baseline_coverage_pct": 0.0,
+      "multi_coverage_pct": 25.0,
       "improvement_pp": 25.0
     },
-    "cohort_c_cisa_kev": {
+    "kev_low_epss": {
       "count": 10,
-      "baseline_filled": 30,
-      "multi_filled": 40,
-      "baseline_coverage_pct": 75.0,
-      "multi_coverage_pct": 100.0,
+      "baseline_filled": 0,
+      "multi_filled": 10,
+      "baseline_coverage_pct": 0.0,
+      "multi_coverage_pct": 25.0,
       "improvement_pp": 25.0
     },
-    "cohort_d_high_epss_no_nvd": {
-      "count": 10,
-      "baseline_filled": 30,
-      "multi_filled": 40,
-      "baseline_coverage_pct": 75.0,
-      "multi_coverage_pct": 100.0,
-      "improvement_pp": 25.0
-    },
-    "cohort_e_weaponized_exploit": {
-      "count": 10,
-      "baseline_filled": 27,
-      "multi_filled": 37,
-      "baseline_coverage_pct": 67.5,
-      "multi_coverage_pct": 92.5,
+    "non_kev_low_epss": {
+      "count": 5,
+      "baseline_filled": 0,
+      "multi_filled": 5,
+      "baseline_coverage_pct": 0.0,
+      "multi_coverage_pct": 25.0,
       "improvement_pp": 25.0
     }
   },
   "items": [
     {
-      "cve_id": "CVE-2021-44228",
-      "cohort": "cohort_a_nvd_control",
+      "cve_id": "CVE-2001-0154",
+      "cohort": "non_kev_mid_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2021-41773",
-      "cohort": "cohort_a_nvd_control",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2020-7699",
-      "cohort": "cohort_a_nvd_control",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "negative",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2020-15778",
-      "cohort": "cohort_a_nvd_control",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "negative",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2017-0144",
-      "cohort": "cohort_a_nvd_control",
-      "baseline": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
-        "summary": true,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
         "summary": true,
         "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2019-0708",
-      "cohort": "cohort_a_nvd_control",
+      "cve_id": "CVE-2006-1547",
+      "cohort": "kev_high_epss",
       "baseline": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": "unknown",
+        "in_kev": "positive",
         "exploit_availability": "unknown"
       },
       "multi_source": {
@@ -331,158 +265,58 @@
         "summary": true,
         "epss_score": true,
         "in_kev": "positive",
-        "exploit_availability": "positive"
+        "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2014-0160",
-      "cohort": "cohort_a_nvd_control",
+      "cve_id": "CVE-2008-1051",
+      "cohort": "non_kev_mid_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
-        "in_kev": "positive",
+        "in_kev": "negative",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2017-5638",
-      "cohort": "cohort_a_nvd_control",
+      "cve_id": "CVE-2009-0305",
+      "cohort": "non_kev_mid_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2019-11510",
-      "cohort": "cohort_a_nvd_control",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2018-13379",
-      "cohort": "cohort_a_nvd_control",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-23897",
-      "cohort": "cohort_b_nvd_gap",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-21893",
-      "cohort": "cohort_b_nvd_gap",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-38077",
-      "cohort": "cohort_b_nvd_gap",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "negative",
         "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2024-21413",
-      "cohort": "cohort_b_nvd_gap",
+      "cve_id": "CVE-2009-0563",
+      "cohort": "kev_high_epss",
       "baseline": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": "unknown",
+        "in_kev": "positive",
         "exploit_availability": "unknown"
       },
       "multi_source": {
@@ -495,194 +329,474 @@
       }
     },
     {
-      "cve_id": "CVE-2024-3094",
-      "cohort": "cohort_b_nvd_gap",
+      "cve_id": "CVE-2009-3613",
+      "cohort": "non_kev_mid_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "positive"
+      }
+    },
+    {
+      "cve_id": "CVE-2009-4223",
+      "cohort": "non_kev_mid_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "positive"
+      }
+    },
+    {
+      "cve_id": "CVE-2010-3653",
+      "cohort": "non_kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "positive"
+      }
+    },
+    {
+      "cve_id": "CVE-2013-5223",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "positive"
+      }
+    },
+    {
+      "cve_id": "CVE-2014-9034",
+      "cohort": "non_kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "positive"
+      }
+    },
+    {
+      "cve_id": "CVE-2018-0155",
+      "cohort": "kev_low_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2018-0795",
+      "cohort": "non_kev_mid_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "negative",
         "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2024-27198",
-      "cohort": "cohort_b_nvd_gap",
+      "cve_id": "CVE-2018-14718",
+      "cohort": "non_kev_mid_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2018-15203",
+      "cohort": "non_kev_low_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2018-16509",
+      "cohort": "non_kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "positive"
+      }
+    },
+    {
+      "cve_id": "CVE-2018-7445",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2024-1709",
-      "cohort": "cohort_b_nvd_gap",
+      "cve_id": "CVE-2020-1027",
+      "cohort": "kev_low_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-21762",
-      "cohort": "cohort_b_nvd_gap",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2024-3400",
-      "cohort": "cohort_b_nvd_gap",
+      "cve_id": "CVE-2020-13818",
+      "cohort": "non_kev_mid_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2020-25079",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2020-25683",
+      "cohort": "non_kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2020-6819",
+      "cohort": "kev_low_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2021-21985",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2024-4577",
-      "cohort": "cohort_b_nvd_gap",
+      "cve_id": "CVE-2021-27145",
+      "cohort": "non_kev_mid_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2022-22947",
-      "cohort": "cohort_c_cisa_kev",
+      "cve_id": "CVE-2021-36934",
+      "cohort": "kev_high_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
-        "exploit_availability": "positive"
+        "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2023-34362",
-      "cohort": "cohort_c_cisa_kev",
+      "cve_id": "CVE-2022-1364",
+      "cohort": "kev_low_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
-        "exploit_availability": "positive"
+        "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2023-2868",
-      "cohort": "cohort_c_cisa_kev",
+      "cve_id": "CVE-2022-20703",
+      "cohort": "kev_low_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
-        "exploit_availability": "positive"
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2022-32409",
+      "cohort": "non_kev_mid_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2022-36974",
+      "cohort": "non_kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
       "cve_id": "CVE-2023-22515",
-      "cohort": "cohort_c_cisa_kev",
+      "cohort": "kev_high_epss",
       "baseline": {
         "cvss_score": true,
         "cwe_ids": true,
         "summary": true,
         "epss_score": false,
-        "in_kev": "unknown",
+        "in_kev": "positive",
         "exploit_availability": "unknown"
       },
       "multi_source": {
@@ -695,523 +809,423 @@
       }
     },
     {
-      "cve_id": "CVE-2023-22518",
-      "cohort": "cohort_c_cisa_kev",
+      "cve_id": "CVE-2023-22527",
+      "cohort": "kev_high_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2023-46805",
-      "cohort": "cohort_c_cisa_kev",
+      "cve_id": "CVE-2023-28205",
+      "cohort": "kev_low_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-21887",
-      "cohort": "cohort_c_cisa_kev",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2023-20198",
-      "cohort": "cohort_c_cisa_kev",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2023-20273",
-      "cohort": "cohort_c_cisa_kev",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2023-27997",
-      "cohort": "cohort_c_cisa_kev",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2022-22965",
-      "cohort": "cohort_d_high_epss_no_nvd",
+      "cve_id": "CVE-2023-35150",
+      "cohort": "non_kev_high_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-28995",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-20656",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "negative",
         "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2024-20931",
-      "cohort": "cohort_d_high_epss_no_nvd",
+      "cve_id": "CVE-2023-39265",
+      "cohort": "non_kev_high_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "negative",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-26229",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "negative",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-26169",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-30078",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "negative",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-38112",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-38063",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "negative",
-        "exploit_availability": "negative"
-      }
-    },
-    {
-      "cve_id": "CVE-2024-38200",
-      "cohort": "cohort_d_high_epss_no_nvd",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "negative",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2020-1472",
-      "cohort": "cohort_e_weaponized_exploit",
+      "cve_id": "CVE-2023-50386",
+      "cohort": "non_kev_high_epss",
       "baseline": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
-        "summary": true,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
-        "summary": true,
+        "summary": false,
         "epss_score": true,
-        "in_kev": "positive",
+        "in_kev": "negative",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2021-34527",
-      "cohort": "cohort_e_weaponized_exploit",
+      "cve_id": "CVE-2024-12069",
+      "cohort": "non_kev_low_epss",
       "baseline": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
-        "summary": true,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
-        "summary": true,
+        "summary": false,
         "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2021-26855",
-      "cohort": "cohort_e_weaponized_exploit",
+      "cve_id": "CVE-2024-23222",
+      "cohort": "kev_low_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2021-34473",
-      "cohort": "cohort_e_weaponized_exploit",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2022-26134",
-      "cohort": "cohort_e_weaponized_exploit",
-      "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": false,
-        "in_kev": "unknown",
-        "exploit_availability": "unknown"
-      },
-      "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
-        "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
-      }
-    },
-    {
-      "cve_id": "CVE-2022-30190",
-      "cohort": "cohort_e_weaponized_exploit",
-      "baseline": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
-        "summary": true,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
+        "cvss_score": false,
         "cwe_ids": false,
-        "summary": true,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2024-34102",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2022-41040",
-      "cohort": "cohort_e_weaponized_exploit",
+      "cve_id": "CVE-2024-36401",
+      "cohort": "kev_high_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2022-41082",
-      "cohort": "cohort_e_weaponized_exploit",
+      "cve_id": "CVE-2024-38812",
+      "cohort": "kev_high_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2024-4671",
+      "cohort": "kev_low_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2024-57727",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2025-34152",
+      "cohort": "non_kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "positive"
+      }
+    },
+    {
+      "cve_id": "CVE-2025-4009",
+      "cohort": "non_kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2025-48927",
+      "cohort": "kev_low_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2025-67975",
+      "cohort": "non_kev_low_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "negative",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2026-102490",
+      "cohort": "kev_low_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2026-71362",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": true,
+        "in_kev": "positive",
+        "exploit_availability": "negative"
+      }
+    },
+    {
+      "cve_id": "CVE-2026-81578",
+      "cohort": "kev_high_epss",
+      "baseline": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
+        "epss_score": false,
+        "in_kev": "unknown",
+        "exploit_availability": "unknown"
+      },
+      "multi_source": {
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
         "in_kev": "positive",
         "exploit_availability": "positive"
       }
     },
     {
-      "cve_id": "CVE-2023-0669",
-      "cohort": "cohort_e_weaponized_exploit",
+      "cve_id": "CVE-2026-88916",
+      "cohort": "non_kev_low_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     },
     {
-      "cve_id": "CVE-2023-27350",
-      "cohort": "cohort_e_weaponized_exploit",
+      "cve_id": "CVE-2026-97074",
+      "cohort": "non_kev_low_epss",
       "baseline": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": false,
         "in_kev": "unknown",
         "exploit_availability": "unknown"
       },
       "multi_source": {
-        "cvss_score": true,
-        "cwe_ids": true,
-        "summary": true,
+        "cvss_score": false,
+        "cwe_ids": false,
+        "summary": false,
         "epss_score": true,
-        "in_kev": "positive",
-        "exploit_availability": "positive"
+        "in_kev": "negative",
+        "exploit_availability": "negative"
       }
     }
   ]

@@ -37,3 +37,23 @@ jobs:
         run: |
           echo "The LLM never creates graph edges; no scan without authorization."
           pytest tests/architecture -v
+
+      - name: Verify Source enum JSON is in sync
+        run: python scripts/generate_source_enum.py --check
+
+  frontend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm --prefix apps/web ci
+
+      - name: Frontend tests
+        run: npm --prefix apps/web test

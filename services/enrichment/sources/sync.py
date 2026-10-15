@@ -86,7 +86,11 @@ DEFAULT_FIRST_EPSS_URL = "https://epss.empiricalsecurity.com/epss_scores-current
 DEFAULT_CVE_ORG_URL = "https://cveawg.mitre.org/api/cve"
 #: cisagov/vulnrichment repo root; files live at ``{year}/{n // 1000}xxx/{CVE-ID}.json``.
 DEFAULT_VULNRICHMENT_URL = "https://raw.githubusercontent.com/cisagov/vulnrichment/develop"
-#: EUVD API host (the euvd.enisa.europa.eu site is the SPA). ``?text={CVE-ID}``.
+#: EUVD API search endpoint: ``/api/search?text={CVE-ID}&size=10``.
+#: Note on endpoint choice (Task D-4 / D-034): ``GET /api/vulnerability?id={id}``
+#: returns HTTP 403 Forbidden on the public gateway. The public search endpoint
+#: ``/api/search?text={CVE-ID}`` returns HTTP 200 with an ``items`` array containing
+#: the matching record and alias mapping.
 DEFAULT_EUVD_URL = "https://euvdservices.enisa.europa.eu/api/search"
 #: NVD CVE API 2.0: ``?cveId={CVE-ID}``.
 DEFAULT_NVD_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
