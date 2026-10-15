@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import Insert as PGInsert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -33,6 +35,8 @@ from packages.schema.models.observation import (
 # 500 rows is 3500 bind parameters -- far below PostgreSQL's 65535 limit and
 # SQLite's 32766 default.
 UPSERT_CHUNK_SIZE = 500
+
+logger = logging.getLogger(__name__)
 
 
 class RawArtifactRepository:
@@ -479,19 +483,40 @@ class EnrichedFindingRepository:
                 .limit(1)
             )
             model = self.session.scalars(stmt).first()
-        return model.to_schema() if model is not None else None
+        if model is None:
+            return None
+        try:
+            return model.to_schema()
+        except (ValidationError, ValueError) as exc:
+            logger.warning(
+                "Enriched finding row is malformed in engagement %s (finding_id=%s): %s",
+                engagement_id or getattr(model, "engagement_id", None),
+                finding_id,
+                exc,
+                extra={
+                    "engagement_id": engagement_id or getattr(model, "engagement_id", None),
+                    "finding_id": finding_id,
+                    "error": str(exc),
+                },
+            )
+            raise
 
     def get_by_engagement(
         self,
         engagement_id: str,
         limit: int | None = None,
         offset: int = 0,
+        skip_invalid: bool = True,
     ) -> list[EnrichedFinding]:
         """Retrieve enriched findings associated with an engagement.
 
         Ordered by finding_id: a key that does not change on re-enrichment, so
         paging with a fixed limit never skips or repeats a row even while
         enrichment is rewriting enriched_at underneath the reader.
+
+        When ``skip_invalid`` is True (default), legacy rows with malformed data
+        (e.g., malformed CVE IDs failing D-040 regex checks) are logged with a
+        structured warning and skipped rather than failing the entire read request.
         """
         stmt = (
             select(EnrichedFindingModel)
@@ -503,7 +528,25 @@ class EnrichedFindingRepository:
         if limit is not None:
             stmt = stmt.limit(limit)
         results = self.session.scalars(stmt).all()
-        return [m.to_schema() for m in results]
+        items: list[EnrichedFinding] = []
+        for m in results:
+            try:
+                items.append(m.to_schema())
+            except (ValidationError, ValueError) as exc:
+                if not skip_invalid:
+                    raise
+                logger.warning(
+                    "Skipping malformed enriched finding row in engagement %s (finding_id=%s): %s",
+                    engagement_id,
+                    m.finding_id,
+                    exc,
+                    extra={
+                        "engagement_id": engagement_id,
+                        "finding_id": m.finding_id,
+                        "error": str(exc),
+                    },
+                )
+        return items
 
     def count_by_engagement(self, engagement_id: str) -> int:
         """Count enriched findings associated with an engagement."""

@@ -1,5 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   normalizeEnrichedFinding,
   normalizeProvenance,
@@ -13,6 +16,10 @@ import {
   PROVENANCE_SOURCES,
   CONFIDENCE_LEVELS,
 } from "../lib/findings.ts";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const sourcesJsonPath = path.resolve(__dirname, "../../../packages/schema/sources.json");
+const canonicalSources = JSON.parse(fs.readFileSync(sourcesJsonPath, "utf8")).sources;
 
 // Fixture mirrors the JSON the backend serializes for
 // packages.schema.models.finding.EnrichedFinding (see services/enrichment/fusion.py
@@ -213,23 +220,8 @@ describe("display helpers", () => {
 });
 
 describe("provenance contract & parity", () => {
-  it("enforces exact parity with backend packages.schema.models.provenance.Source", () => {
-    const expectedSources = [
-      "cve.org",
-      "cisa.vulnrichment",
-      "cisa.kev",
-      "first.epss",
-      "nvd",
-      "enisa.euvd",
-      "osv.dev",
-      "github.advisories",
-      "exploitdb",
-      "metasploit",
-      "bron",
-      "derived",
-      "scanner",
-    ];
-    assert.deepEqual(Array.from(PROVENANCE_SOURCES).sort(), expectedSources.slice().sort());
+  it("enforces exact parity with canonical packages/schema/sources.json", () => {
+    assert.deepEqual(Array.from(PROVENANCE_SOURCES).sort(), canonicalSources.slice().sort());
     assert.equal(new Set(PROVENANCE_SOURCES).size, PROVENANCE_SOURCES.length, "no duplicate sources");
   });
 

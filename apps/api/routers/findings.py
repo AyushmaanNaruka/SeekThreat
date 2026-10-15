@@ -21,7 +21,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from apps.api.core.audit import log_audit_event
@@ -211,7 +211,20 @@ def get_enriched_finding(
     engagement = _require_engagement(
         db, engagement_id, event="findings.query_rejected", target=finding_id
     )
-    finding = EnrichedFindingRepository(db).get(finding_id, engagement_id=engagement_id)
+    try:
+        finding = EnrichedFindingRepository(db).get(finding_id, engagement_id=engagement_id)
+    except (ValidationError, ValueError) as exc:
+        logger.warning(
+            "Enriched finding %s in engagement %s has malformed data: %s",
+            finding_id,
+            engagement_id,
+            exc,
+            extra={"finding_id": finding_id, "engagement_id": engagement_id, "error": str(exc)},
+        )
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Enriched finding {finding_id!r} contains malformed data: {exc}",
+        ) from exc
     _audit_query(engagement, finding_id, {"found": finding is not None})
     if finding is None:
         raise HTTPException(

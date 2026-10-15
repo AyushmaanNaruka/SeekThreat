@@ -130,7 +130,10 @@ def _definite_bool(attr: Attributed[Any] | None, source: Source) -> bool | None:
 def _signal_state(field_name: str, fields: dict[str, Attributed[Any]]) -> str:
     """Classify a signal field as ``positive``, ``negative`` or ``unknown``."""
     if field_name == "in_kev":
-        values = [_definite_bool(fields.get("in_kev"), Source.KEV)]
+        values = [
+            _definite_bool(fields.get("in_kev"), Source.KEV),
+            _definite_bool(fields.get("in_kev"), Source.NVD),
+        ]
     elif field_name == "exploit_availability":
         values = [
             _definite_bool(fields.get("has_public_exploit"), Source.EXPLOITDB),
@@ -147,7 +150,8 @@ def _signal_state(field_name: str, fields: dict[str, Attributed[Any]]) -> str:
 
 def _signal_mirror_loaded(field_name: str, engine: FusionEngine) -> bool:
     if field_name == "in_kev":
-        return engine.cisa_kev.is_loaded
+        nvd_loaded = engine.nvd is not None and engine.nvd.is_loaded
+        return engine.cisa_kev.is_loaded or nvd_loaded
     edb = engine.exploitdb is not None and engine.exploitdb.is_loaded
     msf = engine.metasploit is not None and engine.metasploit.is_loaded
     return edb or msf

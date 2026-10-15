@@ -48,11 +48,25 @@ def test_derived_source_exists_and_is_labelled() -> None:
 
 
 def test_provenance_sources_match_frontend_contract() -> None:
-    """Ensure Source enum is strictly in sync with frontend PROVENANCE_SOURCES."""
+    """Ensure Source enum, sources.json, and frontend PROVENANCE_SOURCES are in strict sync."""
+    import json
     import re
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[2]
+    sources_json_path = repo_root / "packages" / "schema" / "sources.json"
+    assert sources_json_path.is_file(), f"missing {sources_json_path}"
+
+    sources_data = json.loads(sources_json_path.read_text(encoding="utf-8"))
+    json_sources = sources_data.get("sources", [])
+    backend_sources = [s.value for s in Source]
+
+    assert json_sources == backend_sources, (
+        f"packages/schema/sources.json drifted from backend Source enum.\n"
+        f"In JSON: {json_sources}\n"
+        f"In Enum: {backend_sources}"
+    )
+
     findings_ts = repo_root / "apps" / "web" / "lib" / "findings.ts"
     assert findings_ts.is_file(), f"missing {findings_ts}"
 
@@ -61,11 +75,10 @@ def test_provenance_sources_match_frontend_contract() -> None:
     assert match is not None, "PROVENANCE_SOURCES definition not found in findings.ts"
 
     frontend_sources = set(re.findall(r'"([^"]+)"', match.group(1)))
-    backend_sources = {s.value for s in Source}
-    assert frontend_sources == backend_sources, (
+    assert frontend_sources == set(backend_sources), (
         f"Frontend PROVENANCE_SOURCES drifted from backend Source enum.\n"
-        f"In frontend only: {frontend_sources - backend_sources}\n"
-        f"In backend only: {backend_sources - frontend_sources}"
+        f"In frontend only: {frontend_sources - set(backend_sources)}\n"
+        f"In backend only: {set(backend_sources) - frontend_sources}"
     )
 
 
