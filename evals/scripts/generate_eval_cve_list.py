@@ -49,11 +49,11 @@ from pathlib import Path
 SEED: int = 20261011
 
 STRATA: list[dict] = [
-    {"name": "kev_high_epss",     "in_kev": True,  "epss_min": 0.50,  "epss_max": None, "n": 15},
-    {"name": "kev_low_epss",      "in_kev": True,  "epss_min": None,  "epss_max": 0.50, "n": 10},
-    {"name": "non_kev_high_epss", "in_kev": False, "epss_min": 0.70,  "epss_max": None, "n": 10},
-    {"name": "non_kev_mid_epss",  "in_kev": False, "epss_min": 0.10,  "epss_max": 0.70, "n": 10},
-    {"name": "non_kev_low_epss",  "in_kev": False, "epss_min": None,  "epss_max": 0.005,"n":  5},
+    {"name": "kev_high_epss", "in_kev": True, "epss_min": 0.50, "epss_max": None, "n": 15},
+    {"name": "kev_low_epss", "in_kev": True, "epss_min": None, "epss_max": 0.50, "n": 10},
+    {"name": "non_kev_high_epss", "in_kev": False, "epss_min": 0.70, "epss_max": None, "n": 10},
+    {"name": "non_kev_mid_epss", "in_kev": False, "epss_min": 0.10, "epss_max": 0.70, "n": 10},
+    {"name": "non_kev_low_epss", "in_kev": False, "epss_min": None, "epss_max": 0.005, "n": 5},
 ]
 
 _CVE_RE = re.compile(r"^CVE-[0-9]{4}-[0-9]{4,7}$", re.ASCII)
@@ -63,6 +63,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 # ---------------------------------------------------------------------------
 # Mirror loading
 # ---------------------------------------------------------------------------
+
 
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
@@ -92,7 +93,9 @@ def load_kev_ids(mirrors_dir: Path) -> set[str]:
     """Return the set of CVE IDs that appear in the loaded CISA KEV mirror."""
     kev_path = mirrors_dir / "cisa_kev.json"
     if not kev_path.exists():
-        print(f"[warn] KEV mirror not found at {kev_path}; KEV stratum will be empty", file=sys.stderr)
+        print(
+            f"[warn] KEV mirror not found at {kev_path}; KEV stratum will be empty", file=sys.stderr
+        )
         return set()
 
     data = json.loads(kev_path.read_text(encoding="utf-8"))
@@ -152,6 +155,7 @@ def load_epss_scores(mirrors_dir: Path) -> dict[str, float]:
 # Stratified sampling
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class StratumResult:
     name: str
@@ -178,7 +182,8 @@ def stratified_sample(
         target_n: int = spec["n"]
 
         pool = [
-            cid for cid, score in epss.items()
+            cid
+            for cid, score in epss.items()
             if (cid in kev_ids) == in_kev_filter
             and (epss_min is None or score >= epss_min)
             and (epss_max is None or score < epss_max)
@@ -190,12 +195,14 @@ def stratified_sample(
         chosen = pool[:target_n]
         selected_all.update(chosen)
 
-        results.append(StratumResult(
-            name=spec["name"],
-            requested_n=target_n,
-            available_n=len(pool),
-            selected=sorted(chosen),
-        ))
+        results.append(
+            StratumResult(
+                name=spec["name"],
+                requested_n=target_n,
+                available_n=len(pool),
+                selected=sorted(chosen),
+            )
+        )
 
     return sorted(selected_all), results
 
@@ -203,6 +210,7 @@ def stratified_sample(
 # ---------------------------------------------------------------------------
 # Manifest
 # ---------------------------------------------------------------------------
+
 
 def build_manifest(
     mirrors_dir: Path,
@@ -252,6 +260,7 @@ def build_manifest(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
@@ -313,10 +322,12 @@ def main(argv: list[str] | None = None) -> int:
     manifest = build_manifest(mirrors_dir, strata_results, args.seed, generated_at)
 
     if not args.quiet:
-        print(f"\n[info] Selection summary:")
+        print("\n[info] Selection summary:")
         for sr in strata_results:
-            print(f"  {sr.name:<26} requested={sr.requested_n:2d}  "
-                  f"available={sr.available_n:6,d}  selected={len(sr.selected):2d}")
+            print(
+                f"  {sr.name:<26} requested={sr.requested_n:2d}  "
+                f"available={sr.available_n:6,d}  selected={len(sr.selected):2d}"
+            )
         print(f"  {'TOTAL':<26} {'':5s}                       selected={len(cve_list):2d}")
 
     if args.dry_run:

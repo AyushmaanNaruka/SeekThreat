@@ -20,7 +20,6 @@ from evals.scripts.generate_eval_cve_list import (
     load_epss_scores,
     load_kev_ids,
     stratified_sample,
-    build_manifest,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -36,9 +35,9 @@ class TestStratifiedSample:
         "CVE-2021-0002": 0.30,  # KEV + low EPSS
         "CVE-2021-0003": 0.75,  # non-KEV + high EPSS (≥0.70)
         "CVE-2021-0004": 0.20,  # non-KEV + mid EPSS
-        "CVE-2021-0005": 0.001, # non-KEV + low EPSS (< 0.005)
+        "CVE-2021-0005": 0.001,  # non-KEV + low EPSS (< 0.005)
         "CVE-2021-0006": 0.95,  # KEV + high EPSS
-        "CVE-2021-0007": 0.001, # non-KEV + low EPSS
+        "CVE-2021-0007": 0.001,  # non-KEV + low EPSS
         "CVE-2021-0008": 0.15,  # non-KEV + mid EPSS
         "CVE-2021-0009": 0.80,  # non-KEV + high EPSS
         "CVE-2021-0010": 0.40,  # KEV + low EPSS
@@ -47,11 +46,29 @@ class TestStratifiedSample:
 
     def _sample_strata(self, strata_override: list[dict] | None = None):
         strata = strata_override or [
-            {"name": "kev_high_epss",     "in_kev": True,  "epss_min": 0.50,  "epss_max": None,  "n": 2},
-            {"name": "kev_low_epss",      "in_kev": True,  "epss_min": None,  "epss_max": 0.50,  "n": 2},
-            {"name": "non_kev_high_epss", "in_kev": False, "epss_min": 0.70,  "epss_max": None,  "n": 2},
-            {"name": "non_kev_mid_epss",  "in_kev": False, "epss_min": 0.10,  "epss_max": 0.70,  "n": 2},
-            {"name": "non_kev_low_epss",  "in_kev": False, "epss_min": None,  "epss_max": 0.005, "n": 2},
+            {"name": "kev_high_epss", "in_kev": True, "epss_min": 0.50, "epss_max": None, "n": 2},
+            {"name": "kev_low_epss", "in_kev": True, "epss_min": None, "epss_max": 0.50, "n": 2},
+            {
+                "name": "non_kev_high_epss",
+                "in_kev": False,
+                "epss_min": 0.70,
+                "epss_max": None,
+                "n": 2,
+            },
+            {
+                "name": "non_kev_mid_epss",
+                "in_kev": False,
+                "epss_min": 0.10,
+                "epss_max": 0.70,
+                "n": 2,
+            },
+            {
+                "name": "non_kev_low_epss",
+                "in_kev": False,
+                "epss_min": None,
+                "epss_max": 0.005,
+                "n": 2,
+            },
         ]
         return stratified_sample(self._EPSS, self._KEV, strata, SEED)
 
@@ -62,7 +79,13 @@ class TestStratifiedSample:
 
     def test_different_seed_different_result(self) -> None:
         strata = [
-            {"name": "non_kev_mid_epss", "in_kev": False, "epss_min": 0.10, "epss_max": 0.70, "n": 2},
+            {
+                "name": "non_kev_mid_epss",
+                "in_kev": False,
+                "epss_min": 0.10,
+                "epss_max": 0.70,
+                "n": 2,
+            },
         ]
         cves1, _ = stratified_sample(self._EPSS, self._KEV, strata, seed=1)
         cves2, _ = stratified_sample(self._EPSS, self._KEV, strata, seed=2)
@@ -88,7 +111,6 @@ class TestStratifiedSample:
     def test_epss_thresholds_respected(self) -> None:
         _, results = self._sample_strata()
         for sr in results:
-            spec = next(s for s in STRATA if s["name"] == sr.name) if sr.name in {s["name"] for s in STRATA} else None
             # Just check that all selected are in the EPSS dict
             for cid in sr.selected:
                 assert cid in self._EPSS
@@ -99,9 +121,15 @@ class TestStratifiedSample:
 
     def test_stratum_capped_at_available(self) -> None:
         # Request more than available
-        strata = [{"name": "kev_high_epss", "in_kev": True, "epss_min": 0.50, "epss_max": None, "n": 100}]
+        strata = [
+            {"name": "kev_high_epss", "in_kev": True, "epss_min": 0.50, "epss_max": None, "n": 100}
+        ]
         cves, results = stratified_sample(self._EPSS, self._KEV, strata, SEED)
-        assert results[0].selected_n if hasattr(results[0], "selected_n") else len(results[0].selected) <= results[0].available_n
+        assert (
+            results[0].selected_n
+            if hasattr(results[0], "selected_n")
+            else len(results[0].selected) <= results[0].available_n
+        )
 
 
 class TestCommittedManifest:
@@ -116,7 +144,7 @@ class TestCommittedManifest:
     def cve_list(self) -> list[str]:
         assert LIST_PATH.exists(), f"CVE list not found: {LIST_PATH}"
         lines = LIST_PATH.read_text(encoding="utf-8").splitlines()
-        return [l.strip() for l in lines if l.strip()]
+        return [line.strip() for line in lines if line.strip()]
 
     def test_manifest_has_required_keys(self, manifest: dict) -> None:
         for key in ("seed", "selection_rule", "mirrors", "strata", "total_selected"):
@@ -137,8 +165,7 @@ class TestCommittedManifest:
 
     def test_total_selected_equals_list_length(self, manifest: dict, cve_list: list[str]) -> None:
         assert manifest["total_selected"] == len(cve_list), (
-            f"Manifest total_selected={manifest['total_selected']} "
-            f"!= list length={len(cve_list)}"
+            f"Manifest total_selected={manifest['total_selected']} != list length={len(cve_list)}"
         )
 
     def test_all_list_cves_in_manifest(self, manifest: dict, cve_list: list[str]) -> None:
@@ -167,6 +194,7 @@ class TestCommittedManifest:
 
     def test_cve_ids_match_format(self, cve_list: list[str]) -> None:
         import re
+
         cve_re = re.compile(r"^CVE-[0-9]{4}-[0-9]{4,7}$", re.ASCII)
         for cid in cve_list:
             assert cve_re.match(cid), f"Malformed CVE ID in list: {cid!r}"
@@ -187,7 +215,7 @@ class TestDeterminismWithRealMirrors:
         cves2, results2 = stratified_sample(epss, kev_ids, STRATA, SEED)
 
         assert cves1 == cves2
-        for r1, r2 in zip(results1, results2):
+        for r1, r2 in zip(results1, results2, strict=True):
             assert r1.selected == r2.selected
 
     def test_consistent_with_committed_list(self) -> None:
@@ -199,7 +227,6 @@ class TestDeterminismWithRealMirrors:
 
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
         epss_path = mirrors_dir / "epss_v4.json"
-        kev_path = mirrors_dir / "cisa_kev.json"
 
         import hashlib
 
@@ -223,7 +250,11 @@ class TestDeterminismWithRealMirrors:
         kev_ids = load_kev_ids(mirrors_dir)
         cves, _ = stratified_sample(epss, kev_ids, STRATA, manifest["seed"])
 
-        committed = [l.strip() for l in LIST_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
+        committed = [
+            line.strip()
+            for line in LIST_PATH.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         assert cves == committed, (
             "Regenerated list differs from committed eval_cve_list.txt with same mirrors+seed. "
             "Run `python evals/scripts/generate_eval_cve_list.py` to update."

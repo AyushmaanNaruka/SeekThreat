@@ -11,14 +11,12 @@ Verifies the mathematical correctness of:
 from __future__ import annotations
 
 import math
-import pytest
 
 from evals.ers_validation import (
-    _average_precision,
     _auc_roc,
+    _average_precision,
     _bootstrap_ci,
     compute_ranking_metrics,
-    rank_items,
 )
 
 
@@ -65,6 +63,7 @@ class TestAveragePrecision:
 
     def test_returns_float_in_0_1(self) -> None:
         import random
+
         rng = random.Random(42)
         for _ in range(20):
             n = rng.randint(1, 50)
@@ -119,6 +118,7 @@ class TestAucRoc:
 
     def test_returns_in_0_1(self) -> None:
         import random
+
         rng = random.Random(99)
         for _ in range(20):
             n = rng.randint(2, 50)
@@ -141,14 +141,32 @@ class TestBootstrapCI:
     def test_different_seeds_differ(self) -> None:
         # Use a larger, mixed label list so the bootstrap distribution has enough spread
         # that different seeds produce observably different CI values at n=2000.
-        labels = [True, False, True, False, False, True, False, True, False, False,
-                  True, False, True, False, False, True, False, True, False, False]
+        labels = [
+            True,
+            False,
+            True,
+            False,
+            False,
+            True,
+            False,
+            True,
+            False,
+            False,
+            True,
+            False,
+            True,
+            False,
+            False,
+            True,
+            False,
+            True,
+            False,
+            False,
+        ]
         ci1 = _bootstrap_ci(labels, _average_precision, n_resamples=2000, seed=1)
         ci2 = _bootstrap_ci(labels, _average_precision, n_resamples=2000, seed=999)
         # With 2000 resamples and different seeds the interval endpoints differ
-        assert ci1 != ci2, (
-            f"Expected different CIs for seed=1 ({ci1}) vs seed=999 ({ci2})"
-        )
+        assert ci1 != ci2, f"Expected different CIs for seed=1 ({ci1}) vs seed=999 ({ci2})"
 
     def test_lower_le_upper(self) -> None:
         labels = [True, False, True, False, True]
@@ -185,10 +203,16 @@ class TestComputeRankingMetrics:
         items = self._make_items([(0.9, True), (0.5, False), (0.3, True)])
         result = compute_ranking_metrics(items, "score_test", n_bootstrap=50)
         for key in (
-            "score_key", "n_items", "n_positives",
-            "average_precision", "ap_ci_95",
-            "auc_roc", "auc_roc_ci_95",
-            "random_baseline_auc", "n_bootstrap_resamples", "bootstrap_seed",
+            "score_key",
+            "n_items",
+            "n_positives",
+            "average_precision",
+            "ap_ci_95",
+            "auc_roc",
+            "auc_roc_ci_95",
+            "random_baseline_auc",
+            "n_bootstrap_resamples",
+            "bootstrap_seed",
         ):
             assert key in result, f"Missing key: {key}"
 
@@ -221,18 +245,18 @@ class TestComputeRankingMetrics:
         assert result["random_baseline_auc"] == 0.5
 
     def test_deterministic(self) -> None:
-        items = self._make_items([
-            (0.9, True), (0.7, False), (0.5, True), (0.3, False), (0.1, True)
-        ])
+        items = self._make_items(
+            [(0.9, True), (0.7, False), (0.5, True), (0.3, False), (0.1, True)]
+        )
         r1 = compute_ranking_metrics(items, "score_test", n_bootstrap=200, bootstrap_seed=42)
         r2 = compute_ranking_metrics(items, "score_test", n_bootstrap=200, bootstrap_seed=42)
         assert r1["ap_ci_95"] == r2["ap_ci_95"]
         assert r1["auc_roc_ci_95"] == r2["auc_roc_ci_95"]
 
     def test_ci_lower_le_upper(self) -> None:
-        items = self._make_items([
-            (0.9, True), (0.7, False), (0.5, True), (0.3, False), (0.1, True)
-        ])
+        items = self._make_items(
+            [(0.9, True), (0.7, False), (0.5, True), (0.3, False), (0.1, True)]
+        )
         result = compute_ranking_metrics(items, "score_test", n_bootstrap=500)
         ap_lo, ap_hi = result["ap_ci_95"]
         auc_lo, auc_hi = result["auc_roc_ci_95"]

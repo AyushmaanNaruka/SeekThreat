@@ -109,6 +109,7 @@ def _pct(count: int, total: int) -> float:
 # Full-ranking metrics: AP, AUC-ROC, and bootstrap CIs
 # ---------------------------------------------------------------------------
 
+
 def _average_precision(ranked_labels: list[bool]) -> float:
     """Compute Average Precision (AP) over the full ranked list.
 
@@ -167,6 +168,7 @@ def _bootstrap_ci(
     re-ranks by position, then evaluates the metric.  Returns (lower, upper).
     """
     import random
+
     rng = random.Random(seed)
     n = len(ranked_labels)
     boot_vals: list[float] = []
@@ -361,8 +363,7 @@ def run_ers_validation(
 
     # Full-ranking metrics: AP, AUC-ROC, 95% bootstrap CIs (Task A-5)
     ranking_metrics: dict[str, dict[str, Any]] = {
-        pname: compute_ranking_metrics(scored_items, f"score_{pname}")
-        for pname in PROFILES
+        pname: compute_ranking_metrics(scored_items, f"score_{pname}") for pname in PROFILES
     }
 
     top_k = slice_sizes[0]
@@ -509,7 +510,10 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
                 "> **Caveat:** the corroboration target is NOT independent of ERS "
                 "(EPSS uses exploit-code availability among its features — D-029).",
                 "",
-                "| Profile | Weights (CVSS/EPSS/KEV) | AP | AP 95% CI | AUC-ROC | AUC-ROC 95% CI | Positives / n |",
+                (
+                    "| Profile | Weights (CVSS/EPSS/KEV) | AP | AP 95% CI "
+                    "| AUC-ROC | AUC-ROC 95% CI | Positives / n |"
+                ),
                 "| :--- | :--- | :--- | :--- | :--- | :--- | :--- |",
             ]
         )
@@ -525,7 +529,7 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
                     f"[{auc_lo:.4f}, {auc_hi:.4f}] | "
                     f"{m['n_positives']} / {m['n_items']} |"
                 )
-        lines.extend(["", f"Random baseline AUC: 0.5000.", ""])
+        lines.extend(["", "Random baseline AUC: 0.5000.", ""])
 
     lines.extend(
         [

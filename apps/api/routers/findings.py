@@ -224,7 +224,7 @@ def get_enriched_finding(
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=f"Enriched finding {finding_id!r} contains malformed data: {exc}",
-        )
+        ) from exc
     _audit_query(engagement, finding_id, {"found": finding is not None})
     if finding is None:
         raise HTTPException(

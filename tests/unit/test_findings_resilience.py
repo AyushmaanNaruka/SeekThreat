@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
+from pydantic import ValidationError
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -145,7 +146,8 @@ class TestFindingsReadPathResilience:
         api_client: TestClient,
         db_session: Session,
     ) -> None:
-        """Direct GET /findings/{id} on a malformed finding returns 422 with structured explanation."""
+        """Direct GET /findings/{id} on a malformed finding returns 422
+        with structured explanation."""
         _insert_finding_row(db_session, "fnd-bad-id", ["INVALID_CVE_999"], "Malformed Record")
 
         resp = api_client.get(f"/findings/fnd-bad-id?engagement_id={ENGAGEMENT_ID}")
@@ -166,7 +168,7 @@ class TestFindingsReadPathResilience:
         assert items[0].finding.finding_id == "fnd-val"
 
         # Explicit skip_invalid=False: raises validation error
-        with pytest.raises(Exception):
+        with pytest.raises((ValidationError, ValueError)):
             repo.get_by_engagement(ENGAGEMENT_ID, skip_invalid=False)
 
 

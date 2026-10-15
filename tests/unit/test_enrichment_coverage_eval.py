@@ -196,9 +196,7 @@ class TestRunEvaluation:
         assert cohort_labels_verified({"cohort_labels_verified": "yes"}) is False
         assert cohort_labels_verified({}) is False
         assert results["metadata"]["cohort_labels_verified"] is True
-        assert "Cohort labels are recorded as verified" in (
-            generate_markdown_report(results)
-        )
+        assert "Cohort labels are recorded as verified" in (generate_markdown_report(results))
         tampered = json.loads(json.dumps(results))
         tampered["metadata"]["cohort_labels_verified"] = False
         report = generate_markdown_report(tampered)

@@ -228,11 +228,10 @@ def _beat_reenrich(synced_cves: set[str], actor: str) -> dict[str, Any]:
     Returns a summary dict keyed by engagement_id. Each engagement is audited
     separately (actor=system:celery_beat, target=engagement:<id>/beat_sync).
     """
+    from apps.api.db.models import EnrichedFindingModel
     from apps.api.db.repositories import EnrichedFindingRepository
     from packages.schema.models.finding import Finding
     from services.enrichment.service import EnrichmentService
-
-    from apps.api.db.models import EnrichedFindingModel
 
     summary: dict[str, Any] = {
         "cves_synced": sorted(synced_cves),
@@ -309,11 +308,6 @@ def _beat_reenrich(synced_cves: set[str], actor: str) -> dict[str, Any]:
                     },
                 )
         except Exception as exc:  # noqa: BLE001
-            logger.error(
-                "beat_reenrich: failed for engagement %s: %s", eid, exc
-            )
-            summary["engagements"][eid] = {
-                "error": f"{type(exc).__name__}: {exc}"
-            }
+            logger.error("beat_reenrich: failed for engagement %s: %s", eid, exc)
+            summary["engagements"][eid] = {"error": f"{type(exc).__name__}: {exc}"}
     return summary
-

@@ -1,9 +1,11 @@
 """Unit tests for Task A-3: Fair NVD-only baseline KEV parsing and crediting.
 
 Verifies:
-1. NVDSource parses CISA KEV fields (cisaExploitAdd, cisaActionDue, cisaRequiredAction, cisaVulnerabilityName).
+1. NVDSource parses CISA KEV fields
+   (cisaExploitAdd, cisaActionDue, cisaRequiredAction, cisaVulnerabilityName).
 2. FusionEngine with NVD-only baseline credits KEV detection when NVD record carries cisaExploitAdd.
-3. Baseline engine returns in_kev = False (Source.NVD, Confidence.HIGH) when NVD record lacks KEV fields.
+3. Baseline engine returns in_kev = False (Source.NVD, Confidence.HIGH)
+   when NVD record lacks KEV fields.
 4. Baseline engine returns in_kev = None (DERIVED, Confidence.LOW) when CVE is not in NVD.
 5. evals/enrichment_coverage._signal_mirror_loaded recognizes baseline engine as loaded for in_kev.
 6. evals/enrichment_coverage._signal_state classifies in_kev from Source.NVD as positive.
@@ -17,14 +19,14 @@ from pathlib import Path
 
 import pytest
 
-from evals.enrichment_coverage import _signal_mirror_loaded, _signal_state, build_engines
+from evals.enrichment_coverage import _signal_mirror_loaded, _signal_state
 from packages.schema.models.finding import Finding
 from packages.schema.models.provenance import Attributed, Confidence, Provenance, Source
 from services.enrichment.fusion import FusionEngine
 from services.enrichment.sources.cisa_kev import CISAKevSource
 from services.enrichment.sources.cve_org import CVEOrgSource
 from services.enrichment.sources.epss import FirstEPSSSource
-from services.enrichment.sources.secondary import NVDRecord, NVDSource
+from services.enrichment.sources.secondary import NVDSource
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -43,13 +45,15 @@ def temp_nvd_cache(tmp_path: Path) -> Path:
             "cisaVulnerabilityName": "Apache Log4j Remote Code Execution Vulnerability",
             "descriptions": [{"lang": "en", "value": "Log4Shell vulnerability"}],
             "metrics": {
-                "cvssMetricV31": [{
-                    "cvssData": {
-                        "version": "3.1",
-                        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
-                        "baseScore": 10.0,
+                "cvssMetricV31": [
+                    {
+                        "cvssData": {
+                            "version": "3.1",
+                            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:C/C:H/I:H/A:H",
+                            "baseScore": 10.0,
+                        }
                     }
-                }]
+                ]
             },
         },
         "CVE-2020-0001": {
@@ -60,13 +64,15 @@ def temp_nvd_cache(tmp_path: Path) -> Path:
             # No cisaExploitAdd field
             "descriptions": [{"lang": "en", "value": "Non-KEV test vulnerability"}],
             "metrics": {
-                "cvssMetricV31": [{
-                    "cvssData": {
-                        "version": "3.1",
-                        "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
-                        "baseScore": 7.5,
+                "cvssMetricV31": [
+                    {
+                        "cvssData": {
+                            "version": "3.1",
+                            "vectorString": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+                            "baseScore": 7.5,
+                        }
                     }
-                }]
+                ]
             },
         },
     }
@@ -178,7 +184,9 @@ class TestFairNVDBaselineInKEV:
 
 
 class TestCoverageHarnessSignalHelpers:
-    def test_signal_mirror_loaded_true_for_baseline_when_nvd_loaded(self, temp_nvd_cache: Path) -> None:
+    def test_signal_mirror_loaded_true_for_baseline_when_nvd_loaded(
+        self, temp_nvd_cache: Path
+    ) -> None:
         nvd_source = NVDSource(cache_file=temp_nvd_cache)
         engine = FusionEngine(
             cve_org=CVEOrgSource(cache_file=None),

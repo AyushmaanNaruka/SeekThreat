@@ -259,9 +259,9 @@ class NVDRecord(BaseSourceRecord):
     description: str = ""
     # CISA KEV fields embedded in NVD 2.0 API responses.
     # Present only when the CVE appears in the CISA Known Exploited Vulnerabilities catalog.
-    cisa_exploit_add: str | None = None       # ISO date: when added to KEV
-    cisa_action_due: str | None = None        # ISO date: remediation deadline
-    cisa_required_action: str | None = None   # free-text action description
+    cisa_exploit_add: str | None = None  # ISO date: when added to KEV
+    cisa_action_due: str | None = None  # ISO date: remediation deadline
+    cisa_required_action: str | None = None  # free-text action description
     cisa_vulnerability_name: str | None = None  # KEV catalog name
 
 
@@ -403,8 +403,12 @@ class NVDSource(BaseEnrichmentSource[NVDRecord]):
         # Normalise: strip whitespace, treat empty string as None.
         cisa_exploit_add = str(cisa_exploit_add).strip() or None if cisa_exploit_add else None
         cisa_action_due = str(cisa_action_due).strip() or None if cisa_action_due else None
-        cisa_required_action = str(cisa_required_action).strip() or None if cisa_required_action else None
-        cisa_vulnerability_name = str(cisa_vulnerability_name).strip() or None if cisa_vulnerability_name else None
+        cisa_required_action = (
+            str(cisa_required_action).strip() or None if cisa_required_action else None
+        )
+        cisa_vulnerability_name = (
+            str(cisa_vulnerability_name).strip() or None if cisa_vulnerability_name else None
+        )
 
         return NVDRecord(
             cve_id=cve_id,

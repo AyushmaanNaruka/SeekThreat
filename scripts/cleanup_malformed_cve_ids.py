@@ -95,12 +95,14 @@ def cleanup_malformed_cve_ids(
 
         if row_changed:
             modified_rows += 1
-            details.append({
-                "engagement_id": row.engagement_id,
-                "finding_id": row.finding_id,
-                "before": raw_cves,
-                "after": cleaned_cves,
-            })
+            details.append(
+                {
+                    "engagement_id": row.engagement_id,
+                    "finding_id": row.finding_id,
+                    "before": raw_cves,
+                    "after": cleaned_cves,
+                }
+            )
             if apply:
                 finding_data["cve_ids"] = cleaned_cves
                 row.finding_data = finding_data
@@ -110,7 +112,9 @@ def cleanup_malformed_cve_ids(
         session.commit()
         logger.info("Successfully committed updates for %d rows.", modified_rows)
     elif not apply and modified_rows > 0:
-        logger.info("Dry-run complete. %d rows would be updated. Run with --apply to commit.", modified_rows)
+        logger.info(
+            "Dry-run complete. %d rows would be updated. Run with --apply to commit.", modified_rows
+        )
     else:
         logger.info("Scan complete. All %d rows conform to valid CVE ID schemas.", total_scanned)
 
@@ -124,20 +128,29 @@ def cleanup_malformed_cve_ids(
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Clean up malformed CVE IDs in EnrichedFinding rows.")
-    parser.add_argument("--apply", action="store_true", help="Apply fixes to database (default is dry-run)")
+    parser = argparse.ArgumentParser(
+        description="Clean up malformed CVE IDs in EnrichedFinding rows."
+    )
+    parser.add_argument(
+        "--apply", action="store_true", help="Apply fixes to database (default is dry-run)"
+    )
     parser.add_argument("--engagement-id", type=str, help="Optional engagement ID filter")
     args = parser.parse_args()
 
     session = SessionLocal()
     try:
-        results = cleanup_malformed_cve_ids(session, apply=args.apply, engagement_id=args.engagement_id)
+        results = cleanup_malformed_cve_ids(
+            session, apply=args.apply, engagement_id=args.engagement_id
+        )
         print(f"Total scanned: {results['total_scanned']}")
         print(f"Modified rows: {results['modified_rows']}")
         print(f"Rectified CVE IDs: {results['rectified_cve_count']}")
         print(f"Dropped malformed CVE IDs: {results['dropped_cve_count']}")
         for detail in results["details"]:
-            print(f"  [{detail['engagement_id']} / {detail['finding_id']}]: {detail['before']} -> {detail['after']}")
+            print(
+                f"  [{detail['engagement_id']} / {detail['finding_id']}]: "
+                f"{detail['before']} -> {detail['after']}"
+            )
     finally:
         session.close()
 

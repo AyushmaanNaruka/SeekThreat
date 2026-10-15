@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import sys
 from datetime import UTC, datetime
@@ -30,17 +31,18 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
 # Stratum name -> cohort label mapping
 _STRATUM_TO_COHORT: dict[str, str] = {
-    "kev_high_epss":     "kev_high_epss",
-    "kev_low_epss":      "kev_low_epss",
+    "kev_high_epss": "kev_high_epss",
+    "kev_low_epss": "kev_low_epss",
     "non_kev_high_epss": "non_kev_high_epss",
-    "non_kev_mid_epss":  "non_kev_mid_epss",
-    "non_kev_low_epss":  "non_kev_low_epss",
+    "non_kev_mid_epss": "non_kev_mid_epss",
+    "non_kev_low_epss": "non_kev_low_epss",
 }
 
 
 # ---------------------------------------------------------------------------
 # Mirror readers (offline, no network)
 # ---------------------------------------------------------------------------
+
 
 def _load_json(path: Path) -> dict | list | None:
     if not path.exists():
@@ -71,10 +73,8 @@ def _build_epss_index(mirrors_dir: Path) -> dict[str, float]:
     if isinstance(data, dict) and "data" in data:
         for entry in data["data"]:
             cid = str(entry.get("cve", "")).strip().upper()
-            try:
+            with contextlib.suppress(KeyError, TypeError, ValueError):
                 scores[cid] = float(entry["epss"])
-            except (KeyError, TypeError, ValueError):
-                pass
     return scores
 
 
@@ -89,6 +89,7 @@ def _build_nvd_index(mirrors_dir: Path) -> dict[str, dict]:
         return {}
     # Flat {cve_id: entry} — filter by CVE-like keys
     import re
+
     cve_re = re.compile(r"^CVE-[0-9]{4}-[0-9]{4,7}$", re.ASCII)
     return {k.upper(): v for k, v in data.items() if cve_re.match(str(k).upper())}
 
@@ -118,6 +119,7 @@ def _build_euvd_index(mirrors_dir: Path) -> dict[str, dict]:
         return {}
     if isinstance(data, dict):
         import re
+
         cve_re = re.compile(r"^CVE-[0-9]{4}-[0-9]{4,7}$", re.ASCII)
         return {k.upper(): v for k, v in data.items() if cve_re.match(str(k).upper())}
     # list format
@@ -152,6 +154,7 @@ def _build_cve_org_index(mirrors_dir: Path) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 # Per-CVE evidence builder
 # ---------------------------------------------------------------------------
+
 
 def _evidence_for(
     cve_id: str,
@@ -200,6 +203,7 @@ def _evidence_for(
 # Main dataset builder
 # ---------------------------------------------------------------------------
 
+
 def build_baseline(
     mirrors_dir: Path,
     cve_list_path: Path,
@@ -209,8 +213,9 @@ def build_baseline(
     """Build enrichment_baseline.json from mirrors + selection manifest."""
     # Load CVE list
     cve_list = [
-        l.strip() for l in cve_list_path.read_text(encoding="utf-8").splitlines()
-        if l.strip()
+        line.strip()
+        for line in cve_list_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
     ]
     print(f"[info] {len(cve_list)} CVEs from {cve_list_path.name}")
 
@@ -229,17 +234,24 @@ def build_baseline(
     epss_idx = _build_epss_index(mirrors_dir)
     nvd_idx = _build_nvd_index(mirrors_dir)
     euvd_idx = _build_euvd_index(mirrors_dir)
-    print(f"[info]   KEV: {len(kev_idx):,}  EPSS: {len(epss_idx):,}  NVD: {len(nvd_idx):,}  EUVD: {len(euvd_idx):,}")
+    print(
+        f"[info]   KEV: {len(kev_idx):,}  EPSS: {len(epss_idx):,}  "
+        f"NVD: {len(nvd_idx):,}  EUVD: {len(euvd_idx):,}"
+    )
 
     items: list[dict] = []
     for cve_id in cve_list:
         cohort = cve_to_cohort.get(cve_id.upper(), "unclassified")
-        evidence = _evidence_for(cve_id, mirrors_dir, kev_idx, epss_idx, nvd_idx, euvd_idx, retrieved_at)
-        items.append({
-            "cve_id": cve_id,
-            "cohort": cohort,
-            "evidence": evidence,
-        })
+        evidence = _evidence_for(
+            cve_id, mirrors_dir, kev_idx, epss_idx, nvd_idx, euvd_idx, retrieved_at
+        )
+        items.append(
+            {
+                "cve_id": cve_id,
+                "cohort": cohort,
+                "evidence": evidence,
+            }
+        )
 
     # Mirror sidecar info for traceability
     def _mirror_info(name: str) -> dict:
@@ -248,6 +260,7 @@ def build_baseline(
             return {"present": False}
         try:
             import hashlib
+
             digest = hashlib.sha256()
             with open(p, "rb") as fh:
                 for chunk in iter(lambda: fh.read(1 << 20), b""):
@@ -263,7 +276,12 @@ def build_baseline(
                 synced_at = str(meta.get("synced_at", ""))
             except (OSError, ValueError):
                 pass
-        return {"present": True, "sha256": sha, "synced_at": synced_at, "size_bytes": p.stat().st_size}
+        return {
+            "present": True,
+            "sha256": sha,
+            "synced_at": synced_at,
+            "size_bytes": p.stat().st_size,
+        }
 
     dataset = {
         "_synthetic": False,
@@ -289,8 +307,7 @@ def build_baseline(
             "matching the documented stratified selection rule."
         ),
         "mirrors_used": {
-            name: _mirror_info(name)
-            for name in ("nvd", "cisa_kev", "epss_v4", "euvd")
+            name: _mirror_info(name) for name in ("nvd", "cisa_kev", "epss_v4", "euvd")
         },
         "generated_at": retrieved_at,
         "generated_by": "evals/scripts/build_enrichment_baseline.py",
@@ -305,11 +322,20 @@ def build_baseline(
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build enrichment_baseline.json from mirrors + manifest.")
+    parser = argparse.ArgumentParser(
+        description="Build enrichment_baseline.json from mirrors + manifest."
+    )
     parser.add_argument("--mirrors-dir", default=str(_REPO_ROOT / "data" / "enrichment_cache"))
-    parser.add_argument("--cve-list", default=str(_REPO_ROOT / "evals" / "golden" / "eval_cve_list.txt"))
-    parser.add_argument("--manifest", default=str(_REPO_ROOT / "evals" / "golden" / "eval_cve_selection_manifest.json"))
-    parser.add_argument("--out", default=str(_REPO_ROOT / "evals" / "golden" / "enrichment_baseline.json"))
+    parser.add_argument(
+        "--cve-list", default=str(_REPO_ROOT / "evals" / "golden" / "eval_cve_list.txt")
+    )
+    parser.add_argument(
+        "--manifest",
+        default=str(_REPO_ROOT / "evals" / "golden" / "eval_cve_selection_manifest.json"),
+    )
+    parser.add_argument(
+        "--out", default=str(_REPO_ROOT / "evals" / "golden" / "enrichment_baseline.json")
+    )
     args = parser.parse_args(argv)
 
     return build_baseline(

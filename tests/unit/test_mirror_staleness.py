@@ -13,23 +13,19 @@ Invariants tested:
 from __future__ import annotations
 
 import json
-import tempfile
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import pytest
-
-from packages.schema.models.observation import ObservationKind
 from packages.schema.models.provenance import Confidence, Source
 from services.enrichment.fusion import FusionEngine
-from services.enrichment.sources.base import BaseEnrichmentSource, clear_mirror_cache
+from services.enrichment.sources.base import clear_mirror_cache
 from services.enrichment.sources.cisa_kev import CISAKevSource
 from services.enrichment.sources.secondary import ExploitDBSource, MetasploitSource
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _write_meta(mirror_path: Path, synced_at: datetime) -> None:
     """Write a .meta.json sidecar with the given synced_at timestamp."""
@@ -70,6 +66,7 @@ def _fresh_kev_mirror(tmp: Path, days_old: float = 1.0) -> tuple[Path, CISAKevSo
 def _simple_finding(cve_id: str = "CVE-2023-99999") -> object:
     """Minimal Finding-like object with one CVE ID."""
     from packages.schema.models.finding import Finding
+
     return Finding(
         finding_id="fnd-1",
         asset_id="ast-1",
@@ -87,6 +84,7 @@ def _simple_finding(cve_id: str = "CVE-2023-99999") -> object:
 # ---------------------------------------------------------------------------
 # BaseEnrichmentSource.mirror_age_days / is_stale
 # ---------------------------------------------------------------------------
+
 
 class TestMirrorAgeAndIsStale:
     def test_no_cache_file_age_is_none(self):
@@ -124,6 +122,7 @@ class TestMirrorAgeAndIsStale:
 # ---------------------------------------------------------------------------
 # FusionEngine staleness downgrade — KEV
 # ---------------------------------------------------------------------------
+
 
 class TestKevStalenessDowngrade:
     def _engine_with_kev(self, tmp_path: Path, days_old: float) -> FusionEngine:
@@ -190,10 +189,13 @@ class TestKevStalenessDowngrade:
 # FusionEngine staleness downgrade — ExploitDB
 # ---------------------------------------------------------------------------
 
+
 class TestExploitDBStalenessDowngrade:
     def _engine_with_exploitdb(self, tmp_path: Path, days_old: float) -> FusionEngine:
         mirror = tmp_path / "exploitdb.json"
-        mirror.write_text(json.dumps({"CVE-2020-0001": {"exploit_ids": ["12345"]}}), encoding="utf-8")
+        mirror.write_text(
+            json.dumps({"CVE-2020-0001": {"exploit_ids": ["12345"]}}), encoding="utf-8"
+        )
         _write_meta(mirror, datetime.now(UTC) - timedelta(days=days_old))
         clear_mirror_cache(Source.EXPLOITDB)
         edb = ExploitDBSource(cache_file=mirror)
@@ -204,7 +206,11 @@ class TestExploitDBStalenessDowngrade:
         fields = engine.fuse(_simple_finding())
         result = fields.get("has_public_exploit")
         if result is not None:
-            assert result.provenance.confidence in (Confidence.MEDIUM, Confidence.HIGH, Confidence.LOW)
+            assert result.provenance.confidence in (
+                Confidence.MEDIUM,
+                Confidence.HIGH,
+                Confidence.LOW,
+            )
             if result.value is False:
                 assert result.provenance.confidence == Confidence.MEDIUM
 
@@ -224,10 +230,13 @@ class TestExploitDBStalenessDowngrade:
 # FusionEngine staleness downgrade — Metasploit
 # ---------------------------------------------------------------------------
 
+
 class TestMetasploitStalenessDowngrade:
     def _engine_with_metasploit(self, tmp_path: Path, days_old: float) -> FusionEngine:
         mirror = tmp_path / "metasploit.json"
-        mirror.write_text(json.dumps({"CVE-2020-0001": {"module_names": ["exploit/test"]}}), encoding="utf-8")
+        mirror.write_text(
+            json.dumps({"CVE-2020-0001": {"module_names": ["exploit/test"]}}), encoding="utf-8"
+        )
         _write_meta(mirror, datetime.now(UTC) - timedelta(days=days_old))
         clear_mirror_cache(Source.METASPLOIT)
         msf = MetasploitSource(cache_file=mirror)

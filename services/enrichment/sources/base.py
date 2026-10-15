@@ -278,7 +278,11 @@ class BaseEnrichmentSource(ABC, Generic[RecordT]):
         """
         from apps.api.core.config import settings  # local import: avoids circular at module level
 
-        limit = threshold_days if threshold_days is not None else settings.mirror_staleness_threshold_days
+        limit = (
+            threshold_days
+            if threshold_days is not None
+            else settings.mirror_staleness_threshold_days
+        )
         age = self.mirror_age_days()
         if age is None:
             return False

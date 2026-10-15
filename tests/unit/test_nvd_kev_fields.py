@@ -16,10 +16,10 @@ import pytest
 
 from services.enrichment.sources.secondary import NVDRecord, NVDSource
 
-
 # ---------------------------------------------------------------------------
 # Minimal NVD 2.0 raw record helpers
 # ---------------------------------------------------------------------------
+
 
 def _nvd_raw(
     cve_id: str = "CVE-2021-44228",
@@ -68,12 +68,11 @@ def _nvd_raw(
 def _make_nvd_mirror(entries: list[dict]) -> Path:
     """Write a flat {cve_id: entry} NVD mirror to a temp file."""
     mirror_data = {e["id"]: e for e in entries}
-    tmp = tempfile.NamedTemporaryFile(
+    with tempfile.NamedTemporaryFile(
         mode="w", suffix=".json", delete=False, encoding="utf-8"
-    )
-    json.dump(mirror_data, tmp, ensure_ascii=False)
-    tmp.flush()
-    return Path(tmp.name)
+    ) as tmp:
+        json.dump(mirror_data, tmp, ensure_ascii=False)
+        return Path(tmp.name)
 
 
 class TestNVDRecordKEVFields:
@@ -175,7 +174,6 @@ class TestNVDSourceParsesKEVFields:
 
     def test_real_nvd_mirror_has_kev_for_known_cve(self) -> None:
         """Regression: the real NVD mirror contains KEV fields for Log4Shell."""
-        import os
         mirror_path = Path("data/enrichment_cache/nvd.json")
         if not mirror_path.exists():
             pytest.skip("Real NVD mirror not present")
@@ -199,11 +197,13 @@ class TestNVDKEVInRealMirror:
 
     def test_mirror_format_is_flat_dict(self) -> None:
         import re
+
         mirror_path = Path("data/enrichment_cache/nvd.json")
         if not mirror_path.exists():
             pytest.skip("Real NVD mirror not present")
 
         import json
+
         data = json.loads(mirror_path.read_text(encoding="utf-8"))
         assert isinstance(data, dict), "Expected flat {cve_id: entry} dict"
         cve_re = re.compile(r"^CVE-[0-9]{4}-[0-9]+$")

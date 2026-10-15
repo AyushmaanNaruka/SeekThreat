@@ -67,7 +67,11 @@ class TestPerCveEvidenceRecords:
 
     def test_item_count_matches_eval_cve_list(self, baseline_data: dict) -> None:
         assert LIST_PATH.exists()
-        expected_cves = [l.strip() for l in LIST_PATH.read_text(encoding="utf-8").splitlines() if l.strip()]
+        expected_cves = [
+            line.strip()
+            for line in LIST_PATH.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
         items = baseline_data.get("items", [])
         actual_cves = [item["cve_id"] for item in items]
         assert actual_cves == expected_cves
@@ -97,7 +101,10 @@ class TestPerCveEvidenceRecords:
             kev = evidence.get("cisa_kev")
             assert isinstance(kev, dict), f"{cve_id} missing cisa_kev evidence"
             assert isinstance(kev.get("in_catalog"), bool)
-            assert kev.get("source_url") == "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+            assert (
+                kev.get("source_url")
+                == "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"
+            )
 
             # Check EPSS evidence
             epss = evidence.get("epss")

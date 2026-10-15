@@ -27,7 +27,10 @@ from apps.api.main import app
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _write_meta(path: Path, synced_at: datetime, record_count: int = 42, sha256: str = "aabbcc") -> None:
+
+def _write_meta(
+    path: Path, synced_at: datetime, record_count: int = 42, sha256: str = "aabbcc"
+) -> None:
     meta = {
         "synced_at": synced_at.isoformat(),
         "record_count": record_count,
@@ -48,6 +51,7 @@ def _write_not_found(path: Path, cves: list[str]) -> None:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 class TestFeedsStatusEndpoint:
     @pytest.fixture(autouse=True)
@@ -137,5 +141,14 @@ class TestFeedsStatusEndpoint:
     def test_all_8_feeds_present(self):
         resp = self.client.get("/feeds/status")
         names = {e["name"] for e in resp.json()}
-        expected = {"kev", "epss", "exploitdb", "metasploit", "cve_org", "vulnrichment", "euvd", "nvd"}
+        expected = {
+            "kev",
+            "epss",
+            "exploitdb",
+            "metasploit",
+            "cve_org",
+            "vulnrichment",
+            "euvd",
+            "nvd",
+        }
         assert names == expected, f"Missing or extra feeds: {names ^ expected}"

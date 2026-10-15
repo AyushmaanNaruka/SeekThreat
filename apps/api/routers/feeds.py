@@ -11,17 +11,16 @@ sidecar is absent the field is null and last_sync_result is "never".
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter
 from pydantic import BaseModel
 
-from apps.api.core.audit import log_audit_event
 from apps.api.core import config as app_config
-from packages.schema.models.provenance import Source
-from services.enrichment.sources.base import meta_path, read_mirror_meta
+from apps.api.core.audit import log_audit_event
+from services.enrichment.sources.base import read_mirror_meta
 from services.enrichment.sources.sync import MIRROR_FILENAMES, not_found_path
 
 router = APIRouter()
@@ -131,6 +130,7 @@ def get_feeds_status() -> list[FeedStatus]:
     for source, filename in MIRROR_FILENAMES.items():
         # Use the SOURCE_NAMES short name for the "name" field where possible.
         from services.enrichment.sources.sync import SOURCE_NAMES
+
         name = SOURCE_NAMES.get(source, source.value)
         mirror_file = Path(cache_dir) / filename
         statuses.append(_feed_status(name, mirror_file))

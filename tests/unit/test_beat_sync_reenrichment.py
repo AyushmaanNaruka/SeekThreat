@@ -9,8 +9,6 @@ Invariants tested:
 
 from __future__ import annotations
 
-import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -18,7 +16,6 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from apps.api.core.audit import clear_audit_log, get_audit_log
-
 
 # ---------------------------------------------------------------------------
 # Helpers: mock DB session returning enriched-finding-like rows
@@ -30,6 +27,7 @@ def _mock_session_with_findings(findings_by_engagement: dict[str, list[dict[str,
 
     ``findings_by_engagement`` maps engagement_id -> list of finding_data dicts.
     """
+
     class FakeSession:
         def __init__(self):
             self._committed = False

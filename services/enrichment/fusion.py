@@ -375,7 +375,10 @@ class FusionEngine:
                                     source=Source.NVD,
                                     confidence=Confidence.HIGH,
                                     retrieved_at=nvd_rec.retrieved_at,
-                                    note=f"Confirmed active exploitation in the wild via NVD CISA KEV annotation ({cve_id})",
+                                    note=(
+                                        f"Confirmed active exploitation in the wild "
+                                        f"via NVD CISA KEV annotation ({cve_id})"
+                                    ),
                                 ),
                             )
                         }
@@ -409,7 +412,10 @@ class FusionEngine:
                                 source=Source.NVD,
                                 confidence=Confidence.HIGH,
                                 retrieved_at=now,
-                                note=f"None of {', '.join(cve_ids)} carry CISA KEV annotations in NVD",
+                                note=(
+                                    f"None of {', '.join(cve_ids)} carry "
+                                    f"CISA KEV annotations in NVD"
+                                ),
                             ),
                         )
                     }

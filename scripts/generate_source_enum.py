@@ -61,7 +61,10 @@ def main() -> int:
 
     if args.check:
         if not OUTPUT_PATH.exists():
-            print(f"ERROR: {OUTPUT_PATH} does not exist. Run without --check to generate.", file=sys.stderr)
+            print(
+                f"ERROR: {OUTPUT_PATH} does not exist. Run without --check to generate.",
+                file=sys.stderr,
+            )
             return 1
 
         current_content = OUTPUT_PATH.read_text(encoding="utf-8")
@@ -73,7 +76,7 @@ def main() -> int:
 
         if current_json.get("sources") != payload["sources"]:
             print(
-                f"ERROR: {OUTPUT_PATH} is out of sync with packages.schema.models.provenance.Source enum!\n"
+                f"ERROR: {OUTPUT_PATH} is out of sync with Source enum!\n"
                 f"Current sources in JSON: {current_json.get('sources')}\n"
                 f"Expected sources from Enum: {payload['sources']}\n"
                 f"Run `python scripts/generate_source_enum.py` to regenerate.",
