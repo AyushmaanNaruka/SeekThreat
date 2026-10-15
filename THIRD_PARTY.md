@@ -41,6 +41,8 @@ dependency manifests.
 | PyYAML | MIT | Service | Rules-as-data loading for the path engine (D-004) | Ayushmaan | 2026-09-05 |
 | Nuclei | MIT (ProjectDiscovery) | Service | Invoked as subprocess, JSONL output parsed. Source never vendored | Ayushmaan | 2026-09-20 |
 | Nuclei Templates | MIT (ProjectDiscovery) | Vendored | Official vulnerability template archive pinned in container image | Mayank | 2026-09-25 |
+| Nikto | GPL-2.0 (sullo/nikto) | Service | Invoked as subprocess, JSON report parsed. Source never vendored or copied (D-043) | Claude agent — human to confirm | 2026-10-12 |
+| ssh-audit | MIT (jtesta/ssh-audit LICENSE) | Service | Invoked as subprocess, `-j` JSON output parsed. Source never vendored (D-043) | Claude agent read LICENSE — human to confirm | 2026-10-12 |
 | Greenbone / OpenVAS | GPL | Service | Run as container, GMP API via python-gvm | | |
 | Foundation-Sec-8B-Reasoning | Open weights | Service | Local model serving | | |
 | CISA Vulnrichment | CC0-1.0 (Public Domain, cisagov/vulnrichment LICENSE) | Data | Per-CVE files fetched for CVEs we have seen: SSVC decision points, CWE, CVSS fallback | Mayank Narang | 2026-10-11 |

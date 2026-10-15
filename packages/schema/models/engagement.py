@@ -50,6 +50,11 @@ def target_matches(target: str, pattern: str) -> bool:
     pattern = pattern.strip()
     if not target or not pattern:
         return False
+    if "%" in target:
+        # An IPv6 scope id ("fe80::1%eth0") is free text that ipaddress accepts and then
+        # ignores for network membership, so "fd00::1%x,10.9.9.9" would match fd00::/8.
+        # No valid hostname contains '%' either, so refusing it outright loses nothing.
+        return False
 
     try:
         network = ipaddress.ip_network(pattern, strict=False)

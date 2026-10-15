@@ -17,6 +17,15 @@ import {
   hasActiveScans,
   DEFAULT_POLLING_CONFIG,
 } from "../../lib/polling";
+import {
+  buildNiktoRequest,
+  buildNucleiRequest,
+  buildSshAuditRequest,
+  isTargetInScope,
+  scannerTitle,
+  splitHostPortScheme,
+  type ScannerName,
+} from "../../lib/scanOptions";
 import "./dashboard.css";
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
@@ -73,12 +82,29 @@ function formatScanTarget(scan: ScanItem): string {
   if (scan.options?.ports && !scan.target.includes(":")) {
     return `${scan.target}:${scan.options.ports}`;
   }
+  // nikto and ssh-audit carry their port in options.port (bare host target).
+  if (
+    (scan.scanner === "nikto" || scan.scanner === "ssh-audit") &&
+    scan.options?.port &&
+    !scan.target.includes(":")
+  ) {
+    return `${scan.target}:${scan.options.port}`;
+  }
   return scan.target;
 }
 
 export default function DashboardPage() {
-  const [activeNav, setActiveNav] = useState("Engagements");
-  const [selectedScanner, setSelectedScanner] = useState<"nmap" | "nuclei">("nmap");
+  const [activeNav, setActiveNav] = useState("Overview");
+
+  // Overview, Engagements and Scans share one combined view; the nav scrolls to
+  // the matching section (after the view re-renders if Findings was showing).
+  const goToSection = (nav: string, sectionId: string) => {
+    setActiveNav(nav);
+    setTimeout(() => {
+      document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 0);
+  };
+  const [selectedScanner, setSelectedScanner] = useState<ScannerName>("nmap");
   const [targetInput, setTargetInput] = useState("");
   const [scopeWarning, setScopeWarning] = useState<string | null>(null);
 
@@ -86,8 +112,10 @@ export default function DashboardPage() {
   const [engagements, setEngagements] = useState<EngagementItem[]>([]);
   const [selectedEngagementId, setSelectedEngagementId] = useState<string>("");
   const [scans, setScans] = useState<ScanItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [apiError, setApiError] = useState<string | null>(null);
+  // From GET /health on every refresh, not inferred from other calls (a 403 on
+  // launch is the API answering, not the API being down).
+  const [apiHealthy, setApiHealthy] = useState<boolean | null>(null);
   const [nowTick, setNowTick] = useState<number>(Date.now());
   const [pollGuardExceeded, setPollGuardExceeded] = useState(false);
   const pollAttemptsRef = React.useRef(0);
@@ -98,7 +126,7 @@ export default function DashboardPage() {
     engagement_id: "",
     name: "",
     authorized_by: "",
-    allowlist: "127.0.0.1, 127.0.0.1/32, localhost",
+    allowlist: "172.20.0.0/16",
     granted_at: "",
     expires_at: "",
   });
@@ -118,18 +146,34 @@ export default function DashboardPage() {
     engagements[0] ||
     null;
 
+  // "none" (not "expired") when no engagement exists yet: nothing has lapsed.
   const authStatus = activeEngagement
     ? computeEngagementStatus(activeEngagement.granted_at, activeEngagement.expires_at)
-    : "expired";
+    : "none";
 
   // Data fetching
+  // The engagement the latest fetch is for. A response for an engagement the
+  // operator has since switched away from is dropped, so a slow old fetch can't
+  // overwrite the new engagement's scans.
+  const latestScanScopeRef = React.useRef(selectedEngagementId);
+  // Declared before the load effect below, so it updates first on each change.
+  useEffect(() => {
+    latestScanScopeRef.current = selectedEngagementId;
+  }, [selectedEngagementId]);
+
   const refreshData = useCallback(async () => {
+    const scope = selectedEngagementId;
     try {
+      api
+        .getHealth()
+        .then(() => setApiHealthy(true))
+        .catch(() => setApiHealthy(false));
       const [engList, scanList] = await Promise.all([
         api.getEngagements(),
-        api.getScans(),
+        api.getScans(selectedEngagementId || undefined),
       ]);
       setEngagements(engList);
+      if (scope !== latestScanScopeRef.current) return;
       setScans(scanList);
       if (engList.length > 0 && !selectedEngagementId) {
         setSelectedEngagementId(engList[0].engagement_id);
@@ -141,8 +185,6 @@ export default function DashboardPage() {
       if (engagements.length === 0) {
         setApiError(err.message || "Failed to connect to SeekThreat API backend.");
       }
-    } finally {
-      setLoading(false);
     }
   }, [selectedEngagementId, engagements.length]);
 
@@ -216,35 +258,16 @@ export default function DashboardPage() {
     }
 
     const trimmed = val.trim();
-    let hostTarget = trimmed;
-    if (hostTarget.includes("://")) {
-      try {
-        hostTarget = new URL(hostTarget).hostname;
-      } catch {
-        hostTarget = hostTarget.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0].split(":")[0];
-      }
-    } else if (hostTarget.includes(":") && !hostTarget.includes("/")) {
-      hostTarget = hostTarget.split(":")[0];
-    }
-
     const allowlist = activeEngagement.allowlist;
-    const isAllowed = allowlist.some((entry) => {
-      const pattern = entry.trim();
-      if (pattern === trimmed || pattern === hostTarget) return true;
-      if (pattern.startsWith("*.") && (trimmed.endsWith(pattern.slice(1)) || hostTarget.endsWith(pattern.slice(1)))) return true;
-      if (pattern.includes("/")) {
-        // Simple CIDR prefix check for common lab subnets
-        const base = pattern.split("/")[0].split(".").slice(0, 2).join(".");
-        if (trimmed.startsWith(base) || hostTarget.startsWith(base)) return true;
-      }
-      if ((trimmed.startsWith("127.") || hostTarget.startsWith("127.")) && pattern.startsWith("127.")) return true;
-      if ((trimmed.includes("localhost") || hostTarget.includes("localhost")) && pattern.includes("localhost")) return true;
-      return false;
-    });
+    // false = definitely outside; null = the browser can't tell (IPv6 range), so
+    // let the server's gate decide rather than blocking the launch.
+    const isAllowed = isTargetInScope(trimmed, allowlist) !== false;
 
     if (!isAllowed) {
       setScopeWarning(
-        `Target "${trimmed}" is outside authorized scope (${allowlist.join(", ")}). Server authorization gate will reject this target.`
+        trimmed.includes("/") && !trimmed.includes("://")
+          ? `"${trimmed}" is a range. The authorization gate accepts one host per scan: enter a single IP or hostname.`
+          : `Target "${trimmed}" is outside authorized scope (${allowlist.join(", ")}). Server authorization gate will reject this target.`
       );
     } else {
       setScopeWarning(null);
@@ -260,9 +283,11 @@ export default function DashboardPage() {
       setShowCreateModal(true);
       return;
     }
-    let target =
-      targetInput.trim() ||
-      (activeEngagement.allowlist[0] || "127.0.0.1");
+    let target = targetInput.trim();
+    if (!target) {
+      setApiError("Enter a target: an IP, hostname or URL inside this engagement's scope.");
+      return;
+    }
 
     setIsLaunching(true);
     try {
@@ -271,61 +296,25 @@ export default function DashboardPage() {
       setPollGuardExceeded(false);
       const options: Record<string, any> = {};
       if (selectedScanner === "nuclei") {
-        options.template = "tests/fixtures/nuclei/test_http_detect.yaml";
-        // Send the BARE HOST, never a URL. The API's authorization gate compares
-        // `target` as an exact string and deliberately refuses to parse a URL down
-        // to a host (packages/schema/models/engagement.py): if the browser and the
-        // server disagreed about where the host ended, an allowlist check could
-        // pass for one host while the scan hit another. The adapter rebuilds the
-        // URL from the validated `scheme` and `port` options instead. See
-        // DECISIONS.md D-025. Sending "http://localhost" here is what produced
-        // "Target 'http://localhost' is not authorized" against an allowlist that
-        // plainly contained "localhost".
-        let scheme = "http";
-        let port: string | null = null;
-        if (target.includes("://")) {
-          try {
-            const parsed = new URL(target);
-            scheme = parsed.protocol === "https:" ? "https" : "http";
-            target = parsed.hostname;
-            if (parsed.port) port = parsed.port;
-          } catch {
-            target = target.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0];
-            const bits = target.split(":");
-            target = bits[0];
-            if (bits[1] && /^\d+$/.test(bits[1])) port = bits[1];
-          }
-        } else if (target.includes(":") && !target.includes("/")) {
-          const bits = target.split(":");
-          target = bits[0];
-          if (bits[1] && /^\d+$/.test(bits[1])) port = bits[1];
-        }
-        // new URL() brackets an IPv6 literal; the gate matches on the bare address
-        // and the adapter re-brackets it for nuclei.
-        if (target.startsWith("[") && target.endsWith("]")) {
-          target = target.slice(1, -1);
-        }
-        options.scheme = scheme;
-        if (port) options.port = port;
+        // Bare host + scheme/port options, never a URL. See lib/scanOptions.ts
+        // and DECISIONS.md D-025.
+        const built = buildNucleiRequest(target);
+        target = built.target;
+        Object.assign(options, built.options);
+      } else if (selectedScanner === "nikto") {
+        const built = buildNiktoRequest(target);
+        target = built.target;
+        Object.assign(options, built.options);
+      } else if (selectedScanner === "ssh-audit") {
+        const built = buildSshAuditRequest(target);
+        target = built.target;
+        Object.assign(options, built.options);
       } else if (selectedScanner === "nmap") {
         options.no_ping = true;
-        if (target.startsWith("http://") || target.startsWith("https://")) {
-          try {
-            const parsed = new URL(target);
-            target = parsed.hostname;
-            if (parsed.port) {
-              options.ports = parsed.port;
-            }
-          } catch {
-            target = target.replace(/^https?:\/\//, "").split("/")[0];
-          }
-        } else if (target.includes(":") && !target.includes("/")) {
-          const parts = target.split(":");
-          target = parts[0];
-          if (parts[1] && /^\d+$/.test(parts[1])) {
-            options.ports = parts[1];
-          }
-        }
+        // Same parser as the other scanners: handles bare and bracketed IPv6.
+        const { host, port } = splitHostPortScheme(target);
+        target = host.replace(/^\[|\]$/g, "");
+        if (port) options.ports = port;
       }
       await api.launchScan({
         engagement_id: activeEngagement.engagement_id,
@@ -394,7 +383,7 @@ export default function DashboardPage() {
         engagement_id: "",
         name: "",
         authorized_by: "",
-        allowlist: "127.0.0.1, 127.0.0.1/32, localhost",
+        allowlist: "172.20.0.0/16",
         granted_at: "",
         expires_at: "",
       });
@@ -456,7 +445,7 @@ export default function DashboardPage() {
           <nav className="db-nav">
             <div
               className={`db-nav-item ${activeNav === "Overview" ? "active" : ""}`}
-              onClick={() => setActiveNav("Overview")}
+              onClick={() => goToSection("Overview", "db-section-top")}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -469,7 +458,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Engagements" ? "active" : ""}`}
-              onClick={() => setActiveNav("Engagements")}
+              onClick={() => goToSection("Engagements", "db-section-engagements")}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -481,7 +470,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Scans" ? "active" : ""}`}
-              onClick={() => setActiveNav("Scans")}
+              onClick={() => goToSection("Scans", "db-section-scans")}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -490,17 +479,6 @@ export default function DashboardPage() {
                 </svg>
                 <span>Scans</span>
               </div>
-            </div>
-
-            <div className="db-nav-item">
-              <div className="db-nav-item-inner">
-                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-                <span>Observations</span>
-              </div>
-              <span className="db-coming-soon">Active</span>
             </div>
 
             <div
@@ -520,19 +498,6 @@ export default function DashboardPage() {
               </span>
             </div>
 
-            <div className="db-nav-item">
-              <div className="db-nav-item-inner">
-                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <line x1="6" y1="3" x2="6" y2="15" />
-                  <circle cx="18" cy="6" r="3" />
-                  <circle cx="6" cy="18" r="3" />
-                  <path d="M18 9a9 9 0 0 1-9 9" />
-                </svg>
-                <span>Attack Paths</span>
-              </div>
-              <span className="db-coming-soon">Coming Soon</span>
-            </div>
-
             <div
               className={`db-nav-item ${activeNav === "Feeds" ? "active" : ""}`}
               onClick={() => setActiveNav("Feeds")}
@@ -549,30 +514,6 @@ export default function DashboardPage() {
               <span className="db-coming-soon" style={{ background: "rgba(32, 214, 163, 0.15)", color: "#20D6A3", border: "1px solid rgba(32, 214, 163, 0.3)" }}>
                 Live
               </span>
-            </div>
-
-            <div className="db-nav-item">
-              <div className="db-nav-item-inner">
-                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <circle cx="12" cy="12" r="2" />
-                  <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
-                </svg>
-                <span>AI Assistant</span>
-              </div>
-              <span className="db-coming-soon">Coming Soon</span>
-            </div>
-
-            <div className="db-nav-item">
-              <div className="db-nav-item-inner">
-                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14 2 14 8 20 8" />
-                  <line x1="16" y1="13" x2="8" y2="13" />
-                  <line x1="16" y1="17" x2="8" y2="17" />
-                </svg>
-                <span>Reports</span>
-              </div>
-              <span className="db-coming-soon">Coming Soon</span>
             </div>
           </nav>
         </div>
@@ -600,11 +541,13 @@ export default function DashboardPage() {
                           ? "#20D6A3"
                           : authStatus === "not-yet-active"
                           ? "#D8AA45"
+                          : authStatus === "none"
+                          ? "#8395A7"
                           : "#E45D68",
                     }}
                   />
                   <span style={{ textTransform: "capitalize" }}>
-                    {authStatus === "not-yet-active" ? "Not Yet Active" : authStatus}
+                    {authStatus === "not-yet-active" ? "Not Yet Active" : authStatus === "none" ? "None" : authStatus}
                   </span>
                 </div>
               </div>
@@ -642,7 +585,7 @@ export default function DashboardPage() {
       </aside>
 
       {/* ----------------- MAIN AREA ----------------- */}
-      <main className="db-main">
+      <main className="db-main" id="db-section-top">
         {/* TOP BAR */}
         <header className="db-topbar">
           <div className="db-topbar-left">
@@ -674,7 +617,7 @@ export default function DashboardPage() {
               <span className={`db-status-pill ${authStatus}`}>
                 <span className="db-pill-dot" />
                 <span style={{ textTransform: "capitalize" }}>
-                  {authStatus === "not-yet-active" ? "Pending" : authStatus}
+                  {authStatus === "not-yet-active" ? "Pending" : authStatus === "none" ? "None" : authStatus}
                 </span>
               </span>
             </div>
@@ -684,19 +627,20 @@ export default function DashboardPage() {
               <span
                 className="db-pulse-dot"
                 style={{
-                  background: loading
-                    ? "#D9B85C"
-                    : apiError
-                    ? "#E56B73"
-                    : "#20D6A3",
+                  background:
+                    apiHealthy === null
+                      ? "#D9B85C"
+                      : apiHealthy
+                      ? "#20D6A3"
+                      : "#E56B73",
                 }}
               />
               <span>
-                {loading
-                  ? "Syncing..."
-                  : apiError
-                  ? "API unreachable"
-                  : "API reachable"}
+                {apiHealthy === null
+                  ? "Checking API..."
+                  : apiHealthy
+                  ? "API reachable"
+                  : "API unreachable"}
               </span>
             </div>
 
@@ -830,7 +774,7 @@ export default function DashboardPage() {
                   <span className={`db-status-pill ${authStatus}`}>
                     <span className="db-pill-dot" />
                     <span style={{ textTransform: "capitalize" }}>
-                      {authStatus === "not-yet-active" ? "Not Yet Active" : authStatus}
+                      {authStatus === "not-yet-active" ? "Not Yet Active" : authStatus === "none" ? "None" : authStatus}
                     </span>
                   </span>
                   <div className="db-banner-shield-badge">
@@ -958,7 +902,7 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Scanner select: [ Nmap ] & [ Nuclei ] */}
+                {/* Scanner select: Nmap, Nuclei, Nikto, ssh-audit */}
                 <div className="db-form-field">
                   <label className="db-form-label">Scanner</label>
                   <div className="db-scanner-switch">
@@ -991,6 +935,43 @@ export default function DashboardPage() {
                         <span>Nuclei (Vulnerabilities)</span>
                       </div>
                       {selectedScanner === "nuclei" && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      )}
+                    </div>
+
+                    <div
+                      className={`db-scanner-opt ${selectedScanner === "nikto" ? "selected" : ""}`}
+                      onClick={() => setSelectedScanner("nikto")}
+                    >
+                      <div className="db-scanner-opt-left">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="2" y1="12" x2="22" y2="12" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                        <span>Nikto (Web Server)</span>
+                      </div>
+                      {selectedScanner === "nikto" && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      )}
+                    </div>
+
+                    <div
+                      className={`db-scanner-opt ${selectedScanner === "ssh-audit" ? "selected" : ""}`}
+                      onClick={() => setSelectedScanner("ssh-audit")}
+                    >
+                      <div className="db-scanner-opt-left">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        <span>ssh-audit (SSH Config)</span>
+                      </div>
+                      {selectedScanner === "ssh-audit" && (
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <polyline points="9 18 15 12 9 6" />
                         </svg>
@@ -1084,7 +1065,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Recent Scans Card */}
-            <div className="db-card">
+            <div className="db-card" id="db-section-scans">
               <div className="db-card-header">
                 <div className="db-card-title-wrap">
                   <div className="db-card-header-icon">
@@ -1115,7 +1096,7 @@ export default function DashboardPage() {
                     </svg>
                     <div className="db-empty-state-title">No scans executed yet</div>
                     <div className="db-empty-state-desc">
-                      Launch your first Nmap or Nuclei scan against an authorized scope.
+                      Launch a scan (Nmap, Nuclei, Nikto or ssh-audit) against a target in this engagement&apos;s scope.
                     </div>
                   </div>
                 ) : (
@@ -1147,6 +1128,17 @@ export default function DashboardPage() {
                                   {scan.scanner === "nuclei" ? (
                                     <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    </svg>
+                                  ) : scan.scanner === "nikto" ? (
+                                    <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <line x1="2" y1="12" x2="22" y2="12" />
+                                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                    </svg>
+                                  ) : scan.scanner === "ssh-audit" ? (
+                                    <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                                     </svg>
                                   ) : (
                                     <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1223,7 +1215,7 @@ export default function DashboardPage() {
           {/* BOTTOM ROW: ENGAGEMENTS & SCAN ACTIVITY */}
           <div className="db-bottom-row">
             {/* Engagements List */}
-            <div className="db-card">
+            <div className="db-card" id="db-section-engagements">
               <div className="db-card-header">
                 <div className="db-card-title-wrap">
                   <div className="db-card-header-icon">
@@ -1341,7 +1333,7 @@ export default function DashboardPage() {
                   </div>
                   <div className="db-card-title-texts">
                     <h2 className="db-card-title">Scan Activity</h2>
-                    <span className="db-card-subtitle">Real-time status across all active jobs</span>
+                    <span className="db-card-subtitle">Latest jobs in this engagement (refreshes every 2s while a scan runs)</span>
                   </div>
                 </div>
               </div>
@@ -1384,7 +1376,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="db-activity-info">
                               <span className="db-activity-title">
-                                {scan.scanner === "nuclei" ? "Nuclei Vulnerability Scan" : "Nmap Network Scan"}
+                                {scannerTitle(scan.scanner)}
                               </span>
                               <span className="db-activity-target">{formatScanTarget(scan)}</span>
                             </div>
@@ -1501,12 +1493,12 @@ export default function DashboardPage() {
               </div>
 
               <div className="db-form-field">
-                <label className="db-form-label">Target Scope / Allowlist (comma-separated)</label>
+                <label className="db-form-label">Target Scope / Allowlist (comma-separated; authorization valid for 7 days from now)</label>
                 <div className="db-input-wrapper">
                   <input
                     type="text"
                     className="db-input"
-                    placeholder="e.g. 127.0.0.1, 127.0.0.1/32, localhost, 172.20.0.0/16"
+                    placeholder="e.g. 172.20.0.0/16, 172.20.1.10, web.lab.local"
                     value={createForm.allowlist}
                     onChange={(e) => setCreateForm({ ...createForm, allowlist: e.target.value })}
                     required

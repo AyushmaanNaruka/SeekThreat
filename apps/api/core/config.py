@@ -67,6 +67,20 @@ class Settings(BaseSettings):
             "Absolute path to the nuclei binary. If unset, shutil.which('nuclei') is used."
         ),
     )
+    nikto_path: str | None = Field(
+        default_factory=lambda: os.getenv("NIKTO_PATH"),
+        description=(
+            "Absolute path to the nikto executable (nikto or nikto.pl). "
+            "If unset, shutil.which('nikto') is used."
+        ),
+    )
+    ssh_audit_path: str | None = Field(
+        default_factory=lambda: os.getenv("SSH_AUDIT_PATH"),
+        description=(
+            "Absolute path to the ssh-audit executable. "
+            "If unset, shutil.which('ssh-audit') is used."
+        ),
+    )
 
     enrichment_cache_dir: Path = Field(
         default=DEFAULT_ENRICHMENT_CACHE_DIR,

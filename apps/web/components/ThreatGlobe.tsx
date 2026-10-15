@@ -1,15 +1,13 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useMemo } from "react";
+import React, { useEffect, useRef, useMemo } from "react";
 
-interface NodePin {
+// Decorative anchor point for the animated arcs. Purely visual: these are not
+// observed hosts, threats or locations, so they carry no labels or numbers.
+interface ArcAnchor {
   id: string;
   lat: number;
   lon: number;
-  type: "breach" | "actor" | "vulnerability" | "path" | "asset";
-  title: string;
-  sub: string;
-  stat?: string;
   color: string;
 }
 
@@ -45,7 +43,6 @@ const CONTINENT_CENTERS = [
 export default function ThreatGlobe() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const [activeCard, setActiveCard] = useState<string | null>(null);
 
   // Rotation angles
   const rotYRef = useRef(1.4);
@@ -53,56 +50,12 @@ export default function ThreatGlobe() {
   const isDraggingRef = useRef(false);
   const lastMouseRef = useRef({ x: 0, y: 0 });
 
-  const PINS: NodePin[] = useMemo(() => [
-    {
-      id: "breach",
-      lat: 44,
-      lon: -78,
-      type: "breach",
-      title: "DATA BREACH",
-      sub: "Sensitive data exposed",
-      stat: "Customer records",
-      color: "#ef4444",
-    },
-    {
-      id: "actor",
-      lat: 58,
-      lon: 50,
-      type: "actor",
-      title: "THREAT ACTOR",
-      sub: "APT Group",
-      stat: "TTPs detected",
-      color: "#38bdf8",
-    },
-    {
-      id: "vulnerability",
-      lat: 28,
-      lon: 82,
-      type: "vulnerability",
-      title: "VULNERABILITY",
-      sub: "CVE-2024-XXXX",
-      stat: "CVSS 9.8",
-      color: "#ef4444",
-    },
-    {
-      id: "path",
-      lat: 18,
-      lon: -30,
-      type: "path",
-      title: "ATTACK PATH",
-      sub: "4 hops to critical asset",
-      color: "#00f0ff",
-    },
-    {
-      id: "asset",
-      lat: -8,
-      lon: 110,
-      type: "asset",
-      title: "EXPOSED ASSET",
-      sub: "Web Server",
-      stat: "10.10.20.15",
-      color: "#38bdf8",
-    },
+  const PINS: ArcAnchor[] = useMemo(() => [
+    { id: "a", lat: 44, lon: -78, color: "#ef4444" },
+    { id: "b", lat: 58, lon: 50, color: "#38bdf8" },
+    { id: "c", lat: 28, lon: 82, color: "#ef4444" },
+    { id: "d", lat: 18, lon: -30, color: "#00f0ff" },
+    { id: "e", lat: -8, lon: 110, color: "#38bdf8" },
   ], []);
 
   // Prominent Glowing Danger Triangles on continents
@@ -116,12 +69,12 @@ export default function ThreatGlobe() {
   ], []);
 
   const ATTACK_ARCS = useMemo(() => [
-    { from: "actor", to: "vulnerability", color: "#ec4899" },
-    { from: "vulnerability", to: "path", color: "#a855f7" },
-    { from: "path", to: "breach", color: "#ef4444" },
-    { from: "vulnerability", to: "asset", color: "#00f0ff" },
-    { from: "breach", to: "actor", color: "#6366f1" },
-    { from: "actor", to: "path", color: "#38bdf8" },
+    { from: "b", to: "c", color: "#ec4899" },
+    { from: "c", to: "d", color: "#a855f7" },
+    { from: "d", to: "a", color: "#ef4444" },
+    { from: "c", to: "e", color: "#00f0ff" },
+    { from: "a", to: "b", color: "#6366f1" },
+    { from: "b", to: "d", color: "#38bdf8" },
   ], []);
 
   useEffect(() => {
@@ -167,7 +120,6 @@ export default function ThreatGlobe() {
     const phi = Math.PI * (3 - Math.sqrt(5));
     for (let i = 0; i < numOcean; i++) {
       const y = 1 - (i / (numOcean - 1)) * 2;
-      const radiusAtY = Math.sqrt(1 - y * y);
       const theta = phi * i;
       const lon = (theta * 180) / Math.PI;
       const lat = Math.asin(y) * (180 / Math.PI);
@@ -427,7 +379,7 @@ export default function ThreatGlobe() {
         }
       });
 
-      // 6. Threat Node Beacons for Connected Network Pins
+      // 6. Decorative beacons at arc anchors
       PINS.forEach((pin) => {
         const pt = project(pin.lat, pin.lon, R * 1.015);
         if (pt.z > -R * 0.15) {
@@ -502,145 +454,12 @@ export default function ThreatGlobe() {
         <div className="globe-glow-circle"></div>
       </div>
 
-      {/* HTML5 Canvas with 3D Globe and Danger Triangles */}
+      {/* HTML5 Canvas with decorative 3D globe (no data is plotted) */}
       <canvas
         ref={canvasRef}
         className="threat-globe-canvas"
+        aria-hidden="true"
       />
-
-      {/* 1. DATA BREACH CARD (Top Center-Left) */}
-      <div
-        className={`threat-callout data-breach-callout ${activeCard === "breach" ? "is-focused" : ""}`}
-        onMouseEnter={() => setActiveCard("breach")}
-        onMouseLeave={() => setActiveCard(null)}
-      >
-        <div className="callout-card border-red">
-          <div className="card-icon icon-red">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2L1 21h22L12 2zm0 3.8L19.5 19h-15L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-title text-red">DATA BREACH</div>
-            <div className="card-desc">Sensitive data exposed</div>
-            <div className="card-meta text-red-muted">Customer records</div>
-          </div>
-        </div>
-      </div>
-
-      {/* 2. THREAT ACTOR CARD (Top Right) */}
-      <div
-        className={`threat-callout threat-actor-callout ${activeCard === "actor" ? "is-focused" : ""}`}
-        onMouseEnter={() => setActiveCard("actor")}
-        onMouseLeave={() => setActiveCard(null)}
-      >
-        <div className="callout-card border-cyan">
-          <div className="card-icon icon-cyan">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <path d="M12 2a6 6 0 0 0-6 6c0 3 2 5.5 5 5.9V16H8v2h8v-2h-3v-2.1c3-.4 5-2.9 5-5.9a6 6 0 0 0-6-6z" />
-              <path d="M6 19v2h12v-2" />
-              <circle cx="10" cy="8" r="1" fill="currentColor" />
-              <circle cx="14" cy="8" r="1" fill="currentColor" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-title text-cyan">THREAT ACTOR</div>
-            <div className="card-desc text-white">APT Group</div>
-            <div className="card-meta text-slate-400">TTPs detected</div>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. VULNERABILITY CARD (Middle Right) */}
-      <div
-        className={`threat-callout vulnerability-callout ${activeCard === "vulnerability" ? "is-focused" : ""}`}
-        onMouseEnter={() => setActiveCard("vulnerability")}
-        onMouseLeave={() => setActiveCard(null)}
-      >
-        <div className="callout-card border-red">
-          <div className="card-icon icon-red">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2L1 21h22L12 2zm0 3.8L19.5 19h-15L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-title text-red">VULNERABILITY</div>
-            <div className="card-desc text-slate-300">CVE-2024-XXXX</div>
-            <div className="card-meta text-red-muted font-bold">CVSS 9.8</div>
-          </div>
-        </div>
-      </div>
-
-      {/* 4. ATTACK PATH CARD (Lower Left of Globe) */}
-      <div
-        className={`threat-callout attack-path-callout ${activeCard === "path" ? "is-focused" : ""}`}
-        onMouseEnter={() => setActiveCard("path")}
-        onMouseLeave={() => setActiveCard(null)}
-      >
-        <div className="callout-card border-cyan">
-          <div className="card-icon icon-cyan">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-              <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-title text-cyan">ATTACK PATH</div>
-            <div className="card-desc text-slate-300">4 hops to critical asset</div>
-          </div>
-        </div>
-      </div>
-
-      {/* 5. EXPOSED ASSET CARD (Lower Right of Globe) */}
-      <div
-        className={`threat-callout exposed-asset-callout ${activeCard === "asset" ? "is-focused" : ""}`}
-        onMouseEnter={() => setActiveCard("asset")}
-        onMouseLeave={() => setActiveCard(null)}
-      >
-        <div className="callout-card border-cyan">
-          <div className="card-icon icon-cyan">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
-              <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
-              <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
-              <line x1="6" y1="6" x2="6.01" y2="6" />
-              <line x1="6" y1="18" x2="6.01" y2="18" />
-            </svg>
-          </div>
-          <div className="card-content">
-            <div className="card-title text-cyan">EXPOSED ASSET</div>
-            <div className="card-desc text-white">Web Server</div>
-            <div className="card-meta text-slate-400 font-mono text-xs">10.10.20.15</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Right Edge Threat Categories List */}
-      <div className="threat-categories-list">
-        <div className="threat-cat-item">
-          <span className="threat-cat-dot dot-cyan"></span>
-          <span>Phishing</span>
-        </div>
-        <div className="threat-cat-item">
-          <span className="threat-cat-dot dot-indigo"></span>
-          <span>Malware</span>
-        </div>
-        <div className="threat-cat-item">
-          <span className="threat-cat-dot dot-purple"></span>
-          <span>Ransomware</span>
-        </div>
-        <div className="threat-cat-item">
-          <span className="threat-cat-dot dot-red"></span>
-          <span>Data Breach</span>
-        </div>
-        <div className="threat-cat-item">
-          <span className="threat-cat-dot dot-pink"></span>
-          <span>Insider Threat</span>
-        </div>
-        <div className="threat-cat-item">
-          <span className="threat-cat-dot dot-yellow"></span>
-          <span>DDoS</span>
-        </div>
-      </div>
     </div>
   );
 }

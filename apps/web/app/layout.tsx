@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "SEEKTHREAT — See What Others Miss | AI-Powered Cyber Threat Intelligence",
+  title: "SEEKTHREAT — See What Others Miss | Vulnerability Detection & Enrichment Platform",
   description:
-    "From hidden vulnerabilities to complex attack paths, SeekThreat turns scattered data into clear, actionable intelligence before the threat becomes a breach.",
+    "SeekThreat runs authorized scans with Nmap, Nuclei, Nikto and ssh-audit, then enriches findings with CVSS, EPSS, CISA KEV and exploit data. Every field carries its source, and every risk score shows its components.",
   icons: {
     icon: "/favicon.ico",
   },

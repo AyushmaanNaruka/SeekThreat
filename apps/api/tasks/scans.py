@@ -37,16 +37,22 @@ from apps.api.db.repositories import (
 from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.engagement import Authorization, ScanRequest
+from packages.schema.models.observation import Observation
+from services.normalize import findings_from_observations
 from services.scanners.base import (
     AuthorizationError,
     ScannerAdapter,
     ScannerTimeoutError,
     ScannerUnavailableError,
 )
+from services.scanners.nikto_adapter import NiktoAdapter
+from services.scanners.nikto_json import NiktoParseError
 from services.scanners.nmap_adapter import NmapAdapter
 from services.scanners.nmap_xml import NmapParseError
 from services.scanners.nuclei_adapter import NucleiAdapter
 from services.scanners.nuclei_json import NucleiParseError
+from services.scanners.ssh_audit_adapter import SshAuditAdapter
+from services.scanners.ssh_audit_json import SshAuditParseError
 
 #: Audit ``scanner`` field for post-scan enrichment events raised from here.
 POST_SCAN_AUDIT_SCANNER = "post_scan_enrichment"
@@ -102,6 +108,48 @@ def _dispatch_post_scan_enrichment(
         )
 
 
+def _dispatch_interim_findings(
+    observations: tuple[Observation, ...], engagement_id: str, scan_id: str, actor: str
+) -> int:
+    """Fire-and-forget: turn the scan's vuln_candidate observations into findings and
+    enqueue their enrichment (interim bridge, DECISIONS.md D-044).
+
+    Dispatched before ``_dispatch_post_scan_enrichment``. Both tasks share the
+    single-concurrency ``enrichment`` queue and either order converges: findings
+    enriched first are re-enriched once the scan's CVE records are synced (D-041).
+    Never raises, like the post-scan dispatcher. Returns the number dispatched.
+    """
+    try:
+        from apps.api.tasks.enrichment import enrich_findings  # noqa: PLC0415
+
+        findings = findings_from_observations(observations, detected_at=datetime.now(UTC))
+        if not findings:
+            return 0
+        enrich_findings.apply_async(
+            kwargs={
+                "findings_data": [f.model_dump(mode="json") for f in findings],
+                "engagement_id": engagement_id,
+                "actor": actor,
+            },
+            retry=False,
+        )
+        logger.info("interim_findings: enqueued %d finding(s) for scan %s", len(findings), scan_id)
+        return len(findings)
+    except Exception as exc:  # noqa: BLE001
+        error = f"{type(exc).__name__}: {exc}"
+        logger.warning("interim_findings: failed for scan %s: %s", scan_id, error)
+        log_audit_event(
+            event="interim_findings.enqueue_failed",
+            actor=actor,
+            target=f"engagement:{engagement_id}/scan:{scan_id}",
+            engagement_id=engagement_id,
+            scanner=POST_SCAN_AUDIT_SCANNER,
+            status="error",
+            details={"scan_id": scan_id, "error": error},
+        )
+        return 0
+
+
 logger = logging.getLogger(__name__)
 
 # Failures that a retry cannot fix. An unsupported scanner name stays
@@ -118,6 +166,8 @@ PERMANENT_ERRORS = (
     AuthorizationError,
     NmapParseError,
     NucleiParseError,
+    NiktoParseError,
+    SshAuditParseError,
 )
 
 
@@ -177,6 +227,10 @@ def run_scan(
             adapter = NmapAdapter()
         elif scanner == "nuclei":
             adapter = NucleiAdapter()
+        elif scanner == "nikto":
+            adapter = NiktoAdapter()
+        elif scanner == "ssh-audit":
+            adapter = SshAuditAdapter()
         else:
             raise ValueError(f"Unsupported scanner: {scanner!r}")
 
@@ -226,6 +280,12 @@ def run_scan(
         # after the scan is committed and its completion audited (Task 6, D-036).
         # The dispatcher never raises, so it cannot turn a completed scan into a
         # failed one.
+        _dispatch_interim_findings(
+            observations=scan_result.observations,
+            engagement_id=engagement_id,
+            scan_id=scan_id,
+            actor=actor,
+        )
         _dispatch_post_scan_enrichment(
             artifact_id=scan_result.artifact.artifact_id,
             engagement_id=engagement_id,

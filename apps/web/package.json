@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test tests/polling.test.mjs tests/findings.test.mjs"
+    "test": "node --test tests/polling.test.mjs tests/findings.test.mjs tests/scanOptions.test.mjs"
   },
   "dependencies": {
     "next": "16.3.5",

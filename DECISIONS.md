@@ -43,6 +43,172 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-044 — Interim observation→Finding bridge so scans reach enrichment and the UI
+**Date:** 2026-10-15
+**Decided by:** Ayushmaan
+**Type:** Addition (interim; to be replaced by Track 1)
+**Status:** Active
+
+**Decision**
+Add `services/normalize/interim_bridge.py`. After every completed scan, `run_scan` turns each
+distinct `vuln_candidate` observation into a `Finding` and enqueues it on the existing
+`seekthreat.enrichment.enrich` task, ahead of the D-041 post-scan CVE sync. The bridge is
+deliberately minimal:
+- **`asset_id`:** follows D-040 (`host:<canonical ip>` / `host:<lowercase fqdn>`), taken from
+  the observation's nmap-style `endpoint`.
+- **`cve_ids`:** only the canonical CVE IDs the scanner itself reported.
+- **`finding_id`:** a hash of what was found (scanner, asset, endpoint, the scanner's identity
+  keys), so a re-scan upserts rather than duplicates.
+
+No cross-scanner deduplication or asset joining; that remains Track 1's scope.
+
+Same change set, found while driving the dashboard end to end against the lab:
+- **The dashboard's Nuclei option stops forcing the test-fixture template.** It now runs the
+  pinned template set with the adapter's existing exclusions (dos, intrusive, fuzz, rce,
+  bruteforce, default-login).
+- **nmap's default port list now covers every service port in `lab/ground_truth.yaml`**
+  (adds 2222, 3000, 5432, 6379, 8090). The old list found nothing on half the lab.
+- **`lab/docker-compose.yml` gives Juice Shop `restart: unless-stopped`.** It runs out of
+  Node heap (exit 139) when Nikto and Nuclei hit it at once.
+- **Frontend: everything that did not work, or presented made-up data, was removed or wired up.**
+  - Removed: the fake landing-page auth form and "Watch Demo" transcript, the frozen "Live"
+    threat feed, the globe callouts with an invented IP and CVE, and the claims about an AI
+    assistant, a knowledge graph, attack paths, OpenVAS and ZAP. On the dashboard, the dead
+    Observations nav item and the four "Coming Soon" items.
+  - Wired up: the dashboard nav scrolls to real sections, and the API badge comes from
+    `/health`.
+  - Fixed: scans are scoped to the selected engagement, and the client-side scope check
+    mirrors the server gate.
+
+**Why**
+Nothing turned observations into findings (`services/normalize` did not exist), so every
+scan left the Findings view empty and enrichment had nothing to enrich. Track 1 is owned by
+Utkarsh and not yet landed; this unblocks the end-to-end flow without pre-empting it.
+Verified live on 2026-10-15 from the dashboard against the lab:
+- All four scanners were launched side by side.
+- ssh-audit's CVE-2023-48795 on the bastion was enriched with CVSS 5.9 (CISA Vulnrichment),
+  EPSS 93.5% and KEV status, giving ERS 5.6.
+- 24 no-CVE findings (weak SSH algorithms, Nikto and Nuclei checks) are shown with their
+  placeholder fields labelled as estimates.
+
+**Impact on plan**
+Track 1 should replace `findings_from_observations` wholesale; its only caller is
+`_dispatch_interim_findings` in `apps/api/tasks/scans.py`. Findings created by the bridge
+are ordinary `enriched_findings` rows keyed by `(engagement_id, finding_id)`.
+
+**Cost if we're wrong**
+Low. One module, one dispatch call, and a conftest stub. Removing the dispatch call
+restores the previous behaviour exactly.
+
+---
+
+### D-043 — Add Nikto and ssh-audit adapters, restricted to non-destructive checks
+**Date:** 2026-10-12
+**Decided by:** Ayushmaan
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+Add two scanner adapters: Nikto (web server misconfiguration and outdated-software checks) and
+ssh-audit (SSH banner, version and algorithm audit). Both are invoked as subprocesses and their
+JSON output parsed; neither tool's source is vendored. Nikto runs with an include-list of
+`-Tuning 123abde` and an explicit `-Plugins` include-list; ssh-audit runs with `--skip-rate-test`.
+
+**Why**
+The lab is mostly HTTP services plus one SSH bastion that pivots into the data segment. Nmap and
+Nuclei barely cover SSH configuration, and Nikto is the first web scanner on the planned list in
+`services/scanners/README.md`. testssl.sh and sslyze were considered and rejected for now: the
+lab exposes no TLS service, so they would produce nothing measurable.
+
+Safety (hard rule 4): Nikto tuning categories 0 (upload), 4 (injection), 5/7 (remote file
+retrieval), 6 (DoS), 8 (command execution), 9 (SQLi) and c (remote include) are excluded, and
+plugins that act regardless of tuning (`put_del_test`, `auth`, `shellshock`, `strutshock`,
+`dictionary`, `apacheusers`) are not enabled. ssh-audit only performs handshakes; its DHEat
+rate test opens a burst of ~38 connections, which is a DoS probe, so it is skipped.
+
+Licences: Nikto is GPL-2.0 — invoked only, never copied (rule 3). ssh-audit is MIT (LICENSE
+read 2026-10-12).
+
+**Impact on plan**
+Two more `Observation` producers. Findings worth knowing about downstream:
+- ssh-audit 3.x no longer reports CVEs (`cves` is always empty). SSH CVE matching must come
+  from enrichment off the `service_version` observation, not from the scanner.
+- Nikto's JSON report carries no timestamp and usually an empty `banner`, so it rarely
+  produces a `service_version`; it is mainly a `vuln_candidate` source.
+- Both emit endpoints in nmap's `<ip>:<port>/tcp` spelling so findings join to port facts.
+- `apps/api/Dockerfile` installs both, pinned to the code the fixtures were captured with:
+  Nikto at upstream master commit `464da66` (the `ghcr.io/sullo/nikto` image's revision label;
+  archive sha256-verified, `program/` on PATH with `perl` + `libnet-ssleay-perl`) and ssh-audit
+  3.9.0 (wheel, `pip --require-hashes`). Nikto is pinned to a commit, not the `2.5.0` release
+  tag, because that tag's JSON report plugin is broken: it calls `JSON->new` after loading only
+  `JSON::PP` (exit 255 on the first finding) and double-quotes every `msg` (invalid JSON).
+- Verified live on 2026-10-15: image built; engagement `eng-d038-live` (allowlist
+  172.20.1.10, 172.20.2.50) dispatched through `POST /scans` to the lab-attached worker. Nikto
+  vs DVWA `172.20.1.10:80` → completed, 15 `vuln_candidate`; ssh-audit vs bastion
+  `172.20.2.50:2222` → completed, 1 `service_version` + 19 `vuln_candidate`. An off-allowlist
+  target (172.20.1.11) was refused with 403. The bastion ran `version-8.3_p1-r0`, because
+  the lab's `8.2p1` tag does not exist (D-042).
+- Review fix (2026-10-15), touching `packages/schema`: `target_matches` now refuses any target
+  containing `%`. Python's `ipaddress` accepts free text after `%` as an IPv6 scope id and
+  ignores it for network membership, so `fd00::1%x,10.9.9.9` matched an `fd00::/8` allowlist.
+  Nikto splits `-host` on commas (and nuclei's `-u` takes lists), so the scan would also have
+  reached `10.9.9.9`. The Nikto and nuclei adapters reject `%` too, as ssh-audit already did.
+  This only narrows what the gate permits; no valid hostname contains `%`.
+- This entry was first numbered D-038, which collided with the ERS corroboration entry
+  committed earlier; renumbered to D-043.
+
+**Cost if we're wrong**
+Low. Each adapter is self-contained (one adapter, one parser, one dispatch branch). Widening
+Nikto's tuning or plugin lists is a scope change and needs its own entry.
+
+---
+
+### D-042 — Two lab image tags never existed: bastion → OpenSSH 8.3p1, internal-wiki → Confluence 7.13.6
+**Date:** 2026-10-15
+**Decided by:** Ayushmaan
+**Type:** Divergence
+**Status:** Active
+
+**Decision**
+`lab/docker-compose.yml` pins `bastion-ssh` to `linuxserver/openssh-server:version-8.3_p1-r0`
+instead of `:8.2p1`. `lab/ground_truth.yaml` records the bastion's OpenSSH version as `8.3p1`.
+The synthetic `tests/fixtures/nmap/lab_internal.xml` was edited to match, and
+`tests/fixtures/observations/lab_internal.json` was regenerated from it with
+`scripts/build_observation_fixtures.py`. The walkthrough table in
+`docs/mayank_implementation/task_6_level_1_walkthrough.md` was updated too.
+
+**Why**
+`linuxserver/openssh-server:8.2p1` returns 404 from Docker Hub (checked 2026-10-15), and no
+linuxserver tag carries OpenSSH 8.2p1. The lab could not start, and the bastion that pivots
+into the data segment was unscannable. `version-8.3_p1-r0` is the nearest published version.
+It is also the server the ssh-audit fixtures were captured from (D-043).
+
+**Impact on plan**
+The expected CVE is unchanged: CVE-2020-15778 affects OpenSSH through 8.3p1, so the bastion's
+`expected_cves` entry and the attack chain through it still hold. Verified live: ssh-audit
+against the bastion reports banner `SSH-2.0-OpenSSH_8.3`. Note that ssh-audit's
+`service_version` is `8.3` (from the banner); the `p1` suffix comes only from nmap `-sV`.
+The bastion is still covered synthetically in `lab_internal.json` until a real nmap capture
+replaces it, which is now possible.
+
+**internal-wiki (same problem, same fix)**
+`vulhub/confluence:7.18.0` is also absent from Docker Hub (found by a full
+`docker compose pull` on 2026-10-15; vulhub publishes only 6.10.2, 6.11.2, 7.4.10, 7.13.6, 8.5.1
+and 8.5.3). The compose file, ground truth, `lab_internal.xml`/`.json` and the walkthrough now
+say `7.13.6`. CVE-2022-26134 affects 7.13.0–7.13.6 (fixed in 7.13.7), so `expected_cves` is
+unchanged. 7.13.6 is the image vulhub's own CVE-2022-26134 environment uses. As with any vulhub
+Confluence image, the setup wizard (database and trial licence) must be completed before
+the application is fully live; that was true of the intended 7.18.0 tag too.
+
+After both fixes, every image in `lab/docker-compose.yml` pulls.
+
+**Cost if we're wrong**
+Low. Two image tags, two ground-truth fields, one regenerated fixture. Any eval run made
+before this change measured against a bastion that could not exist, so it should be re-run
+rather than compared.
+
+---
+
 ### D-041 — Post-scan sync hardening: engagement-scoped re-enrichment, per-mirror file lock, negative cache, dedicated enrichment worker
 **Date:** 2026-10-12
 **Decided by:** Ayushmaan (review of PR #19)
@@ -458,7 +624,6 @@ No weight or code changes. `evals/ers_sensitivity.py` reproduces the sensitivity
 **Cost if we're wrong**
 Low to change: `ERSWeights` keeps the weights separate from the computation. The higher cost is credibility. Claiming more stability or independence than the numbers support is the failure this correction fixes, and repeating it in the viva would be worse than the instability itself.
 ---
-
 
 ### D-026 — Nuclei observations carry an nmap-shaped `endpoint` join key
 **Date:** 2026-09-26

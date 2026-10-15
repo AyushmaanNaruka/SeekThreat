@@ -3,8 +3,8 @@
 <!--
   SYNTHETIC FIXTURE. Hand-authored nmap -sV output, not a real capture.
 
-  Docker Hub image pulls for jenkins/jenkins:2.441-jdk17, vulhub/confluence:7.18.0
-  and linuxserver/openssh-server:8.2p1 are currently failing on the development
+  Docker Hub image pulls for jenkins/jenkins:2.441-jdk17, vulhub/confluence (then pinned to a nonexistent 7.18.0 tag)
+  and linuxserver/openssh-server (then pinned to a nonexistent 8.2p1 tag) are currently failing on the development
   machine (see DECISIONS.md D-018/D-019); internal-api runs python:3.9-slim which
   pulls fine but has not yet been scanned in a real run either, so all four
   internal-tier hosts are covered synthetically together as one scan run. This
@@ -73,7 +73,7 @@
 <hostname name="lab-internal-wiki-1.lab_internal" type="PTR"/>
 </hostnames>
 <ports><extraports state="closed" count="999"/>
-<port protocol="tcp" portid="8090"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="atlassian-confluence" version="7.18.0" method="probed" conf="10"/></port>
+<port protocol="tcp" portid="8090"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="http" product="atlassian-confluence" version="7.13.6" method="probed" conf="10"/></port>
 </ports>
 <times srtt="11" rttvar="0" to="100000"/>
 </host>
@@ -84,7 +84,7 @@
 <hostname name="lab-bastion-ssh-1.lab_internal" type="PTR"/>
 </hostnames>
 <ports><extraports state="closed" count="999"/>
-<port protocol="tcp" portid="2222"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="ssh" product="openssh" version="8.2p1" method="probed" conf="10"/></port>
+<port protocol="tcp" portid="2222"><state state="open" reason="syn-ack" reason_ttl="64"/><service name="ssh" product="openssh" version="8.3p1" method="probed" conf="10"/></port>
 </ports>
 <times srtt="8" rttvar="0" to="100000"/>
 </host>

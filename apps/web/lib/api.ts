@@ -31,7 +31,7 @@ export interface CreateEngagementPayload {
 export interface ScanItem {
   scan_id: string;
   engagement_id: string;
-  scanner: "nmap" | "nuclei" | string;
+  scanner: "nmap" | "nuclei" | "nikto" | "ssh-audit" | string;
   target: string;
   status: "pending" | "running" | "completed" | "failed";
   options: Record<string, unknown>;

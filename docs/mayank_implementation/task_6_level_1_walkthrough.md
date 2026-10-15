@@ -43,8 +43,8 @@ Expand the deliberately vulnerable test network from 2 containers to a comprehen
 | **`spring-gateway`** | `dmz`, `internal` | `172.20.1.13`, `172.20.2.13` | Spring Cloud Gateway 3.1.0 | CVE-2022-22947 | 9.8 | API Gateway with Actuator RCE |
 | **`internal-api`** | `internal` | `172.20.2.10` | Werkzeug/Flask 2.0.1 | CVE-2022-29361 | 7.5 | Internal microservice |
 | **`jenkins-ci`** | `internal` | `172.20.2.25` | Jenkins 2.441 | CVE-2024-23897 | 9.8 | CI/CD holding build credentials |
-| **`internal-wiki`** | `internal` | `172.20.2.40` | Confluence 7.18.0 | CVE-2022-26134 | 9.8 | Internal documentation portal |
-| **`bastion-ssh`** | `internal`, `data` | `172.20.2.50`, `172.20.3.50` | OpenSSH 8.2p1 | CVE-2020-15778 | 6.8 | SSH gateway between internal & data |
+| **`internal-wiki`** | `internal` | `172.20.2.40` | Confluence 7.13.6 | CVE-2022-26134 | 9.8 | Internal documentation portal |
+| **`bastion-ssh`** | `internal`, `data` | `172.20.2.50`, `172.20.3.50` | OpenSSH 8.3p1 | CVE-2020-15778 | 6.8 | SSH gateway between internal & data |
 | **`db-primary`** | `data` | `172.20.3.10` | PostgreSQL 12.4 | CVE-2020-14349 | 7.2 | Main customer database |
 | **`cache-redis`** | `data` | `172.20.3.20` | Redis 5.0.7 | CVE-2022-0543 | 10.0 | Memory cache with Lua escape RCE |
 | **`scanner`** | `dmz` | `172.20.1.250` | Nmap / Nuclei | Auditor / Tool fixture runner | — | Isolated scanner container |

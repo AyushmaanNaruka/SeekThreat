@@ -1,0 +1,45 @@
+[
+  {
+    "host": "172.20.1.10",
+    "ip": "172.20.1.10",
+    "port": "8080",
+    "banner": "Apache/2.4.49 (Unix)",
+    "vulnerabilities": [
+      {
+        "id": "600050",
+        "method": "HEAD",
+        "url": "/",
+        "msg": "Apache/2.4.49 appears to be outdated (current is at least 2.4.63). Apache 2.2.34 is the EOL for the 2.x branch."
+      },
+      {
+        "id": "999001",
+        "references": "https://nvd.nist.gov/vuln/detail/cve-2021-41773",
+        "method": "GET",
+        "url": "/cgi-bin/",
+        "msg": "Path traversal in Apache 2.4.49, see CVE-2021-41773 and CVE-2021-42013 (also CVE-2021-41773)."
+      },
+      {
+        "id": "999002",
+        "references": "CWE-552",
+        "method": "GET",
+        "url": "/cgi-bin/test-cgi",
+        "msg": "Not a cve: CVE-21-1 and XCVE-2020-12345 and CVE-2020-123456789012345678901."
+      }
+    ]
+  },
+  {
+    "host": "web.lab.local",
+    "ip": "172.20.1.11",
+    "port": "443",
+    "banner": "nginx",
+    "vulnerabilities": [
+      {
+        "id": "000434",
+        "references": "https://owasp.org/www-community/attacks/Cross_Site_Tracing",
+        "method": "TRACE",
+        "url": "/",
+        "msg": "HTTP TRACE method is active which suggests the host is vulnerable to XST."
+      }
+    ]
+  }
+]

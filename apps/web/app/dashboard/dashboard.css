@@ -603,6 +603,20 @@
   background: #E45D68;
 }
 
+/* NO ENGAGEMENT YET = neutral, not an error */
+.db-status-pill.none {
+  background: rgba(131, 149, 167, 0.12);
+  border: 1px solid rgba(131, 149, 167, 0.45);
+  color: #8395A7;
+}
+
+.db-status-pill.none .db-pill-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #8395A7;
+}
+
 /* PENDING / NOT YET ACTIVE = #D8AA45 */
 .db-status-pill.pending,
 .db-status-pill.not-yet-active {

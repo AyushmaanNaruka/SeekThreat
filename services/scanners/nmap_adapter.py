@@ -16,7 +16,11 @@ from datetime import datetime
 from .base import Observation, RawArtifact, ScannerAdapter, ScanRequest
 from .nmap_xml import parse_nmap_xml, parse_run_timestamp
 
-DEFAULT_PORTS = "22,80,443,8000,8080"
+# Common web/SSH ports plus every service port in lab/ground_truth.yaml (Juice Shop
+# 3000, bastion SSH 2222, Postgres 5432, Redis 6379, Confluence 8090). The old list
+# (22,80,443,8000,8080) silently found nothing on half the lab. Keep this in step
+# with ground_truth.yaml when the lab changes.
+DEFAULT_PORTS = "22,80,443,2222,3000,5432,6379,8000,8080,8090"
 PORTS_REGEX = re.compile(r"^(?:-p-|[0-9,\-]+)$")
 
 

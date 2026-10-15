@@ -17,6 +17,9 @@ services:
 
   juiceshop:
     image: bkimminich/juice-shop
+    # Node runs out of heap (exit 139) when Nikto and Nuclei hit it at once; come back
+    # up instead of silently leaving 172.20.1.11 down for every later scan.
+    restart: unless-stopped
     networks:
       dmz: { ipv4_address: 172.20.1.11 }
 
@@ -47,12 +50,12 @@ services:
       internal: { ipv4_address: 172.20.2.25 }
 
   internal-wiki:
-    image: vulhub/confluence:7.18.0
+    image: vulhub/confluence:7.13.6
     networks:
       internal: { ipv4_address: 172.20.2.40 }
 
   bastion-ssh:
-    image: linuxserver/openssh-server:8.2p1
+    image: linuxserver/openssh-server:version-8.3_p1-r0
     environment:
       PASSWORD_ACCESS: "true"
       USER_PASSWORD: "password"

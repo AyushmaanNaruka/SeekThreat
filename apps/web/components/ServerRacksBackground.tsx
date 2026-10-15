@@ -56,7 +56,7 @@ export default function ServerRacksBackground() {
         </svg>
       </div>
 
-      {/* 3. Left Border: Data Breach Server Towers */}
+      {/* 3. Left Border: decorative server towers (no status text) */}
       <div className="rack-cluster rack-left">
         {/* Glowing Red Warning Placard */}
         <div className="rack-hazard-card">
@@ -65,14 +65,6 @@ export default function ServerRacksBackground() {
               <path d="M12 2L1 21h22L12 2zm0 3.8L19.5 19h-15L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
             </svg>
           </div>
-        </div>
-
-        {/* Glowing Red THREAT Badge */}
-        <div className="rack-badge rack-threat-badge">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="#ef4444">
-            <path d="M12 2L1 21h22L12 2zm0 3.8L19.5 19h-15L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
-          </svg>
-          <span>THREAT</span>
         </div>
 
         {/* Server unit chassis */}
@@ -90,7 +82,7 @@ export default function ServerRacksBackground() {
         </div>
       </div>
 
-      {/* 4. Right Border: Tall Server Towers with Multiple DATA BREACH Signs */}
+      {/* 4. Right Border: decorative tall server towers (no status text) */}
       <div className="rack-cluster rack-right">
         {/* Top Glowing Red Danger Triangle Placard */}
         <div className="rack-hazard-card">
@@ -101,27 +93,11 @@ export default function ServerRacksBackground() {
           </div>
         </div>
 
-        {/* Upper DATA BREACH Glowing Banner */}
-        <div className="rack-alert-banner">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444">
-            <path d="M12 2L1 21h22L12 2zm0 3.8L19.5 19h-15L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
-          </svg>
-          <span>DATA BREACH</span>
-        </div>
-
         {/* Middle Warning Placard */}
         <div className="rack-hazard-mini-box">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="#ef4444">
             <path d="M12 2L1 21h22L12 2zm0 3.8L19.5 19h-15L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
           </svg>
-        </div>
-
-        {/* Lower DATA BREACH Glowing Banner */}
-        <div className="rack-alert-banner banner-lower">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="#ef4444">
-            <path d="M12 2L1 21h22L12 2zm0 3.8L19.5 19h-15L12 5.8zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" />
-          </svg>
-          <span>DATA BREACH</span>
         </div>
 
         {/* Server unit chassis */}

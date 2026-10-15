@@ -1,0 +1,10 @@
+{
+  "host": "172.20.1.12",
+  "ip": "172.20.1.12",
+  "port": "80",
+  "banner": "Microsoft-IIS/6.0",
+  "vulnerabilities": [
+    {"id": "999979", "OSVDB": "877", "method": "GET", "url": "/iisadmin/", "msg": "OSVDB-877: HTTP method (\"TRACE\"), a ,] inside a string.",},
+    {"id": "000001", "OSVDB": "0", "method": "GET", "url": "/x", "msg": "No osvdb for this one.",},
+  ],
+}

@@ -286,6 +286,62 @@ def test_execute_scan_nmap_happy_path(engine, seeded_scan, monkeypatch) -> None:
     assert completed_events[0]["scanner"] == "nmap"
 
 
+@pytest.mark.parametrize(
+    ("scanner", "adapter_attr", "content_type"),
+    [
+        pytest.param("nikto", "NiktoAdapter", "application/json", id="nikto"),
+        pytest.param("ssh-audit", "SshAuditAdapter", "application/json", id="ssh-audit"),
+    ],
+)
+def test_execute_scan_dispatches_new_scanners(
+    engine, seeded_scan, monkeypatch, scanner: str, adapter_attr: str, content_type: str
+) -> None:
+    """Each scanner name routes to its own adapter, not to a fallback."""
+    from apps.api.tasks import scans as task_module
+    from packages.schema.models.observation import RawArtifact, ScanResult
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    fake_artifact = RawArtifact(
+        artifact_id="sha256-" + "b" * 58,
+        scanner=scanner,
+        content="[]",
+        content_type=content_type,
+        captured_at=datetime.now(UTC),
+    )
+    mock_adapter = MagicMock()
+    mock_adapter.scan.return_value = ScanResult(artifact=fake_artifact, observations=())
+
+    mock_self = MagicMock()
+    mock_self.request.id = "mock-celery-task-id"
+    mock_self.request.retries = 0
+    mock_self.max_retries = 3
+    mock_self.MaxRetriesExceededError = Exception
+
+    with patch(f"apps.api.tasks.scans.{adapter_attr}", return_value=mock_adapter) as ctor:
+        task_module.execute_scan.run.__func__(
+            mock_self,
+            scan_id=scan_id,
+            engagement_id="eng-celery-test",
+            scanner=scanner,
+            target="172.20.1.50",
+            options={},
+            authorization_dict=auth_dict,
+        )
+
+    ctor.assert_called_once_with()
+    mock_adapter.scan.assert_called_once()
+
+    db = factory()
+    scan = ScanRepository(db).get(scan_id)
+    db.close()
+    assert scan is not None
+    assert scan.status == "completed"
+    assert scan.artifact_id == fake_artifact.artifact_id
+
+
 # ---------------------------------------------------------------------------
 # Retry classification: permanent failures must not be retried
 # ---------------------------------------------------------------------------
@@ -649,6 +705,8 @@ def test_post_scan_enrichment_dispatched_after_completion_audit(
     [
         pytest.param("services.scanners.nuclei_json:NucleiParseError", id="nuclei"),
         pytest.param("services.scanners.nmap_xml:NmapParseError", id="nmap"),
+        pytest.param("services.scanners.nikto_json:NiktoParseError", id="nikto"),
+        pytest.param("services.scanners.ssh_audit_json:SshAuditParseError", id="ssh-audit"),
     ],
 )
 def test_parser_errors_are_permanent(exc: str) -> None:
@@ -673,3 +731,81 @@ def test_broker_visibility_timeout_outlasts_the_longest_allowed_scan() -> None:
     assert celery_app.conf.task_acks_late is True
     options = celery_app.conf.broker_transport_options or {}
     assert options.get("visibility_timeout", 3600) > MAX_TIMEOUT_SECONDS
+
+
+def test_completed_scan_dispatches_interim_findings_before_post_scan_sync(
+    engine,
+    seeded_scan,
+    monkeypatch,
+    _no_real_post_scan_dispatch,
+    _no_real_interim_findings_dispatch,
+) -> None:
+    """D-044: vuln_candidate observations become findings and are queued for
+    enrichment, ahead of the post-scan CVE sync; other kinds produce nothing."""
+    from apps.api.tasks import scans as task_module
+    from packages.schema.models.observation import (
+        Observation,
+        ObservationKind,
+        RawArtifact,
+        ScanResult,
+    )
+    from packages.schema.models.provenance import Confidence, Provenance, Source
+
+    scan_id, auth_dict = seeded_scan
+    monkeypatch.setattr(task_module, "SessionLocal", get_session_factory(engine))
+    now = datetime.now(UTC)
+    artifact = RawArtifact(
+        artifact_id="sha256-" + "d" * 58,
+        scanner="nikto",
+        content=b"[]",
+        content_type="application/json",
+        captured_at=now,
+    )
+
+    def obs(obs_id: str, kind: ObservationKind) -> Observation:
+        return Observation(
+            observation_id=obs_id,
+            engagement_id="eng-celery-test",
+            scanner="nikto",
+            kind=kind,
+            subject="172.20.1.50:80/tcp",
+            attributes={"endpoint": "172.20.1.50:80/tcp", "nikto_id": "1", "msg": "m"},
+            artifact_id=artifact.artifact_id,
+            observed_at=now,
+            provenance=Provenance(
+                source=Source.SCANNER, confidence=Confidence.MEDIUM, retrieved_at=now
+            ),
+        )
+
+    mock_adapter = MagicMock()
+    mock_adapter.is_available.return_value = True
+    mock_adapter.scan.return_value = ScanResult(
+        artifact=artifact,
+        observations=(
+            obs("o-port", ObservationKind.PORT_OPEN),
+            obs("o-vuln", ObservationKind.VULN_CANDIDATE),
+        ),
+    )
+    monkeypatch.setattr(task_module, "NmapAdapter", lambda: mock_adapter)
+
+    order: list[str] = []
+    _no_real_interim_findings_dispatch.side_effect = lambda **_kw: order.append("findings")
+    _no_real_post_scan_dispatch.side_effect = lambda **_kw: order.append("cve_sync")
+
+    task_module.run_scan(
+        scan_id=scan_id,
+        engagement_id="eng-celery-test",
+        scanner="nmap",
+        target="172.20.1.50",
+        options={},
+        authorization_dict=auth_dict,
+        task=None,
+    )
+
+    assert order == ["findings", "cve_sync"]
+    kwargs = _no_real_interim_findings_dispatch.call_args.kwargs
+    assert kwargs["retry"] is False
+    sent = kwargs["kwargs"]["findings_data"]
+    assert [f["observation_ids"] for f in sent] == [["o-vuln"]]
+    assert sent[0]["asset_id"] == "host:172.20.1.50"
+    assert kwargs["kwargs"]["actor"] == "test-operator"
