@@ -19,7 +19,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from apps.api.core.audit import log_audit_event
-from apps.api.core.config import settings
+from apps.api.core import config as app_config
 from packages.schema.models.provenance import Source
 from services.enrichment.sources.base import meta_path, read_mirror_meta
 from services.enrichment.sources.sync import MIRROR_FILENAMES, not_found_path
@@ -88,7 +88,7 @@ def _feed_status(name: str, mirror_file: Path) -> FeedStatus:
                 if synced_dt.tzinfo is None:
                     synced_dt = synced_dt.replace(tzinfo=UTC)
                 age_days = (datetime.now(UTC) - synced_dt).total_seconds() / 86400.0
-                is_stale = age_days > settings.mirror_staleness_threshold_days
+                is_stale = age_days > app_config.settings.mirror_staleness_threshold_days
             except ValueError:
                 pass
 
@@ -122,10 +122,10 @@ def get_feeds_status() -> list[FeedStatus]:
         engagement_id=_AUDIT_ENGAGEMENT,
         scanner=_AUDIT_SCANNER,
         status="success",
-        details={"cache_dir": str(settings.enrichment_cache_dir)},
+        details={"cache_dir": str(app_config.settings.enrichment_cache_dir)},
     )
 
-    cache_dir = settings.enrichment_cache_dir
+    cache_dir = app_config.settings.enrichment_cache_dir
     statuses: list[FeedStatus] = []
 
     for source, filename in MIRROR_FILENAMES.items():
