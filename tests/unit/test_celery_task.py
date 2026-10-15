@@ -286,6 +286,62 @@ def test_execute_scan_nmap_happy_path(engine, seeded_scan, monkeypatch) -> None:
     assert completed_events[0]["scanner"] == "nmap"
 
 
+@pytest.mark.parametrize(
+    ("scanner", "adapter_attr", "content_type"),
+    [
+        pytest.param("nikto", "NiktoAdapter", "application/json", id="nikto"),
+        pytest.param("ssh-audit", "SshAuditAdapter", "application/json", id="ssh-audit"),
+    ],
+)
+def test_execute_scan_dispatches_new_scanners(
+    engine, seeded_scan, monkeypatch, scanner: str, adapter_attr: str, content_type: str
+) -> None:
+    """Each scanner name routes to its own adapter, not to a fallback."""
+    from apps.api.tasks import scans as task_module
+    from packages.schema.models.observation import RawArtifact, ScanResult
+
+    scan_id, auth_dict = seeded_scan
+    factory = get_session_factory(engine)
+    monkeypatch.setattr(task_module, "SessionLocal", factory)
+
+    fake_artifact = RawArtifact(
+        artifact_id="sha256-" + "b" * 58,
+        scanner=scanner,
+        content="[]",
+        content_type=content_type,
+        captured_at=datetime.now(UTC),
+    )
+    mock_adapter = MagicMock()
+    mock_adapter.scan.return_value = ScanResult(artifact=fake_artifact, observations=())
+
+    mock_self = MagicMock()
+    mock_self.request.id = "mock-celery-task-id"
+    mock_self.request.retries = 0
+    mock_self.max_retries = 3
+    mock_self.MaxRetriesExceededError = Exception
+
+    with patch(f"apps.api.tasks.scans.{adapter_attr}", return_value=mock_adapter) as ctor:
+        task_module.execute_scan.run.__func__(
+            mock_self,
+            scan_id=scan_id,
+            engagement_id="eng-celery-test",
+            scanner=scanner,
+            target="172.20.1.50",
+            options={},
+            authorization_dict=auth_dict,
+        )
+
+    ctor.assert_called_once_with()
+    mock_adapter.scan.assert_called_once()
+
+    db = factory()
+    scan = ScanRepository(db).get(scan_id)
+    db.close()
+    assert scan is not None
+    assert scan.status == "completed"
+    assert scan.artifact_id == fake_artifact.artifact_id
+
+
 # ---------------------------------------------------------------------------
 # Retry classification: permanent failures must not be retried
 # ---------------------------------------------------------------------------
@@ -649,6 +705,8 @@ def test_post_scan_enrichment_dispatched_after_completion_audit(
     [
         pytest.param("services.scanners.nuclei_json:NucleiParseError", id="nuclei"),
         pytest.param("services.scanners.nmap_xml:NmapParseError", id="nmap"),
+        pytest.param("services.scanners.nikto_json:NiktoParseError", id="nikto"),
+        pytest.param("services.scanners.ssh_audit_json:SshAuditParseError", id="ssh-audit"),
     ],
 )
 def test_parser_errors_are_permanent(exc: str) -> None:

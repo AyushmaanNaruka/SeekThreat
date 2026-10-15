@@ -43,10 +43,14 @@ from services.scanners.base import (
     ScannerTimeoutError,
     ScannerUnavailableError,
 )
+from services.scanners.nikto_adapter import NiktoAdapter
+from services.scanners.nikto_json import NiktoParseError
 from services.scanners.nmap_adapter import NmapAdapter
 from services.scanners.nmap_xml import NmapParseError
 from services.scanners.nuclei_adapter import NucleiAdapter
 from services.scanners.nuclei_json import NucleiParseError
+from services.scanners.ssh_audit_adapter import SshAuditAdapter
+from services.scanners.ssh_audit_json import SshAuditParseError
 
 #: Audit ``scanner`` field for post-scan enrichment events raised from here.
 POST_SCAN_AUDIT_SCANNER = "post_scan_enrichment"
@@ -118,6 +122,8 @@ PERMANENT_ERRORS = (
     AuthorizationError,
     NmapParseError,
     NucleiParseError,
+    NiktoParseError,
+    SshAuditParseError,
 )
 
 
@@ -177,6 +183,10 @@ def run_scan(
             adapter = NmapAdapter()
         elif scanner == "nuclei":
             adapter = NucleiAdapter()
+        elif scanner == "nikto":
+            adapter = NiktoAdapter()
+        elif scanner == "ssh-audit":
+            adapter = SshAuditAdapter()
         else:
             raise ValueError(f"Unsupported scanner: {scanner!r}")
 

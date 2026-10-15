@@ -16,6 +16,13 @@ import {
   hasActiveScans,
   DEFAULT_POLLING_CONFIG,
 } from "../../lib/polling";
+import {
+  buildNiktoRequest,
+  buildNucleiRequest,
+  buildSshAuditRequest,
+  scannerTitle,
+  type ScannerName,
+} from "../../lib/scanOptions";
 import "./dashboard.css";
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
@@ -72,12 +79,20 @@ function formatScanTarget(scan: ScanItem): string {
   if (scan.options?.ports && !scan.target.includes(":")) {
     return `${scan.target}:${scan.options.ports}`;
   }
+  // nikto and ssh-audit carry their port in options.port (bare host target).
+  if (
+    (scan.scanner === "nikto" || scan.scanner === "ssh-audit") &&
+    scan.options?.port &&
+    !scan.target.includes(":")
+  ) {
+    return `${scan.target}:${scan.options.port}`;
+  }
   return scan.target;
 }
 
 export default function DashboardPage() {
   const [activeNav, setActiveNav] = useState("Engagements");
-  const [selectedScanner, setSelectedScanner] = useState<"nmap" | "nuclei">("nmap");
+  const [selectedScanner, setSelectedScanner] = useState<ScannerName>("nmap");
   const [targetInput, setTargetInput] = useState("");
   const [scopeWarning, setScopeWarning] = useState<string | null>(null);
 
@@ -270,42 +285,19 @@ export default function DashboardPage() {
       setPollGuardExceeded(false);
       const options: Record<string, any> = {};
       if (selectedScanner === "nuclei") {
-        options.template = "tests/fixtures/nuclei/test_http_detect.yaml";
-        // Send the BARE HOST, never a URL. The API's authorization gate compares
-        // `target` as an exact string and deliberately refuses to parse a URL down
-        // to a host (packages/schema/models/engagement.py): if the browser and the
-        // server disagreed about where the host ended, an allowlist check could
-        // pass for one host while the scan hit another. The adapter rebuilds the
-        // URL from the validated `scheme` and `port` options instead. See
-        // DECISIONS.md D-025. Sending "http://localhost" here is what produced
-        // "Target 'http://localhost' is not authorized" against an allowlist that
-        // plainly contained "localhost".
-        let scheme = "http";
-        let port: string | null = null;
-        if (target.includes("://")) {
-          try {
-            const parsed = new URL(target);
-            scheme = parsed.protocol === "https:" ? "https" : "http";
-            target = parsed.hostname;
-            if (parsed.port) port = parsed.port;
-          } catch {
-            target = target.replace(/^[a-zA-Z]+:\/\//, "").split("/")[0];
-            const bits = target.split(":");
-            target = bits[0];
-            if (bits[1] && /^\d+$/.test(bits[1])) port = bits[1];
-          }
-        } else if (target.includes(":") && !target.includes("/")) {
-          const bits = target.split(":");
-          target = bits[0];
-          if (bits[1] && /^\d+$/.test(bits[1])) port = bits[1];
-        }
-        // new URL() brackets an IPv6 literal; the gate matches on the bare address
-        // and the adapter re-brackets it for nuclei.
-        if (target.startsWith("[") && target.endsWith("]")) {
-          target = target.slice(1, -1);
-        }
-        options.scheme = scheme;
-        if (port) options.port = port;
+        // Bare host + scheme/port options, never a URL. See lib/scanOptions.ts
+        // and DECISIONS.md D-025.
+        const built = buildNucleiRequest(target);
+        target = built.target;
+        Object.assign(options, built.options);
+      } else if (selectedScanner === "nikto") {
+        const built = buildNiktoRequest(target);
+        target = built.target;
+        Object.assign(options, built.options);
+      } else if (selectedScanner === "ssh-audit") {
+        const built = buildSshAuditRequest(target);
+        target = built.target;
+        Object.assign(options, built.options);
       } else if (selectedScanner === "nmap") {
         options.no_ping = true;
         if (target.startsWith("http://") || target.startsWith("https://")) {
@@ -948,7 +940,7 @@ export default function DashboardPage() {
                   )}
                 </div>
 
-                {/* Scanner select: [ Nmap ] & [ Nuclei ] */}
+                {/* Scanner select: Nmap, Nuclei, Nikto, ssh-audit */}
                 <div className="db-form-field">
                   <label className="db-form-label">Scanner</label>
                   <div className="db-scanner-switch">
@@ -981,6 +973,43 @@ export default function DashboardPage() {
                         <span>Nuclei (Vulnerabilities)</span>
                       </div>
                       {selectedScanner === "nuclei" && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      )}
+                    </div>
+
+                    <div
+                      className={`db-scanner-opt ${selectedScanner === "nikto" ? "selected" : ""}`}
+                      onClick={() => setSelectedScanner("nikto")}
+                    >
+                      <div className="db-scanner-opt-left">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="2" y1="12" x2="22" y2="12" />
+                          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                        </svg>
+                        <span>Nikto (Web Server)</span>
+                      </div>
+                      {selectedScanner === "nikto" && (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <polyline points="9 18 15 12 9 6" />
+                        </svg>
+                      )}
+                    </div>
+
+                    <div
+                      className={`db-scanner-opt ${selectedScanner === "ssh-audit" ? "selected" : ""}`}
+                      onClick={() => setSelectedScanner("ssh-audit")}
+                    >
+                      <div className="db-scanner-opt-left">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                          <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        <span>ssh-audit (SSH Config)</span>
+                      </div>
+                      {selectedScanner === "ssh-audit" && (
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                           <polyline points="9 18 15 12 9 6" />
                         </svg>
@@ -1132,6 +1161,17 @@ export default function DashboardPage() {
                                   {scan.scanner === "nuclei" ? (
                                     <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                                       <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                                    </svg>
+                                  ) : scan.scanner === "nikto" ? (
+                                    <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <line x1="2" y1="12" x2="22" y2="12" />
+                                      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                                    </svg>
+                                  ) : scan.scanner === "ssh-audit" ? (
+                                    <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                                     </svg>
                                   ) : (
                                     <svg className="db-scanner-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1369,7 +1409,7 @@ export default function DashboardPage() {
                             </div>
                             <div className="db-activity-info">
                               <span className="db-activity-title">
-                                {scan.scanner === "nuclei" ? "Nuclei Vulnerability Scan" : "Nmap Network Scan"}
+                                {scannerTitle(scan.scanner)}
                               </span>
                               <span className="db-activity-target">{formatScanTarget(scan)}</span>
                             </div>

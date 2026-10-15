@@ -154,3 +154,19 @@ def test_authorization_rejects_inverted_or_zero_width_window() -> None:
             granted_at=NOW,
             expires_at=NOW,
         )
+
+
+@pytest.mark.parametrize(
+    ("target", "pattern"),
+    [
+        # Python's ipaddress accepts almost any text after '%' as an IPv6 scope id and
+        # ignores it for network membership, so these parsed as fd00::1 and matched.
+        # Nikto splits -host on commas, so the first one would also have scanned 10.9.9.9.
+        ("fd00::1%x,10.9.9.9", "fd00::/8"),
+        ("fd00::1%x,10.9.9.9", "fd00::1"),
+        ("::1%eth0", "::1"),
+        ("fe80::1%eth0", "fe80::/10"),
+    ],
+)
+def test_scoped_ipv6_target_never_matches(target: str, pattern: str) -> None:
+    assert target_matches(target, pattern) is False

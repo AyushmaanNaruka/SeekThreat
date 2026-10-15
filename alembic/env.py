@@ -20,7 +20,10 @@ config = context.config
 
 # Interpret the config file for Python logging.
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # Keep loggers created before migrations ran. The default (True) silences every
+    # existing logger in the process, which hides scanner warnings whenever alembic
+    # runs in-process (tests/unit/test_alembic.py does).
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

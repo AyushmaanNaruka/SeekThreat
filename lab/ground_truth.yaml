@@ -115,7 +115,7 @@ hosts:
       - port: 8090
         service: http
         product: atlassian-confluence
-        version: "7.18.0"
+        version: "7.13.6"
     expected_cves:
       - id: CVE-2022-26134
         confidence: certain
@@ -132,7 +132,7 @@ hosts:
       - port: 2222
         service: ssh
         product: openssh
-        version: "8.2p1"
+        version: "8.3p1"
     expected_cves:
       - id: CVE-2020-15778
         confidence: possible

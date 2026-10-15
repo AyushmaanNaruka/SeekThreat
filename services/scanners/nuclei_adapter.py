@@ -183,6 +183,11 @@ def _nuclei_target(request: ScanRequest) -> str:
             )
         return target
 
+    if "%" in target:
+        # ipaddress accepts any text after '%' as an IPv6 scope id, so a scope could carry a
+        # comma-separated second target into -u. The gate refuses these too.
+        raise ValueError(f"Nuclei target {target!r} has an IPv6 scope id; scoped targets are refused")
+
     try:
         ip: ipaddress.IPv4Address | ipaddress.IPv6Address | None = ipaddress.ip_address(target)
     except ValueError:

@@ -1,0 +1,1 @@
+[{"host":"172.20.1.10","ip":"172.20.1.10","port":"80","banner":"","vulnerabilities":[{"id": "013587","references": "https://developer.mozilla.org/en-US/docs/Web/HTTP/CSP","method":"GET","url":"/","msg":"Suggested security header missing: content-security-policy."},{"id": "600050","method":"HEAD","url":"/","msg":"Apache/2.4.49 appears to be outdated

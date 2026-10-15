@@ -588,3 +588,10 @@ def test_malformed_or_conflicting_selection_options_fail_closed(
     with patch("subprocess.run") as mock_run, pytest.raises(ValueError):
         adapter.scan(req)
     mock_run.assert_not_called()
+
+
+@pytest.mark.parametrize("target", ["::1%eth0", "::1%x,10.9.9.9"])
+def test_scoped_ipv6_target_is_refused(target: str) -> None:
+    request = ScanRequest(target=target, authorization=_authorization(), options={})
+    with pytest.raises(ValueError, match="scope"):
+        _nuclei_target(request)
