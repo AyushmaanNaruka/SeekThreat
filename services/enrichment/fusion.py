@@ -472,7 +472,7 @@ class FusionEngine:
             }
 
         kev_cve, kev_record = hit
-        out: dict[str, Attributed[EnrichmentValue]] = {
+        out = {
             "in_kev": Attributed[EnrichmentValue](
                 value=True,
                 provenance=Provenance(
