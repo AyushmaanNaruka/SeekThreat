@@ -56,7 +56,8 @@ def _host_from(observation: Observation) -> str | None:
         # Bare "<host>:<port>" (some nuclei records carry no endpoint attribute).
         candidate = candidate.rsplit(":", 1)[0]
     candidate = candidate.strip("[]")
-    if not candidate:
+    if not candidate or candidate == "unknown":
+        # nuclei_json uses "unknown" when a record names no host at all.
         return None
     try:
         return ipaddress.ip_address(candidate).compressed
@@ -95,6 +96,13 @@ def _description(observation: Observation) -> str:
     parts = [a[k] for k in ("description", "notes", "recommendation") if a.get(k)]
     if a.get("url"):
         parts.append(f"URL: {a['url']}")
+    # Finding has no confidence field, so carry the scanner's own confidence and note
+    # here: a low-confidence, banner-inferred CVE must not read as a confirmed one.
+    prov = observation.provenance
+    confidence = f"Scanner confidence: {prov.confidence.value}"
+    if prov.note:
+        confidence += f" ({prov.note})"
+    parts.append(confidence)
     return " | ".join(parts)
 
 

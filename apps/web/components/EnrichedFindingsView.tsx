@@ -1030,6 +1030,28 @@ function FindingDetails({ item, engagementName }: { item: EnrichedFindingItem; e
         )}
       </div>
 
+      {/* What the scanner itself reported, with its confidence: a banner-inferred CVE
+          must not read as a confirmed one just because the CVE data is real. */}
+      {item.scanner_report && (
+        <div
+          style={{
+            marginBottom: "1.25rem",
+            padding: "0.75rem 1rem",
+            borderRadius: "8px",
+            border: "1px solid rgba(131, 149, 167, 0.3)",
+            background: "rgba(217, 226, 229, 0.04)",
+            fontSize: "0.8rem",
+            color: "#A7B2B5",
+            lineHeight: 1.5,
+          }}
+        >
+          <div style={{ fontWeight: 600, color: "var(--text-primary, #f9fafb)", marginBottom: "0.25rem" }}>
+            Scanner report ({item.scanner || "scanner"})
+          </div>
+          {item.scanner_report}
+        </div>
+      )}
+
       {/* Per-Field Provenance & Lineage */}
       <div>
         <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.875rem" }}>

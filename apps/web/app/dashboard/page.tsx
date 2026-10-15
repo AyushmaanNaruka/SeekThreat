@@ -22,6 +22,7 @@ import {
   buildSshAuditRequest,
   isTargetInScope,
   scannerTitle,
+  splitHostPortScheme,
   type ScannerName,
 } from "../../lib/scanOptions";
 import "./dashboard.css";
@@ -150,7 +151,17 @@ export default function DashboardPage() {
     : "none";
 
   // Data fetching
+  // The engagement the latest fetch is for. A response for an engagement the
+  // operator has since switched away from is dropped, so a slow old fetch can't
+  // overwrite the new engagement's scans.
+  const latestScanScopeRef = React.useRef(selectedEngagementId);
+  // Declared before the load effect below, so it updates first on each change.
+  useEffect(() => {
+    latestScanScopeRef.current = selectedEngagementId;
+  }, [selectedEngagementId]);
+
   const refreshData = useCallback(async () => {
+    const scope = selectedEngagementId;
     try {
       api
         .getHealth()
@@ -161,6 +172,7 @@ export default function DashboardPage() {
         api.getScans(selectedEngagementId || undefined),
       ]);
       setEngagements(engList);
+      if (scope !== latestScanScopeRef.current) return;
       setScans(scanList);
       if (engList.length > 0 && !selectedEngagementId) {
         setSelectedEngagementId(engList[0].engagement_id);
@@ -298,23 +310,10 @@ export default function DashboardPage() {
         Object.assign(options, built.options);
       } else if (selectedScanner === "nmap") {
         options.no_ping = true;
-        if (target.startsWith("http://") || target.startsWith("https://")) {
-          try {
-            const parsed = new URL(target);
-            target = parsed.hostname;
-            if (parsed.port) {
-              options.ports = parsed.port;
-            }
-          } catch {
-            target = target.replace(/^https?:\/\//, "").split("/")[0];
-          }
-        } else if (target.includes(":") && !target.includes("/")) {
-          const parts = target.split(":");
-          target = parts[0];
-          if (parts[1] && /^\d+$/.test(parts[1])) {
-            options.ports = parts[1];
-          }
-        }
+        // Same parser as the other scanners: handles bare and bracketed IPv6.
+        const { host, port } = splitHostPortScheme(target);
+        target = host.replace(/^\[|\]$/g, "");
+        if (port) options.ports = port;
       }
       await api.launchScan({
         engagement_id: activeEngagement.engagement_id,

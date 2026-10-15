@@ -74,6 +74,8 @@ export interface EnrichedFindingItem {
   asset_id: string;
   scanner: string;
   title: string;
+  /** The scanner's own report, including its confidence (D-044). Shown verbatim. */
+  scanner_report: string;
   detected_at: string;
   cve_ids: string[];
   /** First CVE on the finding, or null if the scanner reported none. */
@@ -207,6 +209,7 @@ export function normalizeEnrichedFinding(raw: unknown): EnrichedFindingItem {
     asset_id: String(finding.asset_id ?? ""),
     scanner: String(finding.scanner ?? ""),
     title: String(finding.title ?? ""),
+    scanner_report: String(finding.description ?? ""),
     detected_at: String(finding.detected_at ?? ""),
     cve_ids: cveIds,
     cve_id: cveIds.length > 0 ? cveIds[0] : null,

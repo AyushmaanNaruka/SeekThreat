@@ -110,3 +110,24 @@ def test_bare_host_port_subject_and_matcher_name_title() -> None:
     finding = findings_from_observations([obs], detected_at=NOW)[0]
     assert finding.asset_id == "host:172.20.1.10"
     assert finding.title == "HTTP Missing Security Headers: x-frame-options"
+
+
+def test_scanner_confidence_is_carried_and_hostless_records_are_skipped() -> None:
+    inferred = _obs("o1", {"endpoint": "172.20.2.50:2222/tcp", "cve_ids": "CVE-2020-15778"})
+    inferred = inferred.model_copy(
+        update={
+            "provenance": Provenance(
+                source=Source.SCANNER,
+                confidence=Confidence.LOW,
+                retrieved_at=NOW,
+                note="banner-version CVE mapping (inference)",
+            )
+        }
+    )
+    hostless = _obs("o2", {"template_id": "t"}, scanner="nuclei", subject="unknown")
+    findings = findings_from_observations([inferred, hostless], detected_at=NOW)
+    assert len(findings) == 1
+    assert (
+        "Scanner confidence: low (banner-version CVE mapping (inference))"
+        in findings[0].description
+    )

@@ -124,4 +124,18 @@ describe("isTargetInScope (mirrors the server gate; the server stays authoritati
     assert.equal(isTargetInScope("fd00::1", ["fd00::/8"]), null);
     assert.equal(isTargetInScope("fd00::1", ["fd00::1"]), true);
   });
+  it("agrees with the server on malformed or rare allowlist forms (review of a8ba7a7)", () => {
+    // A '%' in a URL path is fine: only the bare host is sent and checked.
+    assert.equal(isTargetInScope("http://172.20.1.10/a%20b", ["172.20.0.0/16"]), true);
+    // Empty / non-integer prefixes are not "/0": Python's ip_network rejects them.
+    assert.equal(isTargetInScope("8.8.8.8", ["10.0.0.0/"]), false);
+    assert.equal(isTargetInScope("10.1.1.1", ["10.0.0.0/8.0"]), false);
+    // Leading-zero octets are not valid IPv4 to the server.
+    assert.equal(isTargetInScope("010.0.0.1", ["10.0.0.0/8"]), false);
+    // Netmask-style and non-canonical IPv6 entries: the browser can't decide, so defer.
+    assert.equal(isTargetInScope("10.1.1.1", ["10.0.0.0/255.0.0.0"]), null);
+    assert.equal(isTargetInScope("fd00::1", ["fd00:0:0:0:0:0:0:1"]), null);
+    // A URL-shaped allowlist entry never matches: the gate compares the bare host.
+    assert.equal(isTargetInScope("http://web.lab.local", ["http://web.lab.local"]), false);
+  });
 });
