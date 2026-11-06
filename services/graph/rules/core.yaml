@@ -1,0 +1,98 @@
+# Attack graph rules (DECISIONS.md D-004: rules are data).
+#
+# Each rule names one kind of step the engine is allowed to create. The engine has
+# exactly one matcher per rule name (services/graph/builder.py); a test fails if a rule
+# here has no matcher or a matcher has no rule. Every edge a rule produces carries the
+# rule name and the ids of the facts that satisfied its preconditions.
+#
+# `confidence` is the ceiling for edges from this rule. Rules that rest on something
+# no scan observed say so in `assumption`, and are LOW.
+version: 1
+rules:
+  - name: entry_zone_service_access
+    description: >-
+      An attacker starting in an entry zone can send traffic to every service observed
+      open inside that zone.
+    preconditions:
+      - {fact: "zone", where: "attacker_entry is true"}
+      - {fact: "observation", kind: "port_open | service_version | vuln_candidate", where: "address in zone"}
+    effect: network_access
+    confidence: high
+    citation: "MITRE ATT&CK TA0043 Reconnaissance / T1046 Network Service Discovery"
+
+  - name: intra_zone_service_access
+    description: >-
+      Code execution on a machine gives network access to services observed open on
+      other machines in any zone that machine has an address in (flat segment).
+    preconditions:
+      - {fact: "node", kind: "code_execution"}
+      - {fact: "topology", where: "intra_zone_reachable is true and both addresses share a zone"}
+      - {fact: "observation", kind: "port_open | service_version | vuln_candidate"}
+    effect: network_access
+    confidence: high
+    citation: "MITRE ATT&CK TA0008 Lateral Movement"
+
+  - name: declared_flow_service_access
+    description: >-
+      Code execution on a machine in zone A gives network access to services observed
+      open in zone B when the topology declares a flow A -> B covering that port.
+    preconditions:
+      - {fact: "node", kind: "code_execution"}
+      - {fact: "topology", where: "flow from_zone -> to_zone covers the port"}
+      - {fact: "observation", kind: "port_open | service_version | vuln_candidate"}
+    effect: network_access
+    confidence: high
+    citation: "MITRE ATT&CK TA0008 Lateral Movement"
+
+  - name: exploit_grants_code_execution
+    description: >-
+      Network access to a service with a finding classified as code execution grants
+      code execution on that machine.
+    preconditions:
+      - {fact: "node", kind: "network_access"}
+      - {fact: "finding", where: "on this service, capability code_execution (capabilities.yaml)"}
+    effect: code_execution
+    confidence: high
+    citation: "MITRE ATT&CK T1190 Exploit Public-Facing Application; T1210 Exploitation of Remote Services"
+
+  - name: exploit_grants_file_read
+    description: >-
+      Network access to a service with a finding classified as arbitrary file read
+      grants file read on that machine.
+    preconditions:
+      - {fact: "node", kind: "network_access"}
+      - {fact: "finding", where: "on this service, capability file_read (capabilities.yaml)"}
+    effect: file_read
+    confidence: high
+    citation: "CWE-22 Path Traversal; MITRE ATT&CK T1005 Data from Local System"
+
+  - name: local_access_exposes_credentials
+    description: >-
+      Code execution or arbitrary file read on a machine is treated as exposing
+      credential material stored on it.
+    preconditions:
+      - {fact: "node", kind: "code_execution | file_read"}
+    effect: credentials
+    confidence: low
+    assumption: >-
+      Not observed. Assumes the machine stores reusable credentials (keys, tokens,
+      config secrets). True on many servers, verified on none by this scan.
+    citation: "MITRE ATT&CK T1552 Unsecured Credentials"
+
+  - name: credential_reuse_remote_login
+    description: >-
+      Credentials taken from one machine are tried against a remote-login service
+      (ssh, rdp, winrm, telnet) observed on another machine it can reach.
+    preconditions:
+      - {fact: "node", kind: "credentials"}
+      - {fact: "observation", kind: "service_version | port_open", where: "service name is a remote-login service"}
+      - {fact: "topology", where: "source machine can reach the service (intra-zone or declared flow)"}
+    effect: code_execution
+    confidence: low
+    assumption: >-
+      Not observed. Assumes credentials from the source machine are valid on the
+      target login service. Credential reuse is common, but this scan proves nothing
+      about it.
+    citation: "MITRE ATT&CK T1078 Valid Accounts; T1021.004 Remote Services: SSH"
+
+remote_login_services: [ssh, ms-wbt-server, rdp, winrm, wsman, telnet, vnc]

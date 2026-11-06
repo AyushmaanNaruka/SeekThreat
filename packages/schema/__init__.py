@@ -15,7 +15,17 @@ from packages.schema.models.engagement import (
     target_matches,
 )
 from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
-from packages.schema.models.graph import AttackPath, Chokepoint, PathEdge, Rule
+from packages.schema.models.graph import (
+    AttackGraphResult,
+    AttackPath,
+    Chokepoint,
+    GraphNode,
+    NodeKind,
+    PathEdge,
+    Rule,
+    SimulationResult,
+    UnclassifiedFinding,
+)
 from packages.schema.models.observation import (
     Observation,
     ObservationKind,
@@ -29,9 +39,11 @@ from packages.schema.models.provenance import (
     Source,
 )
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
+from packages.schema.models.topology import MultiHomedHost, NetworkTopology, Zone, ZoneFlow
 
 __all__ = [
     "Asset",
+    "AttackGraphResult",
     "AttackPath",
     "Attributed",
     "Authorization",
@@ -44,6 +56,10 @@ __all__ = [
     "EnrichmentValue",
     "ExposureRiskScore",
     "Finding",
+    "GraphNode",
+    "MultiHomedHost",
+    "NetworkTopology",
+    "NodeKind",
     "Observation",
     "ObservationKind",
     "PathEdge",
@@ -54,6 +70,10 @@ __all__ = [
     "ScanResult",
     "ScoreComponent",
     "Service",
+    "SimulationResult",
     "Source",
     "target_matches",
+    "UnclassifiedFinding",
+    "Zone",
+    "ZoneFlow",
 ]
