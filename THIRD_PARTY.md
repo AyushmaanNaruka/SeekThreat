@@ -38,6 +38,8 @@ dependency manifests.
 | DefectDojo | BSD-3-Clause | Study / Vendored | Scanner output parser patterns (django-DefectDojo) | Mayank Narang | 2026-10-11 |
 | Nmap | NPSL | Service | Invoked as subprocess, XML output parsed. Source never vendored | | |
 | NetworkX | BSD-3-Clause | Service | In-memory attack graph substrate (D-003) | Ayushmaan | 2026-09-05 |
+| Neo4j Community Edition | GPL-3.0 (server) | Service | `neo4j:5-community` container under the `viz` compose profile; read-only, disposable projection of the attack graph (D-003). Never linked or vendored; spoken to over Bolt only | Claude agent — human to confirm | 2026-11-06 |
+| Neo4j Python driver (`neo4j`) | Apache-2.0 | Service | Bolt client in `apps/api/graph_projection.py` writing the projection; `services/graph` never imports it | Claude agent — human to confirm | 2026-11-06 |
 | PyYAML | MIT | Service | Rules-as-data loading for the path engine (D-004) | Ayushmaan | 2026-09-05 |
 | Nuclei | MIT (ProjectDiscovery) | Service | Invoked as subprocess, JSONL output parsed. Source never vendored | Ayushmaan | 2026-09-20 |
 | Nuclei Templates | MIT (ProjectDiscovery) | Vendored | Official vulnerability template archive pinned in container image | Mayank | 2026-09-25 |

@@ -63,6 +63,58 @@ result = analyze(engagement_id=..., observations=..., findings=..., topology=...
   network, database, clock, randomness and model imports. Byte-identical output for the
   same facts is asserted in `tests/unit/test_graph_engine.py`.
 
+## Neo4j projection (D-003, `viz` profile)
+
+Neo4j is a **read-only, disposable view** of a result the engine already proved, for
+Neo4j Browser. The engine never reads it back; drop it at any time and re-project.
+
+- `sinks/neo4j_projection.py` is pure: `projection_statements(result)` returns ordered,
+  parameterized Cypher (UNWIND batches). It imports no driver and passes the purity test.
+- `apps/api/graph_projection.py` owns the `neo4j` driver and runs the statements in one
+  write transaction: delete this engagement's old projection, then write the new one.
+  Other engagements are never touched (every element carries `engagement_id`).
+
+```bash
+docker compose -f infra/docker-compose.yml --profile viz up -d neo4j   # Browser: http://localhost:7474
+# NEO4J_URI / NEO4J_USER / NEO4J_PASSWORD from .env (see .env.example)
+curl -X POST http://localhost:8000/engagements/eng-lab-demo/attack-graph/project
+python -m apps.api.cli.project_graph --engagement-id eng-lab-demo       # same thing from a shell
+```
+
+Both take `max_depth` / `max_paths` like `GET .../attack-graph`, are audit-logged
+(`attack_graph.projected` / `attack_graph.project_rejected`), and answer **503** when
+Neo4j is not configured or not running (start the `viz` profile), **409** without a
+declared topology, **502** if Neo4j rejects the write.
+
+**Model**
+
+| Element | Meaning | Key properties |
+|---|---|---|
+| `(:GraphProjection)` | one per engagement | `topology_id`, `rules_digest`, `truncated`, counts, `projected_at` |
+| `(:AttackState:<Kind>)` | one per graph node; `<Kind>` is `Attacker`, `NetworkAccess`, `CodeExecution`, `FileRead`, `Credentials`; goals also get `:Goal` | `node_id`, `label`, `machine`, `zones`, `goal`, `path_ids` |
+| `-[:STEP]->` | one per edge | `edge_id`, `rule_name`, `confidence`, `evidence`, `description`, `finding_ids`, `path_ids`, `path_count` |
+| `(:AttackPath)` | one per enumerated path, `-[:STARTS_AT]->` entry, `-[:ENDS_AT]->` goal | `path_id`, `ordinal`, `length`, `confidence`, `edge_ids` (in order), `finding_ids` |
+
+**Demo queries** (Neo4j Browser; set `:param eid => 'eng-lab-demo'` first)
+
+```cypher
+// The whole attack graph for one engagement
+MATCH (a:AttackState {engagement_id: $eid})-[r:STEP]->(b) RETURN a, r, b;
+
+// The shortest proven path into the data tier, with the rule and evidence per step
+MATCH (p:AttackPath {engagement_id: $eid})-[:ENDS_AT]->(g:Goal)
+WHERE any(z IN g.zones WHERE z = 'data') WITH p ORDER BY p.ordinal LIMIT 1
+MATCH (a)-[r:STEP {engagement_id: $eid}]->(b) WHERE p.path_id IN r.path_ids
+RETURN a, r, b;
+
+// The steps shared by the most enumerated paths
+MATCH ()-[r:STEP {engagement_id: $eid}]->()
+RETURN r.rule_name, r.finding_ids, r.path_count, r.evidence ORDER BY r.path_count DESC LIMIT 10;
+```
+
+(`data` is the crown-jewel zone in `lab/topology.yaml`. Chokepoint ranking stays in the
+API response, which remains the source of truth; `path_count` is not a ranking.)
+
 ## Path Scoring (DECISIONS.md D-039 — proposed, not settled)
 
 D-029's multiplicative heuristic (`EPSS × exploit_availability × privilege_delta`) has known problems: it multiplies a probability by an ordinal, double-counts exploit evidence, and zeroes a path when no public exploit is indexed. **D-039 proposes** a replacement. It is pending sign-off by the graph owner, and D-029 stays Active until then.
