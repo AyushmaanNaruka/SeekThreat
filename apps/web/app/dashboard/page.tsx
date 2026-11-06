@@ -11,20 +11,16 @@ import {
   ScanItem,
   ObservationItem,
   CreateEngagementPayload,
+  ApiError,
+  ScanPlanResponse,
+  ScanRejection,
+  BatchScanPayload,
 } from "../../lib/api";
 import {
   hasActiveScans,
   DEFAULT_POLLING_CONFIG,
 } from "../../lib/polling";
-import {
-  buildNiktoRequest,
-  buildNucleiRequest,
-  buildSshAuditRequest,
-  isTargetInScope,
-  scannerTitle,
-  splitHostPortScheme,
-  type ScannerName,
-} from "../../lib/scanOptions";
+import { scannerTitle, type ScannerName } from "../../lib/scanOptions";
 import "./dashboard.css";
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
@@ -77,6 +73,18 @@ function formatExpiresIn(expiresAt: string): string {
   return `${hours}h ${mins}m`;
 }
 
+// Debounce for the live POST /scans/plan preview while the operator types.
+const PLAN_DEBOUNCE_MS = 350;
+
+/**
+ * Shared options for a batch. Per-target port/scheme are derived by the server
+ * from each entry (URL scheme/port, host:port), so the browser sends none. The
+ * server ignores nmap's no_ping for network ranges, where it runs discovery.
+ */
+function batchOptionsFor(scanner: ScannerName): Record<string, unknown> {
+  return scanner === "nmap" ? { no_ping: true } : {};
+}
+
 function formatScanTarget(scan: ScanItem): string {
   if (scan.options?.ports && !scan.target.includes(":")) {
     return `${scan.target}:${scan.options.ports}`;
@@ -105,7 +113,20 @@ export default function DashboardPage() {
   };
   const [selectedScanner, setSelectedScanner] = useState<ScannerName>("nmap");
   const [targetInput, setTargetInput] = useState("");
-  const [scopeWarning, setScopeWarning] = useState<string | null>(null);
+  // Live dry-run preview from POST /scans/plan. `key` records which
+  // engagement/scanner/input the stored answer is for, so a plan for older
+  // input is never used to enable the launch button.
+  const [planState, setPlanState] = useState<{
+    key: string;
+    plan: ScanPlanResponse | null;
+    error: string | null;
+  } | null>(null);
+  const planRequestRef = React.useRef(0);
+  const [launchResult, setLaunchResult] = useState<{
+    message: string;
+    ok: boolean;
+    rejected: ScanRejection[];
+  } | null>(null);
 
   // Live Backend State
   const [engagements, setEngagements] = useState<EngagementItem[]>([]);
@@ -244,89 +265,99 @@ export default function DashboardPage() {
     };
   }, [activeScansPresent]);
 
-  // Target input validation against active engagement allowlist
-  const handleTargetChange = (val: string) => {
-    setTargetInput(val);
-    if (!val.trim()) {
-      setScopeWarning(null);
-      return;
-    }
-    if (!activeEngagement) {
-      setScopeWarning("No active engagement selected.");
-      return;
-    }
+  const activeEngagementId = activeEngagement ? activeEngagement.engagement_id : "";
+  const currentPlanKey = JSON.stringify([activeEngagementId, selectedScanner, targetInput]);
+  const planIsCurrent = planState !== null && planState.key === currentPlanKey;
+  // The last answered plan stays on screen (marked "Updating") while a newer
+  // request is pending; only a current one drives the button.
+  const plan = planState ? planState.plan : null;
+  const planError = planIsCurrent && planState ? planState.error : null;
+  const plannedCount = planIsCurrent && plan ? plan.total_planned : 0;
 
-    const trimmed = val.trim();
-    const allowlist = activeEngagement.allowlist;
-    // false = definitely outside; null = the browser can't tell (IPv6 range), so
-    // let the server's gate decide rather than blocking the launch.
-    const isAllowed = isTargetInScope(trimmed, allowlist) !== false;
+  // Debounced dry run. The server parses, expands ranges and checks scope; the
+  // browser only shows what it answered. A response for input, engagement or
+  // scanner that has since changed is dropped (request counter + abort).
+  // State is only set from the timer callback, never synchronously here.
+  useEffect(() => {
+    const requestId = ++planRequestRef.current;
+    if (!targetInput.trim() || !activeEngagementId) return;
+    const key = JSON.stringify([activeEngagementId, selectedScanner, targetInput]);
+    const payload: BatchScanPayload = {
+      engagement_id: activeEngagementId,
+      scanner: selectedScanner,
+      targets: [targetInput],
+      options: batchOptionsFor(selectedScanner),
+    };
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const res = await api.planScans(payload, controller.signal);
+        if (requestId !== planRequestRef.current) return;
+        setPlanState({ key, plan: res, error: null });
+      } catch (err: unknown) {
+        if (requestId !== planRequestRef.current) return;
+        if (err instanceof Error && err.name === "AbortError") return;
+        const message = err instanceof Error && err.message ? err.message : "Could not preview these targets.";
+        setPlanState({ key, plan: null, error: message });
+      }
+    }, PLAN_DEBOUNCE_MS);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [targetInput, activeEngagementId, selectedScanner]);
 
-    if (!isAllowed) {
-      setScopeWarning(
-        trimmed.includes("/") && !trimmed.includes("://")
-          ? `"${trimmed}" is a range. The authorization gate accepts one host per scan: enter a single IP or hostname.`
-          : `Target "${trimmed}" is outside authorized scope (${allowlist.join(", ")}). Server authorization gate will reject this target.`
-      );
-    } else {
-      setScopeWarning(null);
-    }
+  // Scope shortcut pills append the pattern on a new line rather than replace.
+  const appendTarget = (pattern: string) => {
+    setTargetInput((prev) => {
+      const trimmed = prev.replace(/\s+$/, "");
+      return trimmed ? `${trimmed}\n${pattern}` : pattern;
+    });
   };
 
   const [isLaunching, setIsLaunching] = useState(false);
 
-  // Launch scan handler
+  // Launch handler: one POST /scans/batch for everything in the textarea.
   const handleLaunchScan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeEngagement) {
       setShowCreateModal(true);
       return;
     }
-    let target = targetInput.trim();
-    if (!target) {
-      setApiError("Enter a target: an IP, hostname or URL inside this engagement's scope.");
+    if (!targetInput.trim()) {
+      setApiError("Enter at least one target inside this engagement's scope.");
       return;
     }
 
     setIsLaunching(true);
+    setLaunchResult(null);
     try {
       setApiError(null);
       pollAttemptsRef.current = 0;
       setPollGuardExceeded(false);
-      const options: Record<string, any> = {};
-      if (selectedScanner === "nuclei") {
-        // Bare host + scheme/port options, never a URL. See lib/scanOptions.ts
-        // and DECISIONS.md D-025.
-        const built = buildNucleiRequest(target);
-        target = built.target;
-        Object.assign(options, built.options);
-      } else if (selectedScanner === "nikto") {
-        const built = buildNiktoRequest(target);
-        target = built.target;
-        Object.assign(options, built.options);
-      } else if (selectedScanner === "ssh-audit") {
-        const built = buildSshAuditRequest(target);
-        target = built.target;
-        Object.assign(options, built.options);
-      } else if (selectedScanner === "nmap") {
-        options.no_ping = true;
-        // Same parser as the other scanners: handles bare and bracketed IPv6.
-        const { host, port } = splitHostPortScheme(target);
-        target = host.replace(/^\[|\]$/g, "");
-        if (port) options.ports = port;
-      }
-      await api.launchScan({
+      const res = await api.launchScanBatch({
         engagement_id: activeEngagement.engagement_id,
         scanner: selectedScanner,
-        target: target,
-        options: options,
+        targets: [targetInput],
+        options: batchOptionsFor(selectedScanner),
       });
+      const launched = res.accepted.length;
+      const rejectedCount = res.rejected.length;
+      let message = `Launched ${launched} scan${launched === 1 ? "" : "s"}`;
+      if (rejectedCount > 0) {
+        message += `; ${rejectedCount} target${rejectedCount === 1 ? "" : "s"} rejected`;
+      }
+      setLaunchResult({ message: `${message}.`, ok: true, rejected: res.rejected });
       setTargetInput("");
-      setScopeWarning(null);
       await refreshData();
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Launch scan error:", err);
-      setApiError(err.message || "Failed to dispatch scan.");
+      if (err instanceof ApiError && err.rejected.length > 0) {
+        // 422: every entry was rejected. Show why and keep the input to edit.
+        setLaunchResult({ message: err.message, ok: false, rejected: err.rejected });
+      } else {
+        setApiError(err instanceof Error && err.message ? err.message : "Failed to dispatch scans.");
+      }
     } finally {
       setIsLaunching(false);
     }
@@ -960,40 +991,112 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                {/* Target input */}
+                {/* Targets: any mix of IPs, CIDRs, ranges, hostnames, host:port, URLs */}
                 <div className="db-form-field">
-                  <label className="db-form-label">Target (IP, hostname, or URL)</label>
+                  <label className="db-form-label" htmlFor="db-scan-targets">
+                    Targets (IPs, CIDRs, ranges, hostnames or URLs — one per line or comma-separated)
+                  </label>
                   <div className="db-input-wrapper">
-                    <input
-                      type="text"
-                      className="db-input"
+                    <textarea
+                      id="db-scan-targets"
+                      className="db-input db-targets-textarea"
+                      rows={4}
+                      spellCheck={false}
                       placeholder={
                         activeEngagement && activeEngagement.allowlist.length > 0
                           ? `e.g. ${activeEngagement.allowlist[0]}`
-                          : "Enter IP, hostname, or URL"
+                          : "Enter IPs, CIDRs, ranges, hostnames or URLs"
                       }
                       value={targetInput}
-                      onChange={(e) => handleTargetChange(e.target.value)}
+                      onChange={(e) => setTargetInput(e.target.value)}
                     />
-                    <svg className="db-input-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <polyline points="6 9 12 15 18 9" />
-                    </svg>
                   </div>
                 </div>
 
-                {/* Scope Warning Alert if outside allowlist */}
-                {scopeWarning && (
-                  <div className="db-scope-warning">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <span>{scopeWarning}</span>
+                {/* Live plan preview from POST /scans/plan (the server decides) */}
+                {targetInput.trim() && activeEngagement && (
+                  <div className="db-plan-preview">
+                    {planError ? (
+                      <div className="db-scope-warning">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="8" x2="12" y2="12" />
+                          <line x1="12" y1="16" x2="12.01" y2="16" />
+                        </svg>
+                        <span>{planError}</span>
+                      </div>
+                    ) : plan ? (
+                      <>
+                        <div className="db-plan-summary">
+                          <span>
+                            {plan.total_planned} scan{plan.total_planned === 1 ? "" : "s"} will be launched
+                          </span>
+                          <span className="db-plan-meta">
+                            {!planIsCurrent ? "Updating preview..." : `max ${plan.max_scans}`}
+                          </span>
+                        </div>
+                        {plan.planned.length > 0 && (
+                          <ul className="db-plan-list">
+                            {plan.planned.map((item, idx) => (
+                              <li key={`${item.target}-${idx}`} className="db-plan-row">
+                                <span className="db-plan-target">{item.target}</span>
+                                <span className="db-plan-kind">{item.kind}</span>
+                                {item.note && <span className="db-plan-note">{item.note}</span>}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                        {plan.rejected.length > 0 && (
+                          <ul className="db-plan-list db-plan-rejected">
+                            {plan.rejected.map((rej, idx) => (
+                              <li key={`${rej.input}-${idx}`} className="db-scope-warning">
+                                <span>
+                                  <strong>{rej.target ?? rej.input}</strong>: {rej.reason}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </>
+                    ) : (
+                      <div className="db-plan-summary">
+                        <span className="db-plan-meta">Checking targets against scope...</span>
+                      </div>
+                    )}
                   </div>
                 )}
 
-                {/* Authorized Scope Suggestions from Active Engagement */}
+                {/* Result of the last batch launch */}
+                {launchResult && (
+                  <div className={launchResult.ok ? "db-launch-result" : "db-launch-result failed"}>
+                    <div className="db-launch-result-head">
+                      <span>{launchResult.message}</span>
+                      <button
+                        type="button"
+                        className="db-launch-result-close"
+                        onClick={() => setLaunchResult(null)}
+                        aria-label="Dismiss"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {launchResult.rejected.length > 0 && (
+                      <ul className="db-plan-list db-plan-rejected">
+                        {launchResult.rejected.map((rej, idx) => (
+                          <li key={`${rej.input}-${idx}`} className="db-scope-warning">
+                            <span>
+                              <strong>{rej.target ?? rej.input}</strong>: {rej.reason}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+
+                {/* Authorized Scope Suggestions: append to the textarea, never replace.
+                    A *.domain wildcard can't be scanned directly; the server rejects it
+                    with a reason in the preview. */}
                 {activeEngagement && activeEngagement.allowlist.length > 0 && (
                   <div className="db-form-field">
                     <span className="db-suggestions-title">Authorized Scope Shortcuts</span>
@@ -1003,7 +1106,7 @@ export default function DashboardPage() {
                           type="button"
                           key={pattern}
                           className="db-suggestion-pill"
-                          onClick={() => handleTargetChange(pattern)}
+                          onClick={() => appendTarget(pattern)}
                         >
                           {pattern}
                         </button>
@@ -1016,7 +1119,7 @@ export default function DashboardPage() {
                 <button
                   type={activeEngagement ? "submit" : "button"}
                   className="db-btn-launch"
-                  disabled={isLaunching || !!scopeWarning}
+                  disabled={!!activeEngagement && (isLaunching || plannedCount === 0)}
                   onClick={(e) => {
                     if (!activeEngagement) {
                       e.preventDefault();
@@ -1026,9 +1129,13 @@ export default function DashboardPage() {
                 >
                   <span>
                     {isLaunching
-                      ? "Launching Scan..."
+                      ? plannedCount > 1
+                        ? `Launching ${plannedCount} Scans...`
+                        : "Launching Scan..."
                       : !activeEngagement
                       ? "Register Engagement First"
+                      : plannedCount > 1
+                      ? `Launch ${plannedCount} Scans`
                       : "Launch Scan"}
                   </span>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
