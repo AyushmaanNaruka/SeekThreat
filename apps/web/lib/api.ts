@@ -5,6 +5,8 @@
 
 import { normalizeEnrichedFinding } from "./findings";
 import type { EnrichedFindingItem } from "./findings";
+import { parseAttackGraphResult } from "./attackGraph";
+import type { AttackGraphResult, NetworkTopology, SimulationResult } from "./attackGraph";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -89,6 +91,7 @@ export interface ObservationProvenance {
   source: string;
   confidence: string;
   retrieved_at: string;
+  note?: string | null;
 }
 
 export interface ObservationItem {
@@ -132,6 +135,17 @@ export interface EnrichedFindingListResponse {
   limit: number;
   offset: number;
 }
+
+export type {
+  AttackGraphResult,
+  AttackPath,
+  Chokepoint,
+  GraphNode,
+  NetworkTopology,
+  PathEdge,
+  SimulationResult,
+  UnclassifiedFinding,
+} from "./attackGraph";
 
 export interface BatchEnrichResult {
   status: string;
@@ -275,11 +289,16 @@ export const api = {
    * GET /findings/{id}?engagement_id=...
    * Retrieve a single enriched finding record within an engagement.
    */
-  async getFinding(findingId: string, engagementId: string): Promise<EnrichedFindingItem> {
+  async getFinding(
+    findingId: string,
+    engagementId: string,
+    signal?: AbortSignal
+  ): Promise<EnrichedFindingItem> {
     const res = await fetch(
       `${API_BASE_URL}/findings/${encodeURIComponent(findingId)}?engagement_id=${encodeURIComponent(
         engagementId
-      )}`
+      )}`,
+      { signal }
     );
     const raw = await handleResponse<Record<string, unknown>>(res);
     return normalizeEnrichedFinding(raw);
@@ -355,5 +374,75 @@ export const api = {
       finding_ids: data.finding_ids,
       items: (data.items || []).map((raw) => normalizeEnrichedFinding(raw)),
     };
+  },
+  // -------------------------------------------------------------------------
+  // Attack graph (Layer 3). Paths are built by the deterministic rules engine
+  // (services/graph); the UI only displays them.
+  // -------------------------------------------------------------------------
+
+  /** GET /engagements/{id}/topology. 404 when no topology has been declared. */
+  async getTopology(engagementId: string, signal?: AbortSignal): Promise<NetworkTopology> {
+    const res = await fetch(
+      `${API_BASE_URL}/engagements/${encodeURIComponent(engagementId)}/topology`,
+      { signal }
+    );
+    return handleResponse<NetworkTopology>(res);
+  },
+
+  /**
+   * GET /engagements/{id}/attack-graph. 409/404 with a `detail` message when no
+   * topology is declared. Limits are omitted unless given (server defaults apply).
+   */
+  async getAttackGraph(
+    engagementId: string,
+    opts: { maxDepth?: number; maxPaths?: number; signal?: AbortSignal } = {}
+  ): Promise<AttackGraphResult> {
+    const params = new URLSearchParams();
+    if (opts.maxDepth !== undefined) params.set("max_depth", String(opts.maxDepth));
+    if (opts.maxPaths !== undefined) params.set("max_paths", String(opts.maxPaths));
+    const qs = params.toString();
+    const res = await fetch(
+      `${API_BASE_URL}/engagements/${encodeURIComponent(engagementId)}/attack-graph${qs ? `?${qs}` : ""}`,
+      { signal: opts.signal }
+    );
+    return parseAttackGraphResult(await handleResponse<unknown>(res));
+  },
+
+  /** POST /engagements/{id}/attack-graph/simulate: rebuild with findings marked fixed. */
+  async simulateRemediation(
+    engagementId: string,
+    fixedFindingIds: string[],
+    signal?: AbortSignal
+  ): Promise<SimulationResult> {
+    const res = await fetch(
+      `${API_BASE_URL}/engagements/${encodeURIComponent(engagementId)}/attack-graph/simulate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fixed_finding_ids: fixedFindingIds }),
+        signal,
+      }
+    );
+    const data = await handleResponse<SimulationResult>(res);
+    parseAttackGraphResult(data.after);
+    return data;
+  },
+
+  /**
+   * GET /observations/{observation_id}?engagement_id=...
+   * Observation ids include their "obs:" prefix; the whole id is the path segment.
+   */
+  async getObservation(
+    observationId: string,
+    engagementId: string,
+    signal?: AbortSignal
+  ): Promise<ObservationItem> {
+    const res = await fetch(
+      `${API_BASE_URL}/observations/${encodeURIComponent(observationId)}?engagement_id=${encodeURIComponent(
+        engagementId
+      )}`,
+      { signal }
+    );
+    return handleResponse<ObservationItem>(res);
   },
 };
