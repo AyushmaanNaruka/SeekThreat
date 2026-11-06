@@ -4,8 +4,9 @@ Enumeration is exhaustive up to the stated limits and deterministic: shortest pa
 first, ties broken by the sequence of edge ids. Only shortcut-free paths are listed: a
 path that steps to a node some earlier node on it already has a direct edge to is a
 detour around a shorter path (e.g. compromising the proxy to reach a gateway the
-attacker could already reach from the entry zone), so it is not listed separately. Nothing here scores, ranks or prunes by
-risk (path scoring is pending sign-off, DECISIONS.md D-039). When a limit is hit the
+attacker could already reach from the entry zone), so it is not listed separately.
+Nothing here scores, ranks or prunes by risk (path scoring is pending sign-off,
+DECISIONS.md D-039). When a limit is hit the
 result says so; it never silently drops paths.
 """
 
