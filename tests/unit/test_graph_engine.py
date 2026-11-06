@@ -466,3 +466,12 @@ def test_facts_from_another_engagement_are_rejected(
 )
 def test_parse_endpoint(text: str, expected: tuple[str, int, str] | None) -> None:
     assert parse_endpoint(text) == expected
+
+
+def test_rules_digest_ignores_line_endings(tmp_path: Path) -> None:
+    from services.graph.ruleset import RULES_DIR
+
+    for name in ("core.yaml", "capabilities.yaml"):
+        text = (RULES_DIR / name).read_bytes().replace(bytes([13, 10]), bytes([10]))
+        (tmp_path / name).write_bytes(text.replace(bytes([10]), bytes([13, 10])))
+    assert load_ruleset(tmp_path).digest == load_ruleset().digest

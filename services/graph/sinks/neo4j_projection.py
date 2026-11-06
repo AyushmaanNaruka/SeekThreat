@@ -170,6 +170,9 @@ def projection_statements(result: AttackGraphResult) -> list[Statement]:
         }
         if path.score is not None:
             row["score"] = path.score
+        if path.rank is not None:
+            row["rank"] = path.rank
+            row["rank_explanation"] = path.rank_explanation
         path_rows.append(row)
 
     props: dict[str, Any] = {

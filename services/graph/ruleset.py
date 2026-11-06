@@ -17,6 +17,7 @@ RULES_DIR = Path(__file__).resolve().parent / "rules"
 CODE_EXECUTION = "code_execution"
 FILE_READ = "file_read"
 CAPABILITIES = (CODE_EXECUTION, FILE_READ)
+_CRLF, _LF = bytes([13, 10]), bytes([10])
 
 
 @dataclass(frozen=True)
@@ -53,10 +54,12 @@ def _lower_set(values: Any) -> frozenset[str]:
 
 
 def load_ruleset(rules_dir: Path = RULES_DIR) -> RuleSet:
-    """Parse `core.yaml` and `capabilities.yaml`. The digest covers both files' bytes, so
+    """Parse `core.yaml` and `capabilities.yaml`. The digest covers both files' contents, so
     a result can cite exactly which rule data produced it."""
-    core_bytes = (rules_dir / "core.yaml").read_bytes()
-    cap_bytes = (rules_dir / "capabilities.yaml").read_bytes()
+    # Line endings are normalised so a Windows (CRLF) checkout of the same rules gives
+    # the same digest as a Unix one.
+    core_bytes = (rules_dir / "core.yaml").read_bytes().replace(_CRLF, _LF)
+    cap_bytes = (rules_dir / "capabilities.yaml").read_bytes().replace(_CRLF, _LF)
     core = yaml.safe_load(core_bytes)
     caps = yaml.safe_load(cap_bytes)
 
