@@ -34,6 +34,29 @@ def is_valid_hostname(value: str) -> bool:
     return all(_HOSTNAME_LABEL_RE.fullmatch(label) for label in value.lower().split("."))
 
 
+_NETWORK_TARGET_RE = re.compile(r"[0-9a-fA-F:.]+/(?:0|[1-9][0-9]{0,2})", re.ASCII)
+
+
+def _network_target_within(
+    target: str, network: ipaddress.IPv4Network | ipaddress.IPv6Network
+) -> bool:
+    """Is CIDR `target` entirely inside allowlisted `network`?
+
+    Only canonical "address/prefixlen" with no host bits set: netmask forms
+    ("10.0.0.0/255.0.0.0") and "10.0.0.5/24" are refused, since the string goes
+    to nmap verbatim and must mean exactly the block that was checked.
+    """
+    if not _NETWORK_TARGET_RE.fullmatch(target):
+        return False
+    try:
+        target_net = ipaddress.ip_network(target, strict=True)
+    except ValueError:
+        return False
+    if target_net.version != network.version:
+        return False
+    return target_net.subnet_of(network)  # type: ignore[arg-type]
+
+
 def target_matches(target: str, pattern: str) -> bool:
     """Does `target` fall inside allowlist entry `pattern`?
 
@@ -42,9 +65,13 @@ def target_matches(target: str, pattern: str) -> bool:
     matches a target that is itself a valid DNS hostname: it is a suffix check, not a
     glob, so `http://evil.com/.lab.local` does not "end in" `.lab.local`.
 
+    A target is a single IP, a hostname, or a canonical CIDR block; a CIDR target
+    matches only a network pattern that contains the whole block.
+
     The target is compared exactly as provided — no URL parsing, no DNS
-    resolution. Until proper URL target support is added (see DECISIONS.md),
-    callers must supply the exact string that will be scanned.
+    resolution. URLs and ranges are broken into these shapes before the gate, by
+    `apps/api/core/targets.py` (DECISIONS.md D-045); callers must supply the
+    exact string that will be scanned.
     """
     target = target.strip()
     pattern = pattern.strip()
@@ -62,6 +89,8 @@ def target_matches(target: str, pattern: str) -> bool:
         network = None
 
     if network is not None:
+        if "/" in target:
+            return _network_target_within(target, network)
         try:
             return ipaddress.ip_address(target) in network
         except ValueError:

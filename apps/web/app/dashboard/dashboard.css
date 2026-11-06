@@ -1063,6 +1063,105 @@
   color: #E45D68;
 }
 
+/* ---------- MULTI-TARGET LAUNCH: textarea, plan preview, result ---------- */
+.db-targets-textarea {
+  padding-right: 0.8rem;
+  min-height: 4.5rem;
+  resize: vertical;
+  line-height: 1.45;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.db-plan-preview,
+.db-launch-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.5rem 0.7rem;
+  background: #080C0E;
+  border: 1px solid rgba(217, 226, 229, 0.18);
+  border-radius: 7px;
+  font-size: 0.72rem;
+  color: #D9E2E5;
+}
+
+.db-launch-result {
+  background: rgba(32, 214, 163, 0.08);
+  border-color: rgba(32, 214, 163, 0.4);
+  color: #20D6A3;
+}
+
+.db-launch-result.failed {
+  background: rgba(228, 93, 104, 0.08);
+  border-color: rgba(228, 93, 104, 0.4);
+  color: #E45D68;
+}
+
+.db-plan-summary,
+.db-launch-result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+
+.db-plan-meta {
+  font-weight: 400;
+  color: #7B8A8D;
+}
+
+.db-launch-result-close {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0;
+  font-size: 0.75rem;
+}
+
+.db-plan-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 9rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.db-plan-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.45rem;
+}
+
+.db-plan-target {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #F5F7F8;
+  overflow-wrap: anywhere;
+}
+
+.db-plan-kind {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #A7B2B5;
+  border: 1px solid rgba(217, 226, 229, 0.25);
+  border-radius: 4px;
+  padding: 0 0.3rem;
+}
+
+.db-plan-note {
+  color: #7B8A8D;
+}
+
+.db-plan-rejected .db-scope-warning {
+  overflow-wrap: anywhere;
+}
+
 /* ---------- RECENT SCANS TABLE ---------- */
 .db-table-container {
   overflow-x: hidden;
