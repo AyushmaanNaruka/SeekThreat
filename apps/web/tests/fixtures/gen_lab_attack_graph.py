@@ -14,7 +14,7 @@ where OUTPUT is apps/web/tests/fixtures/lab_attack_graph.json.
 import glob
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import yaml
 
@@ -31,7 +31,7 @@ with open("lab/topology.yaml", encoding="utf-8") as fh:
     topo = NetworkTopology.model_validate(yaml.safe_load(fh))
 eng = topo.engagement_id
 obs = [o.model_copy(update={"engagement_id": eng}) for o in obs]
-findings = findings_from_observations(obs, datetime(2026, 11, 6, tzinfo=timezone.utc))
+findings = findings_from_observations(obs, datetime(2026, 11, 6, tzinfo=UTC))
 res = analyze(engagement_id=eng, observations=obs, findings=findings, topology=topo)
 out = {"topology": topo.model_dump(mode="json"), "attack_graph": res.model_dump(mode="json")}
 if res.chokepoints:
