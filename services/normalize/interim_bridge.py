@@ -1,4 +1,9 @@
-"""Interim observation -> Finding bridge (DECISIONS.md D-044).
+"""Interim observation -> Finding bridge (DECISIONS.md D-044). SUPERSEDED.
+
+Superseded by `services.normalize.pipeline` (identity resolution + cross-scanner dedup,
+DECISIONS.md D-045, proposed); the scan task no longer calls this. Kept because it is
+still exported from `services.normalize` and covered by `tests/unit/test_interim_bridge.py`;
+remove both once D-045 is accepted.
 
 Until Track 1's normalizer lands, nothing turned a scan's observations into findings,
 so enrichment had nothing to enrich. This bridge is deliberately minimal and
