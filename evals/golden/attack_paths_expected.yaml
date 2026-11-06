@@ -1,0 +1,57 @@
+# Machine-readable hop lists for lab/ground_truth.yaml `expected_attack_paths`.
+#
+# lab/ground_truth.yaml stays the source of truth. This file only restates, per path
+# id, the ordered host names each path's free-text steps already name, so
+# evals/attack_paths.py can grade the engine without parsing prose. Nothing here adds
+# a host, a hop or a CVE the steps do not state; each entry cites the step text it came
+# from. tests/unit/test_attack_paths_eval.py checks every path id and host name against
+# ground_truth.yaml, and that each host and CVE appears in that path's step text.
+#
+# `cves` lists, per host, only CVE ids the steps name for that host. A host with no
+# entry has no CVE named for it in the steps (e.g. path-2's bastion hop is an SSH login
+# with an exfiltrated key, not an exploit).
+#
+# Known issue, NOT corrected here (owner to decide): per lab/docker-compose.yml, dvwa is
+# only on the dmz network and internal-api only on the internal network, and
+# internal-api is not on the data network, so path-1's hops dvwa -> internal-api and
+# internal-api -> db-primary are not network-reachable in the lab as wired. The eval
+# reports this as a ground-truth feasibility failure, separate from engine misses.
+source: lab/ground_truth.yaml
+paths:
+  - id: path-1
+    hosts:
+      - dvwa          # "External scanner probes DVWA on DMZ (172.20.1.10)";
+                      # "Exploit CVE-2021-41773 path traversal / SSRF on dvwa"
+      - internal-api  # "Network reachability dvwa -> internal-api (172.20.2.10)";
+                      # "Exfiltrate database connection credentials from internal-api"
+      - db-primary    # "Network reachability internal-api -> db-primary (172.20.3.10)";
+                      # "Exploit CVE-2020-14349 on db-primary to dump crown jewel customer records"
+    cves:
+      dvwa: [CVE-2021-41773]
+      db-primary: [CVE-2020-14349]
+
+  - id: path-2
+    hosts:
+      - spring-gateway  # "External scanner discovers spring-gateway on DMZ (172.20.1.13)";
+                        # "Exploit CVE-2022-22947 (SpEL Code Injection) for initial RCE on gateway"
+      - jenkins-ci      # "Pivot across internal network to jenkins-ci (172.20.2.25)";
+                        # "Exploit CVE-2024-23897 on Jenkins CLI to read /root/.ssh/id_rsa"
+      - bastion-ssh     # "SSH login to bastion-ssh (172.20.2.50) using exfiltrated key"
+      - cache-redis     # "Pivot from bastion to cache-redis on data network (172.20.3.20)";
+                        # "Exploit CVE-2022-0543 Lua sandbox escape to obtain root RCE on database host"
+    cves:
+      spring-gateway: [CVE-2022-22947]
+      jenkins-ci: [CVE-2024-23897]
+      cache-redis: [CVE-2022-0543]
+
+  - id: path-3
+    hosts:
+      - dmz-proxy      # "External scanner probes dmz-proxy (172.20.1.12)"
+      - internal-wiki  # "Exploit CVE-2021-23017 or proxy routing misconfiguration to access
+                       #  internal-wiki (172.20.2.40)";
+                       # "Exploit CVE-2022-26134 unauthenticated OGNL injection on internal-wiki"
+    cves:
+      # The step offers CVE-2021-23017 *or* a proxy routing misconfiguration, so the
+      # proxy CVE is one option, not a requirement.
+      dmz-proxy: [CVE-2021-23017]
+      internal-wiki: [CVE-2022-26134]
