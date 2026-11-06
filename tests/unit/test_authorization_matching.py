@@ -45,9 +45,31 @@ def _auth(
         ("lab.local", "172.20.0.0/16", False),
         # An IP never matches a hostname pattern.
         ("172.20.1.10", "lab.local", False),
-        # A target must be a single host: a range equal to the allowlist entry
-        # is not itself a permitted target.
-        ("172.20.1.0/24", "172.20.1.0/24", False),
+        # A CIDR target is permitted only when the whole block sits inside an
+        # allowlisted network (DECISIONS.md D-045).
+        ("172.20.1.0/24", "172.20.1.0/24", True),
+        ("172.20.1.0/24", "172.20.0.0/16", True),
+        ("172.20.1.128/25", "172.20.1.0/24", True),
+        ("172.20.0.0/16", "172.20.1.0/24", False),
+        ("172.20.0.0/15", "172.20.0.0/16", False),
+        ("10.0.0.0/24", "172.20.0.0/16", False),
+        ("172.20.1.10/32", "172.20.1.10", True),
+        ("0.0.0.0/0", "172.20.0.0/16", False),
+        ("fd00:1::/120", "fd00::/16", True),
+        ("fd00::/8", "fd00::/16", False),
+        # ...in canonical address/prefixlen form only: the string reaches nmap
+        # verbatim, so it must mean exactly the block that was checked.
+        ("172.20.1.5/24", "172.20.0.0/16", False),
+        ("172.20.1.0/255.255.255.0", "172.20.0.0/16", False),
+        ("172.20.1.0/24 10.0.0.1", "172.20.0.0/16", False),
+        ("172.20.1.0/24,10.0.0.1", "172.20.0.0/16", False),
+        ("172.20.1.0/024", "172.20.0.0/16", False),
+        ("172.20.1.0/", "172.20.0.0/16", False),
+        ("/24", "172.20.0.0/16", False),
+        ("::ffff:172.20.1.0/120", "172.20.0.0/16", False),
+        # A CIDR target never matches a hostname pattern.
+        ("172.20.1.0/24", "lab.local", False),
+        ("172.20.1.0/24", "*.lab.local", False),
         # URLs are never parsed down to a host (parser-differential bypasses).
         ("http://evil.example\\@172.20.1.10/", "172.20.1.0/24", False),
         ("https://attacker.com@172.20.1.10", "172.20.1.0/24", False),
