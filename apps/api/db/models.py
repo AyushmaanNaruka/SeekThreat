@@ -1,4 +1,4 @@
-"""SQLAlchemy ORM models for Layer 1 Collection persistence."""
+"""SQLAlchemy ORM models: collection, enrichment, and declared network topology."""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Fin
 from packages.schema.models.observation import Observation, ObservationKind, RawArtifact
 from packages.schema.models.provenance import Attributed, Provenance
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
+from packages.schema.models.topology import NetworkTopology
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite.
 JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
@@ -276,3 +277,31 @@ class EnrichedFindingModel(Base):
             ers = ExposureRiskScore(value=self.ers_value, components=components)
 
         return EnrichedFinding(finding=finding, fields=fields, ers=ers)
+
+
+class EngagementTopologyModel(Base):
+    """The declared network model (NetworkTopology) for one engagement.
+
+    One row per engagement: re-declaring replaces it. ``document`` holds the full
+    declaration as JSON and is the source of truth; ``topology_id`` (its content hash),
+    ``declared_by`` and ``declared_at`` are copied out so they can be queried and
+    audited without parsing the document.
+    """
+
+    __tablename__ = "engagement_topologies"
+
+    engagement_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("engagements.engagement_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    topology_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
+    declared_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    declared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    def to_schema(self) -> NetworkTopology:
+        """Rebuild the declaration from its stored document. ``topology_id`` is
+        recomputed from the content, never read back from the column."""
+        return NetworkTopology.model_validate(self.document)
