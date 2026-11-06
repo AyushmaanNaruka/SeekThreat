@@ -94,6 +94,13 @@ Then, on the dashboard:
 4. **Findings:** each scan's vulnerability observations become findings and are enriched
    automatically (DECISIONS.md D-044). Click **Refresh** once a scan completes, then expand a
    row for the risk-score breakdown and the source of every field.
+5. **Attack graph (API):** declare the lab's network topology for your engagement once, then
+   read `GET /engagements/<id>/attack-graph`:
+
+   ```bash
+   docker compose -f infra/docker-compose.yml -f infra/docker-compose.lab.yml --profile core \
+     exec api python -m apps.api.cli.load_topology --engagement-id <id> lab/topology.yaml
+   ```
 
 Never point a scan at anything outside `lab/` without an authorization record.
 

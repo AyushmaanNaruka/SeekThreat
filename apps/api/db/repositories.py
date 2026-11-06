@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.db.models import (
     EngagementModel,
+    EngagementTopologyModel,
     EnrichedFindingModel,
     ObservationModel,
     RawArtifactModel,
@@ -30,6 +31,7 @@ from packages.schema.models.observation import (
     RawArtifact,
     ScanResult,
 )
+from packages.schema.models.topology import NetworkTopology
 
 # Rows per INSERT ... ON CONFLICT statement. enriched_findings has 7 columns, so
 # 500 rows is 3500 bind parameters -- far below PostgreSQL's 65535 limit and
@@ -557,3 +559,36 @@ class EnrichedFindingRepository:
         )
         count = self.session.scalar(stmt)
         return int(count) if count is not None else 0
+
+
+class TopologyRepository:
+    """Persistence for the one declared NetworkTopology each engagement may have."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, engagement_id: str) -> NetworkTopology | None:
+        """Return the engagement's declared topology, or None if none is declared."""
+        model = self.session.get(EngagementTopologyModel, engagement_id)
+        return model.to_schema() if model is not None else None
+
+    def upsert(
+        self, topology: NetworkTopology, updated_at: datetime | None = None
+    ) -> NetworkTopology:
+        """Store ``topology`` as the engagement's declaration, replacing any earlier one.
+
+        The caller checks that the engagement exists; the foreign key enforces it on
+        PostgreSQL (and on SQLite when foreign keys are switched on).
+        """
+        document = topology.model_dump(mode="json", exclude={"topology_id"})
+        model = self.session.get(EngagementTopologyModel, topology.engagement_id)
+        if model is None:
+            model = EngagementTopologyModel(engagement_id=topology.engagement_id)
+            self.session.add(model)
+        model.topology_id = topology.topology_id
+        model.document = document
+        model.declared_by = topology.declared_by
+        model.declared_at = topology.declared_at
+        model.updated_at = updated_at or datetime.now(UTC)
+        self.session.flush()
+        return model.to_schema()
