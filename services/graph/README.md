@@ -31,6 +31,7 @@ Narration
 
 ```python
 from services.graph import analyze, simulate_remediation
+
 result = analyze(engagement_id=..., observations=..., findings=..., topology=..., enriched=...)
 ```
 
