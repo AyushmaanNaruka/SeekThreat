@@ -7,7 +7,8 @@ lab/topology.yaml. Observations are re-homed to the topology's engagement id.
 Nothing in the output is hand-written.
 
 From the repo root:
-    PYTHONPATH=. python apps/web/tests/fixtures/gen_lab_attack_graph.py         apps/web/tests/fixtures/lab_attack_graph.json
+    PYTHONPATH=. python apps/web/tests/fixtures/gen_lab_attack_graph.py OUTPUT
+where OUTPUT is apps/web/tests/fixtures/lab_attack_graph.json.
 """
 
 import glob
