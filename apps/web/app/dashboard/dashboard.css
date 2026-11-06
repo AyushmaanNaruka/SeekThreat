@@ -1721,6 +1721,7 @@
 }
 
 .ap-path-num { font-weight: 700; }
+.ap-rank-why { margin: 4px 0 0; font-size: 0.85em; }
 
 .ap-chain {
   display: flex;

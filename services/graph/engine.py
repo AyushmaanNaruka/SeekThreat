@@ -25,6 +25,7 @@ from packages.schema.models.graph import (
     SimulationResult,
 )
 from packages.schema.models.observation import Observation
+from packages.schema.models.provenance import Confidence
 from packages.schema.models.topology import NetworkTopology
 from services.graph.builder import AttackGraph, build_attack_graph
 from services.graph.ruleset import RuleSet, load_ruleset
@@ -189,6 +190,58 @@ def find_chokepoints(graph: AttackGraph, paths: Iterable[AttackPath]) -> tuple[C
     return tuple(result)
 
 
+_CONFIDENCE_RANK = {Confidence.HIGH: 2, Confidence.MEDIUM: 1, Confidence.LOW: 0}
+
+
+def rank_paths(
+    graph: AttackGraph, paths: Iterable[AttackPath], enriched: Iterable[EnrichedFinding]
+) -> tuple[AttackPath, ...]:
+    """Order already-enumerated paths for an analyst (DECISIONS.md D-047).
+
+    Lexicographic, no weights: (1) weakest-step confidence, high first, so fully
+    observed paths come before ones resting on an assumption; (2) the highest stored ERS
+    of any finding the path exploits, unscored last (ERS is read, never recomputed:
+    D-028); (3) fewer steps; (4) edge ids. Ranking reorders; it never adds or drops a
+    path (Hard Rule 1).
+    """
+    ers: dict[str, float] = {
+        e.finding.finding_id: e.ers.value for e in enriched if e.ers is not None
+    }
+
+    def top_ers(path: AttackPath) -> tuple[float, str] | None:
+        scored = [(ers[f], f) for edge in path.edges for f in edge.finding_ids if f in ers]
+        return max(scored, key=lambda item: (item[0], item[1])) if scored else None
+
+    def key(path: AttackPath) -> tuple[int, int, float, int, tuple[str, ...]]:
+        best = top_ers(path)
+        return (
+            -_CONFIDENCE_RANK[path.confidence],
+            0 if best is not None else 1,
+            -(best[0] if best is not None else 0.0),
+            len(path.edges),
+            tuple(e.edge_id for e in path.edges),
+        )
+
+    ordered = sorted(paths, key=key)
+    result: list[AttackPath] = []
+    for rank, path in enumerate(ordered, start=1):
+        weakest_edge = min(path.edges, key=lambda e: _CONFIDENCE_RANK[e.confidence])
+        best = top_ers(path)
+        if best is None:
+            ers_text = "no finding on this path has a stored ERS (not scored)"
+        else:
+            finding = graph.findings[best[1]]
+            what = ", ".join(finding.cve_ids) or finding.title or best[1]
+            ers_text = f"highest stored ERS on the path is {best[0]:.1f} ({what})"
+        explanation = (
+            f"Rank {rank}: {path.confidence.value} confidence "
+            f"(weakest step: {weakest_edge.rule_name}); {ers_text}; "
+            f"{len(path.edges)} steps."
+        )
+        result.append(path.model_copy(update={"rank": rank, "rank_explanation": explanation}))
+    return tuple(result)
+
+
 def analyze(
     *,
     engagement_id: str,
@@ -204,6 +257,7 @@ def analyze(
     """Build, enumerate and find chokepoints in one call. The single entry point the API
     uses. Pure: the same inputs always serialise to the same bytes."""
     rules = ruleset or load_ruleset()
+    enriched = list(enriched)
     graph = build_attack_graph(
         engagement_id=engagement_id,
         observations=observations,
@@ -214,14 +268,15 @@ def analyze(
         exclude_finding_ids=exclude_finding_ids,
     )
     enumeration = enumerate_paths(graph, max_depth=max_depth, max_paths=max_paths)
+    ranked = rank_paths(graph, enumeration.paths, enriched)
     return AttackGraphResult(
         engagement_id=engagement_id,
         topology_id=topology.topology_id,
         rules_digest=rules.digest,
         nodes=tuple(graph.nodes.values()),
         edges=tuple(graph.edges.values()),
-        paths=enumeration.paths,
-        chokepoints=find_chokepoints(graph, enumeration.paths),
+        paths=ranked,
+        chokepoints=find_chokepoints(graph, ranked),
         unclassified_findings=graph.unclassified,
         unzoned_addresses=graph.unzoned_addresses,
         max_depth=max_depth,

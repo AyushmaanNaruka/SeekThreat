@@ -52,7 +52,10 @@ result = analyze(engagement_id=..., observations=..., findings=..., topology=...
   confidence is its weakest edge.
 - **Enumeration** is iterative deepening: every simple path up to `max_depth`, shortest
   first, ties broken by edge ids, capped at `max_paths`, with `truncated` set when a
-  limit is hit. **Paths are unranked** (`score` is `None`) until D-039 is signed off.
+  limit is hit.
+- **Ranking (D-047)** is ordinal: weakest-step confidence, then highest stored ERS on the
+  path, then fewer steps, then edge ids. Each path has `rank` and a `rank_explanation`;
+  there is no composite `score`. Ranking only reorders the enumerated set.
 - **Chokepoints** are ranked by goals cut, then paths broken. **Remediation
   simulation** rebuilds from the same facts without the fixed findings and reports what
   disappeared.

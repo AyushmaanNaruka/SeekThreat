@@ -70,9 +70,9 @@ describe("parseAttackGraphResult", () => {
     assert.ok(parsed.paths.length > 0, "fixture should contain paths");
   });
 
-  it("paths are unranked: every score is null", () => {
+  it("there is no composite score: every score is null", () => {
     for (const p of graph.paths) assert.equal(p.score, null);
-    assert.match(graph.ordering, /unranked/);
+    assert.match(graph.ordering, /ranked \(D-047\)/);
   });
 
   it("rejects an edge without evidence", () => {
@@ -250,9 +250,17 @@ describe("groupPathsByGoal", () => {
     }
   });
 
-  it("orders groups by label, not by path count", () => {
-    const labels = groups.map((g) => g.goal_label);
-    assert.deepEqual(labels, [...labels].sort((a, b) => a.localeCompare(b, "en")));
+  it("orders groups by their best server rank, not by path count", () => {
+    const best = groups.map((g) => Math.min(...g.paths.map((p) => p.rank)));
+    assert.deepEqual(best, [...best].sort((a, b) => a - b));
+    assert.equal(best[0], 1);
+  });
+
+  it("carries the server's rank explanation on every path", () => {
+    for (const p of graph.paths) {
+      assert.equal(typeof p.rank, "number");
+      assert.match(p.rank_explanation, new RegExp(`^Rank ${p.rank}:`));
+    }
   });
 
   it("keeps the server's path order inside a group", () => {

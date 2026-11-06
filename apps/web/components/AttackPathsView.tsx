@@ -179,7 +179,9 @@ function PathChain({
   return (
     <div className="ap-path">
       <div className="ap-path-head">
-        <span className="ap-path-num">Path {index + 1}</span>
+        <span className="ap-path-num">
+          {typeof path.rank === "number" ? `Rank ${path.rank}` : `Path ${index + 1}`}
+        </span>
         <span className="ap-mono ap-muted" title="path_id">
           {path.path_id}
         </span>
@@ -191,6 +193,7 @@ function PathChain({
         </span>
         {assumed && <span className="ap-badge ap-badge-assumption">includes assumption</span>}
       </div>
+      {path.rank_explanation && <p className="ap-muted ap-rank-why">{path.rank_explanation}</p>}
       <div className="ap-chain">
         <NodeChip node={nodes.get(path.entry_node)} nodeId={path.entry_node} />
         {path.edges.map((edge) => (

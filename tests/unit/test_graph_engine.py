@@ -17,10 +17,11 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from packages.schema.models.finding import Finding
+from packages.schema.models.finding import EnrichedFinding, Finding
 from packages.schema.models.graph import AttackGraphResult, NodeKind
 from packages.schema.models.observation import Observation, ObservationKind
 from packages.schema.models.provenance import Confidence, Provenance, Source
+from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 from packages.schema.models.topology import NetworkTopology
 from services.graph import analyze, build_attack_graph, load_ruleset, simulate_remediation
 from services.graph.builder import MATCHERS, parse_endpoint
@@ -142,12 +143,62 @@ def test_paths_are_simple_chains_from_an_attacker_to_a_goal(result: AttackGraphR
         assert len(visited) == len(set(visited)), "path revisits a node"
         assert all(e.edge_id in edge_ids for e in path.edges)
         assert path.score is None
+        assert path.narration is None  # narration is strictly downstream (Layer 4)
 
 
-def test_paths_are_ordered_shortest_first_then_by_edge_ids(result: AttackGraphResult) -> None:
-    keys = [(len(p.edges), tuple(e.edge_id for e in p.edges)) for p in result.paths]
+def test_paths_are_ranked_by_confidence_then_length_when_nothing_is_scored(
+    result: AttackGraphResult,
+) -> None:
+    order = {Confidence.HIGH: 0, Confidence.MEDIUM: 1, Confidence.LOW: 2}
+    keys = [
+        (order[p.confidence], len(p.edges), tuple(e.edge_id for e in p.edges)) for p in result.paths
+    ]
     assert keys == sorted(keys)
+    assert [p.rank for p in result.paths] == list(range(1, len(result.paths) + 1))
     assert len({p.path_id for p in result.paths}) == len(result.paths)
+    for path in result.paths:
+        assert path.score is None
+        assert path.rank_explanation is not None
+        assert path.rank_explanation.startswith(f"Rank {path.rank}:")
+        assert "not scored" in path.rank_explanation
+
+
+def _enriched(finding: Finding, ers_value: float) -> EnrichedFinding:
+    prov = Provenance(source=Source.DERIVED, confidence=Confidence.HIGH, retrieved_at=DETECTED)
+    component = ScoreComponent(
+        name="test", value=ers_value, weight=1.0, explanation="test input", provenance=prov
+    )
+    return EnrichedFinding(
+        finding=finding, ers=ExposureRiskScore(value=ers_value, components=(component,))
+    )
+
+
+def test_stored_ers_orders_paths_of_equal_confidence(
+    facts: tuple[list[Observation], list[Finding]], result: AttackGraphResult
+) -> None:
+    obs, fnd = facts
+    jenkins = _finding_for(fnd, "CVE-2024-23897")
+    ranked = analyze(
+        engagement_id=ENGAGEMENT,
+        observations=obs,
+        findings=fnd,
+        topology=_topology(),
+        enriched=[_enriched(jenkins, 9.5)],
+    )
+    # Same path set; ranking only reorders.
+    assert sorted(p.path_id for p in ranked.paths) == sorted(p.path_id for p in result.paths)
+    low = [p for p in ranked.paths if p.confidence == Confidence.LOW]
+    uses = [any(jenkins.finding_id in e.finding_ids for e in p.edges) for p in low]
+    # Every low-confidence path through the scored Jenkins finding precedes every one
+    # that has no scored finding.
+    assert uses == sorted(uses, reverse=True)
+    assert uses[0], "no low-confidence path exploits the scored finding"
+    first = low[0]
+    assert first.rank_explanation is not None
+    assert "9.5" in first.rank_explanation
+    assert "CVE-2024-23897" in first.rank_explanation
+    # Confidence still dominates ERS: high-confidence paths come first.
+    assert ranked.paths[0].confidence == Confidence.HIGH
 
 
 def test_lab_paths_reach_the_data_tier_and_the_wiki(result: AttackGraphResult) -> None:
@@ -179,7 +230,16 @@ def test_truncation_is_reported_and_keeps_the_shortest_prefix(
         engagement_id=ENGAGEMENT, observations=obs, findings=fnd, topology=_topology(), max_paths=5
     )
     assert small.truncated
-    assert [p.path_id for p in small.paths] == [p.path_id for p in result.paths[:5]]
+    graph = build_attack_graph(
+        engagement_id=ENGAGEMENT,
+        observations=obs,
+        findings=fnd,
+        topology=_topology(),
+        ruleset=load_ruleset(),
+    )
+    shortest = enumerate_paths(graph).paths[:5]
+    # Truncation keeps the shortest-first enumeration prefix; ranking then reorders it.
+    assert sorted(p.path_id for p in small.paths) == sorted(p.path_id for p in shortest)
     shallow = analyze(
         engagement_id=ENGAGEMENT, observations=obs, findings=fnd, topology=_topology(), max_depth=3
     )

@@ -43,6 +43,52 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-047 — Ordinal path ranking instead of a numeric path score
+**Date:** 2026-11-06
+**Decided by:** Claude, under the graph owner's delegation ("build as you like"). **Ayushmaan to confirm.**
+**Type:** Addition (closes the Layer 3 ranking gap without adopting D-039)
+**Status:** Active, pending confirmation
+
+**Decision**
+Enumerated attack paths are ranked lexicographically, with no weights and no composite
+number:
+1. **Weakest-step confidence**, high first. A fully observed path outranks one that rests
+   on a LOW assumption edge.
+2. **Highest stored ERS** among the findings the path exploits, highest first. Paths with
+   no scored finding come last. ERS is read from `EnrichedFinding.ers` and never recomputed
+   (D-028).
+3. **Fewer steps.**
+4. **Edge ids**, as a deterministic tie break.
+
+Each path carries `rank` and a `rank_explanation` sentence naming the weakest step and the
+ERS it was ranked on. `AttackPath.score` stays `None`. Ranking runs after enumeration and
+only reorders; it never adds or drops a path. Truncation still keeps the shortest-first
+enumeration prefix.
+
+**Why**
+The architecture calls for ERS-based ranking in Layer 3. D-039's numeric tiers still have
+every open item listed there: unjustified barrier values, the 0.001 EPSS floor, undefined
+cost for edges with no CVE or EPSS, unjustified Tier 2 weights, and the Tier 1/Tier 2
+disagreement. An ordinal rule needs none of those constants. It multiplies nothing (D-008,
+D-029). Every position can be explained in one sentence, which meets "every risk score
+renders its own explanation". Confidence comes before ERS because a high ERS on a pivot
+that was only assumed should not outrank a fully observed chain. Rejected: adopting D-039
+as written, which would quote its open constants as if they were calibrated; and staying
+unranked, which leaves the Layer 3 deliverable incomplete.
+
+**Impact on plan**
+Layer 3 ranking is done without waiting on D-039. The API and UI show rank and
+explanation. D-039 stays a proposal. If its open items are ever closed, a numeric score
+could replace step 2 in a new decision.
+
+**Cost if we're wrong**
+Low. The rule is one function, `services/graph/engine.py:rank_paths`. Changing the key
+order or swapping in a score is a local change with tests. The risk is that lexicographic
+order hides magnitude: a path with ERS 9.9 and one with 9.8 sit next to each other with no
+"how much worse". That is accepted on purpose and stated in the explanation text.
+
+---
+
 ### D-046 — Layer 3 engine: declared topology for reachability, evidence-only capabilities, unranked enumeration
 **Date:** 2026-11-06
 **Decided by:** Ayushmaan (graph owner), implemented with Claude
@@ -315,7 +361,7 @@ Low. The contract aligns directly with the existing Pydantic validation and API 
 **Date:** 2026-10-11 (revised 2026-10-12 after PR #19 review)
 **Decided by:** Proposed by Mayank; pending sign-off by Ayushmaan (graph owner)
 **Type:** Reversal
-**Status:** Proposed
+**Status:** Proposed, not adopted. Layer 3 ships the ordinal ranking in D-047 instead; this numeric proposal stays open for if its open items are ever closed.
 
 **Decision**
 Proposal to retire the multiplicative path score (`EPSS × exploit_availability × privilege_delta`) that D-029 flagged as a viva risk, and replace it with two separately defined tiers. The proposal is not settled. D-029 stays Active until the graph owner signs off.

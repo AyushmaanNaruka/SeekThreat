@@ -51,8 +51,12 @@ export interface PathEdge {
 export interface AttackPath {
   path_id: string;
   edges: PathEdge[];
-  /** Always null until a path-scoring formula is signed off (D-039). Never displayed. */
+  /** Always null: there is no composite path score (D-047). Never displayed. */
   score: number | null;
+  /** 1 = look at first. Ordinal ranking from the server (D-047); null if unranked. */
+  rank: number | null;
+  /** The server's sentence explaining this path's rank. */
+  rank_explanation: string | null;
   narration: string | null;
   confidence: GraphConfidence;
   entry_node: string;
@@ -311,9 +315,10 @@ export interface GoalGroup {
 }
 
 /**
- * Group paths by goal node. Groups are ordered by goal label (then id) so the order
- * implies nothing about risk; paths inside a group keep the server's order, which is
- * the engine's stated, unranked `ordering`.
+ * Group paths by goal node. Paths inside a group keep the server's ranked order
+ * (D-047). Groups are ordered by the best (lowest) rank among their paths, then by goal
+ * label and id, so the first group holds the server's rank-1 path. Unranked paths sort
+ * after ranked ones.
  */
 export function groupPathsByGoal(
   paths: readonly AttackPath[],
@@ -335,8 +340,11 @@ export function groupPathsByGoal(
     }
     group.paths.push(path);
   }
+  const bestRank = (g: GoalGroup): number =>
+    Math.min(...g.paths.map((p) => (typeof p.rank === "number" ? p.rank : Infinity)));
   return [...groups.values()].sort(
     (a, b) =>
+      bestRank(a) - bestRank(b) ||
       a.goal_label.localeCompare(b.goal_label, "en") ||
       (a.goal_node < b.goal_node ? -1 : a.goal_node > b.goal_node ? 1 : 0)
   );
