@@ -83,3 +83,26 @@ Without arguments, both eval scripts run on the synthetic fixtures in `tests/fix
 and write `results/enrichment_coverage_results.*` and `results/ers_validation_synthetic.*`.
 Because the per-CVE sources were fetched for exactly the evaluated IDs, their coverage partly
 measures fetch success.
+
+## Attack path validity (Layer 3 engine, fixture-based)
+
+`evals/attack_paths.py` runs `services.graph.engine.analyze` over the observation fixtures in
+`tests/fixtures/observations/` (findings via the interim bridge, topology from
+`lab/topology.yaml`) and grades the enumerated paths against `lab/ground_truth.yaml`
+`expected_attack_paths`. The free-text steps are restated as ordered host lists in
+`golden/attack_paths_expected.yaml`; a test checks every host and CVE there against the steps.
+
+```bash
+python evals/attack_paths.py   # writes results/attack_paths_results.{json,md}
+```
+
+- **strict**: a path's host sequence (engine machines mapped to lab hosts, consecutive repeats
+  collapsed) equals the expected hop list. **lenient**: the expected hosts appear in order,
+  other hosts allowed anywhere. A host counts at any capability, so each verdict also says how
+  the final host was reached and which named CVEs the example path actually exploits.
+- Each expected hop is also checked against `lab/topology.yaml`, so ground truth that the lab
+  wiring cannot support is reported separately from engine misses, along with every
+  `reachable_from` claim the topology contradicts.
+- **Not a lab run.** 8 of the 10 hosts have only synthetic fixtures. This is not the manual
+  N=50 attack path validity metric in the table above, and its counts are not a validity
+  score. The output is deterministic, and a test fails if the committed results are stale.
