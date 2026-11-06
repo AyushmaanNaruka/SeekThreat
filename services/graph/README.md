@@ -27,6 +27,38 @@ Ranked paths
 Narration
 ```
 
+## How it is built (D-046)
+
+```python
+from services.graph import analyze, simulate_remediation
+result = analyze(engagement_id=..., observations=..., findings=..., topology=..., enriched=...)
+```
+
+- **Inputs:** stored observations, findings, optional enriched findings (for fused CWE
+  ids), and the engagement's declared `NetworkTopology` (zones, attacker-entry zone,
+  crown-jewel zones, multi-homed hosts, allowed flows). The lab's topology is
+  `lab/topology.yaml`.
+- **Nodes** are attacker states: `attacker:<zone>`, `access:<ip>:<port>/<proto>`,
+  `exec:<machine>`, `read:<machine>`, `creds:<machine>`. Goals are every `exec` node plus
+  access to any service in a crown-jewel zone.
+- **Edges** come only from the seven rules in `rules/core.yaml`, one matcher each in
+  `builder.py`. Each edge has a content-derived `edge_id`, the rule name, the evidence ids
+  (`obs:`, `finding:`, `topology:`), a confidence, and the findings it depends on.
+- **Capabilities** (`rules/capabilities.yaml`) come from scanner tags and CWE ids only.
+  Findings no rule classifies are returned in `unclassified_findings` with the reason.
+- **Assumptions** (`local_access_exposes_credentials`, `credential_reuse_remote_login`)
+  are LOW confidence and say "Assumed, not observed" in their description. A path's
+  confidence is its weakest edge.
+- **Enumeration** is iterative deepening: every simple path up to `max_depth`, shortest
+  first, ties broken by edge ids, capped at `max_paths`, with `truncated` set when a
+  limit is hit. **Paths are unranked** (`score` is `None`) until D-039 is signed off.
+- **Chokepoints** are ranked by goals cut, then paths broken. **Remediation
+  simulation** rebuilds from the same facts without the fixed findings and reports what
+  disappeared.
+- **Purity:** `tests/architecture/test_graph_purity.py` keeps this package free of
+  network, database, clock, randomness and model imports. Byte-identical output for the
+  same facts is asserted in `tests/unit/test_graph_engine.py`.
+
 ## Path Scoring (DECISIONS.md D-039 — proposed, not settled)
 
 D-029's multiplicative heuristic (`EPSS × exploit_availability × privilege_delta`) has known problems: it multiplies a probability by an ordinal, double-counts exploit evidence, and zeroes a path when no public exploit is indexed. **D-039 proposes** a replacement. It is pending sign-off by the graph owner, and D-029 stays Active until then.

@@ -43,6 +43,65 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-046 — Layer 3 engine: declared topology for reachability, evidence-only capabilities, unranked enumeration
+**Date:** 2026-11-06
+**Decided by:** Ayushmaan (graph owner), implemented with Claude
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+`services/graph` builds an attacker-state graph (`attacker`, `network_access`,
+`code_execution`, `file_read`, `credentials` nodes) from observations, findings and a
+**declared network topology** (`packages/schema/models/topology.py`, one per engagement,
+content-hashed, attributed to a named person). Seven named rules in
+`services/graph/rules/core.yaml` are the only way an edge is created; each has one matcher
+in `builder.py`, and a test fails if the two drift. What a finding grants is decided only
+from the scanner's template tags and CWE ids (`rules/capabilities.yaml`), never free text.
+Paths are enumerated exhaustively up to stated limits, shortest first, ties by edge ids,
+and are **not scored** (`AttackPath.score` is `None`) until D-039 is signed off.
+
+**Why**
+- *Reachability cannot be observed from one vantage point.* The scanner sits in the DMZ
+  (worker attached to every segment per D-020), so every open port looks reachable. Real
+  engagements get reachability from the network owner, so it is declared like an
+  authorization. Every lateral edge cites the `topology_id` **and** an observed open
+  service. Rejected: inferring reachability from subnets alone (cannot see dual-homed
+  hosts; scanners see each address as a separate host), and having the model propose
+  reachability (Hard Rule 1). `ObservationKind.REACHABILITY` exists unused; vantage-aware
+  scans could later supply observed reachability and replace parts of the declaration.
+- *Capabilities from evidence, narrow on purpose.* Nuclei tags (`rce`, `lfi`, ...) are
+  scanner evidence (high); CWE classes are weakness types, not outcomes (medium);
+  memory corruption may only crash (low). Smuggling, SSRF, XSS and DoS are not mapped,
+  because their outcome depends on deployment. Unmapped findings are listed with the
+  evidence that was checked, never dropped silently.
+- *Two rules are explicit assumptions*, both LOW confidence and labelled in every edge
+  description: local access exposes credentials, and those credentials work on a
+  reachable remote-login service. Without them no multi-hop credential pivot can be
+  represented (ground-truth path-2 needs one); with them the UI must show they are
+  assumed, not observed. A path's confidence is its weakest edge.
+- *Chokepoints rank by goals cut, then paths broken.* Raw path counts reward findings
+  that sit on many detours.
+- *Unranked.* D-039's open items (barrier values, the EPSS floor, cost of edges without
+  CVE/EPSS, Tier 2 weights, tier disagreement) are still open. Ordering is structural only.
+
+**Impact on plan**
+Layer 3 core (graph, rules, paths, chokepoints, remediation simulation) lands in November
+as scheduled. Ranking waits on D-039. The engine reads the D-040 `asset_id` format and works
+with either the D-044 bridge or the proposed D-045 normalizer. `lab/topology.yaml`
+transcribes `lab/docker-compose.yml`. **Found while doing this:** per compose, ground-truth
+`path-1` (dvwa -> internal-api -> db-primary) is not reachable, because dvwa is DMZ-only and
+internal-api is internal-only. Several `reachable_from` lists in `lab/ground_truth.yaml`
+also contradict compose. Left unedited pending the owner's call.
+
+**Cost if we're wrong**
+Low to moderate. Rules and capability maps are data and cheap to change. The topology
+model is a new schema type and table; replacing declared reachability with observed
+reachability later is additive. The real risk is presentation. If assumption edges are
+shown without their label, or paths are read as ranked, analysts trust orderings and pivots
+the scan never proved.
+
+---
+
 ### D-044 — Interim observation→Finding bridge so scans reach enrichment and the UI
 **Date:** 2026-10-15
 **Decided by:** Ayushmaan
