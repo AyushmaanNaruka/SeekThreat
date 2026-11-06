@@ -96,6 +96,11 @@ services:
       # Feed mirrors: written by the sync tasks (enrichment-worker), read by api and workers.
       # One named volume at one path, so the writer and the readers agree.
       ENRICHMENT_CACHE_DIR: /data/enrichment_cache
+      # Read-only graph projection (D-003). Only reachable when the `viz` profile is
+      # up; otherwise POST .../attack-graph/project answers 503 and nothing else cares.
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
     volumes: [enrichmentcache:/data/enrichment_cache]
     ports: ["127.0.0.1:8000:8000"]
     depends_on:

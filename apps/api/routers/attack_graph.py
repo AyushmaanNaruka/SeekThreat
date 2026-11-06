@@ -4,6 +4,7 @@
 - GET  /engagements/{engagement_id}/topology               read the declared topology
 - GET  /engagements/{engagement_id}/attack-graph           build and enumerate paths
 - POST /engagements/{engagement_id}/attack-graph/simulate  rebuild with findings fixed
+- POST /engagements/{engagement_id}/attack-graph/project   write it to the Neo4j projection
 
 The graph is computed on every request by `services.graph.analyze` from the facts in
 the database: the engagement's observations, its findings (stored inside the enriched
@@ -32,6 +33,13 @@ from apps.api.db.repositories import (
     TopologyRepository,
 )
 from apps.api.db.session import get_db
+from apps.api.graph_projection import (
+    Neo4jProjector,
+    ProjectionFailed,
+    ProjectionSummary,
+    ProjectionUnavailable,
+    get_projector,
+)
 from packages.schema.models.engagement import Engagement
 from packages.schema.models.finding import EnrichedFinding, Finding
 from packages.schema.models.graph import AttackGraphResult, SimulationResult
@@ -302,3 +310,55 @@ def simulate_attack_graph(
         },
     )
     return simulation
+
+
+@router.post(
+    "/{engagement_id}/attack-graph/project",
+    response_model=ProjectionSummary,
+    summary="Write the attack graph to the read-only Neo4j projection (viz profile)",
+)
+def project_attack_graph(
+    engagement_id: str,
+    max_depth: int = Query(DEFAULT_MAX_DEPTH, ge=1, le=MAX_DEPTH_LIMIT),
+    max_paths: int = Query(DEFAULT_MAX_PATHS, ge=1, le=MAX_PATHS_LIMIT),
+    db: Session = Depends(get_db),
+    projector: Neo4jProjector = Depends(get_projector),
+) -> ProjectionSummary:
+    """Build the graph exactly as GET .../attack-graph does and replace this engagement's
+    projection in Neo4j with it (other engagements are untouched). Neo4j is a disposable
+    view for Neo4j Browser (D-003): it is written only here and never read back.
+
+    503 when Neo4j is not configured or not running (start the `viz` compose profile),
+    502 when it is reached but rejects the write."""
+    event_rejected = "attack_graph.project_rejected"
+    engagement = _require_engagement(db, engagement_id, event=event_rejected)
+    target = f"engagement:{engagement_id}/attack-graph/projection"
+    try:
+        projector.require_configured()
+    except ProjectionUnavailable as exc:
+        _audit(engagement, event_rejected, target, "neo4j_unconfigured", {"reason": str(exc)})
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+
+    facts = _load_facts(db, engagement, event_rejected, target)
+    result = analyze(
+        engagement_id=engagement_id,
+        observations=facts.observations,
+        findings=facts.findings,
+        topology=facts.topology,
+        enriched=facts.enriched,
+        max_depth=max_depth,
+        max_paths=max_paths,
+    )
+    details = {**_graph_summary(result), "neo4j": projector.target}
+    try:
+        summary = projector.project(result)
+    except ProjectionUnavailable as exc:
+        _audit(
+            engagement, event_rejected, target, "neo4j_unavailable", {**details, "reason": str(exc)}
+        )
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except ProjectionFailed as exc:
+        _audit(engagement, event_rejected, target, "neo4j_failed", {**details, "reason": str(exc)})
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+    _audit(engagement, "attack_graph.projected", target, "success", details)
+    return summary

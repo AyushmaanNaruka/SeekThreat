@@ -132,6 +132,30 @@ class Settings(BaseSettings):
         ),
     )
 
+    # Neo4j is a read-only, disposable projection for visualization (D-003), served by
+    # the `viz` compose profile. Unset NEO4J_URI or NEO4J_PASSWORD means "not
+    # configured": the projection endpoint answers 503 and nothing else is affected.
+    neo4j_uri: str | None = Field(
+        default=None,
+        description=(
+            "NEO4J_URI: Bolt URI of the viz-profile Neo4j, e.g. bolt://localhost:7687 for "
+            "native dev, bolt://neo4j:7687 inside the compose network."
+        ),
+    )
+    neo4j_user: str = Field(default="neo4j", description="NEO4J_USER")
+    neo4j_password: str | None = Field(
+        default=None,
+        description="NEO4J_PASSWORD: must match the password in the compose NEO4J_AUTH.",
+    )
+    neo4j_connection_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        description=(
+            "NEO4J_CONNECTION_TIMEOUT_SECONDS: how long the projection waits for Neo4j "
+            "before answering 503."
+        ),
+    )
+
     @field_validator("database_url", mode="after")
     @classmethod
     def _apply_psycopg_driver(cls, value: str) -> str:

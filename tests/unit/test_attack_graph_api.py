@@ -1,5 +1,6 @@
 """Unit tests for the Layer 3 API: declared topology, attack graph, remediation
-simulation, single-evidence lookups, and the topology loader CLI.
+simulation, single-evidence lookups, the topology loader CLI, and the Neo4j projection
+(endpoint and CLI, over a fake driver: no Neo4j is needed or contacted).
 
 The attack-graph tests run the real engine over the lab observation fixtures
 (tests/fixtures/observations/*.json), with findings built by the interim bridge exactly
@@ -15,12 +16,15 @@ from typing import Any
 import pytest
 import yaml
 from fastapi.testclient import TestClient
+from neo4j.exceptions import AuthError, ClientError, ServiceUnavailable
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from apps.api.cli.load_topology import TopologyLoadError, load_topology
+from apps.api.cli.project_graph import ProjectGraphError, project_graph
 from apps.api.core.audit import clear_audit_log, get_audit_log
+from apps.api.core.config import Settings
 from apps.api.db import models as _models  # noqa: F401 – side-effect: registers all tables
 from apps.api.db.base import Base
 from apps.api.db.repositories import (
@@ -31,11 +35,14 @@ from apps.api.db.repositories import (
     TopologyRepository,
 )
 from apps.api.db.session import get_db
+from apps.api.graph_projection import Neo4jConfig, Neo4jProjector, get_projector
 from apps.api.main import app
 from packages.schema.models.engagement import Authorization, Engagement
 from packages.schema.models.finding import EnrichedFinding, Finding
+from packages.schema.models.graph import AttackGraphResult
 from packages.schema.models.observation import Observation, ScanResult
 from packages.schema.models.topology import NetworkTopology
+from services.graph.sinks import projection_statements, schema_statements
 from services.normalize import findings_from_observations
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -490,3 +497,233 @@ class TestLoadTopologyCli:
         bad.write_text("zones: []\ndeclared_by: x\ndeclared_at: 2026-01-01T00:00:00Z\n")
         with pytest.raises(TopologyLoadError, match="not a valid topology"):
             load_topology(db_session, bad, ENGAGEMENT_ID)
+
+
+# ---------------------------------------------------------------------------
+# Neo4j projection (fake driver)
+# ---------------------------------------------------------------------------
+
+NEO4J_PASSWORD = "test-only-not-a-secret"
+
+
+class _FakeResult:
+    def consume(self) -> None:
+        return None
+
+
+class _FakeTx:
+    def __init__(self, driver: _FakeDriver) -> None:
+        self.driver = driver
+
+    def run(self, query: str, parameters: dict[str, Any]) -> _FakeResult:
+        if self.driver.fail_on_write is not None:
+            raise self.driver.fail_on_write
+        self.driver.writes.append((query, parameters))
+        return _FakeResult()
+
+
+class _FakeSession:
+    def __init__(self, driver: _FakeDriver) -> None:
+        self.driver = driver
+
+    def __enter__(self) -> _FakeSession:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        return None
+
+    def run(self, query: str, parameters: dict[str, Any]) -> _FakeResult:
+        self.driver.schema.append((query, parameters))
+        return _FakeResult()
+
+    def execute_write(self, fn: Any, *args: Any) -> Any:
+        self.driver.transactions += 1
+        return fn(_FakeTx(self.driver), *args)
+
+
+class _FakeDriver:
+    def __init__(
+        self,
+        fail_on_connect: Exception | None = None,
+        fail_on_write: Exception | None = None,
+    ) -> None:
+        self.fail_on_connect = fail_on_connect
+        self.fail_on_write = fail_on_write
+        self.opened: list[tuple[str, dict[str, Any]]] = []
+        self.schema: list[tuple[str, dict[str, Any]]] = []
+        self.writes: list[tuple[str, dict[str, Any]]] = []
+        self.transactions = 0
+        self.closed = False
+
+    def factory(self, uri: str, **config: Any) -> _FakeDriver:
+        self.opened.append((uri, config))
+        return self
+
+    def __enter__(self) -> _FakeDriver:
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.closed = True
+
+    def verify_connectivity(self) -> None:
+        if self.fail_on_connect is not None:
+            raise self.fail_on_connect
+
+    def session(self) -> _FakeSession:
+        return _FakeSession(self)
+
+
+def _projector(driver: _FakeDriver) -> Neo4jProjector:
+    config = Neo4jConfig(uri="bolt://neo4j.test:7687", user="neo4j", password=NEO4J_PASSWORD)
+    return Neo4jProjector(config, driver_factory=driver.factory)
+
+
+def _use_projector(projector: Neo4jProjector) -> None:
+    app.dependency_overrides[get_projector] = lambda: projector
+
+
+PROJECT_URL = f"/engagements/{ENGAGEMENT_ID}/attack-graph/project"
+
+
+class TestProjection:
+    def test_writes_the_same_graph_as_get(
+        self, api_client: TestClient, db_session: Session
+    ) -> None:
+        _seed_lab(db_session, api_client)
+        driver = _FakeDriver()
+        _use_projector(_projector(driver))
+
+        resp = api_client.post(PROJECT_URL)
+        assert resp.status_code == 200, resp.text
+        graph = AttackGraphResult.model_validate(
+            api_client.get(f"/engagements/{ENGAGEMENT_ID}/attack-graph").json()
+        )
+        body = resp.json()
+        assert body["engagement_id"] == ENGAGEMENT_ID
+        assert body["topology_id"] == graph.topology_id
+        assert (body["nodes"], body["relationships"], body["paths"]) == (
+            len(graph.nodes),
+            len(graph.edges),
+            len(graph.paths),
+        )
+        assert body["neo4j_uri"] == "bolt://neo4j.test:7687"
+
+        assert driver.opened == [
+            (
+                "bolt://neo4j.test:7687",
+                {"auth": ("neo4j", NEO4J_PASSWORD), "connection_timeout": 5.0},
+            )
+        ]
+        assert driver.schema == schema_statements()
+        assert driver.transactions == 1, "delete + rewrite must be one transaction"
+        assert driver.writes == projection_statements(graph)
+        assert driver.closed
+
+        audit = _events("attack_graph.projected")
+        assert len(audit) == 1
+        assert audit[0]["actor"] == AUTHORIZER
+        assert audit[0]["engagement_id"] == ENGAGEMENT_ID
+        assert audit[0]["details"]["paths"] == len(graph.paths)
+        assert NEO4J_PASSWORD not in resp.text
+        assert NEO4J_PASSWORD not in repr(get_audit_log())
+
+    def test_limits_are_passed_through(self, api_client: TestClient, db_session: Session) -> None:
+        _seed_lab(db_session, api_client)
+        driver = _FakeDriver()
+        _use_projector(_projector(driver))
+        resp = api_client.post(PROJECT_URL, params={"max_depth": 3, "max_paths": 2})
+        assert resp.status_code == 200
+        assert resp.json()["paths"] <= 2
+
+    def test_unconfigured_is_503_and_never_connects(
+        self, api_client: TestClient, db_session: Session
+    ) -> None:
+        _seed_lab(db_session, api_client)
+        driver = _FakeDriver()
+        _use_projector(Neo4jProjector(None, driver_factory=driver.factory))
+        resp = api_client.post(PROJECT_URL)
+        assert resp.status_code == 503
+        detail = resp.json()["detail"]
+        assert "not configured" in detail and "--profile viz" in detail
+        assert driver.opened == []
+        assert _events("attack_graph.project_rejected")[0]["status"] == "neo4j_unconfigured"
+
+    def test_projector_reads_settings(self) -> None:
+        unset = Settings(neo4j_uri=None, neo4j_password=None)
+        assert Neo4jProjector.from_settings(unset).config is None
+        configured = Neo4jProjector.from_settings(
+            Settings(neo4j_uri="bolt://localhost:7687", neo4j_password=NEO4J_PASSWORD)
+        )
+        assert configured.config is not None
+        assert configured.config.user == "neo4j"
+
+    def test_unreachable_is_503_with_viz_hint(
+        self, api_client: TestClient, db_session: Session
+    ) -> None:
+        _seed_lab(db_session, api_client)
+        driver = _FakeDriver(fail_on_connect=ServiceUnavailable("connection refused"))
+        _use_projector(_projector(driver))
+        resp = api_client.post(PROJECT_URL)
+        assert resp.status_code == 503
+        assert "not reachable" in resp.json()["detail"]
+        assert "--profile viz" in resp.json()["detail"]
+        assert driver.writes == []
+        rejected = _events("attack_graph.project_rejected")[0]
+        assert rejected["status"] == "neo4j_unavailable"
+        assert rejected["actor"] == AUTHORIZER
+
+    def test_bad_credentials_are_503(self, api_client: TestClient, db_session: Session) -> None:
+        _seed_lab(db_session, api_client)
+        _use_projector(_projector(_FakeDriver(fail_on_connect=AuthError("unauthorized"))))
+        resp = api_client.post(PROJECT_URL)
+        assert resp.status_code == 503
+        assert "NEO4J_PASSWORD" in resp.json()["detail"]
+        assert NEO4J_PASSWORD not in resp.text
+
+    def test_rejected_write_is_502(self, api_client: TestClient, db_session: Session) -> None:
+        _seed_lab(db_session, api_client)
+        _use_projector(_projector(_FakeDriver(fail_on_write=ClientError("syntax"))))
+        resp = api_client.post(PROJECT_URL)
+        assert resp.status_code == 502
+        assert _events("attack_graph.project_rejected")[0]["status"] == "neo4j_failed"
+
+    def test_missing_topology_is_409(self, api_client: TestClient, db_session: Session) -> None:
+        _seed_engagement(db_session)
+        _seed_lab_facts(db_session)
+        driver = _FakeDriver()
+        _use_projector(_projector(driver))
+        resp = api_client.post(PROJECT_URL)
+        assert resp.status_code == 409
+        assert "No network topology is declared" in resp.json()["detail"]
+        assert driver.opened == []
+        assert _events("attack_graph.project_rejected")[0]["status"] == "no_topology"
+
+    def test_unknown_engagement_is_404(self, api_client: TestClient) -> None:
+        driver = _FakeDriver()
+        _use_projector(_projector(driver))
+        assert api_client.post("/engagements/eng-missing/attack-graph/project").status_code == 404
+        assert driver.opened == []
+
+
+class TestProjectGraphCli:
+    def test_projects_and_audits(self, api_client: TestClient, db_session: Session) -> None:
+        _seed_lab(db_session, api_client)
+        driver = _FakeDriver()
+        summary = project_graph(db_session, ENGAGEMENT_ID, _projector(driver))
+        assert summary.paths > 0
+        assert driver.writes[0][1] == {"engagement_id": ENGAGEMENT_ID}
+        assert _events("attack_graph.projected")[0]["details"]["via"] == "cli"
+
+    def test_unreachable_neo4j_is_an_error(
+        self, api_client: TestClient, db_session: Session
+    ) -> None:
+        _seed_lab(db_session, api_client)
+        driver = _FakeDriver(fail_on_connect=ServiceUnavailable("down"))
+        with pytest.raises(ProjectGraphError, match="--profile viz"):
+            project_graph(db_session, ENGAGEMENT_ID, _projector(driver))
+        assert _events("attack_graph.project_rejected")[0]["status"] == "neo4j_unavailable"
+
+    def test_missing_topology_is_an_error(self, db_session: Session) -> None:
+        _seed_engagement(db_session)
+        with pytest.raises(ProjectGraphError, match="no topology"):
+            project_graph(db_session, ENGAGEMENT_ID, _projector(_FakeDriver()))
