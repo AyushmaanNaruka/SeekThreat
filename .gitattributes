@@ -1,0 +1,4 @@
+# The attack-graph rules digest (services/graph/ruleset.py) hashes these files' raw bytes,
+# so they must have the same line endings on every checkout. Without this, a Windows
+# clone with core.autocrlf=true gets CRLF and a different rules_digest for the same rules.
+services/graph/rules/*.yaml text eol=lf
