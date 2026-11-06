@@ -5,6 +5,7 @@ import Link from "next/link";
 import DashboardGlobe from "../../components/DashboardGlobe";
 import SidebarOrbit from "../../components/SidebarOrbit";
 import EnrichedFindingsView from "../../components/EnrichedFindingsView";
+import FeedHealthPanel from "../../components/FeedHealthPanel";
 import {
   api,
   EngagementItem,
@@ -497,6 +498,23 @@ export default function DashboardPage() {
               </span>
             </div>
 
+            <div
+              className={`db-nav-item ${activeNav === "Feeds" ? "active" : ""}`}
+              onClick={() => setActiveNav("Feeds")}
+              style={{ cursor: "pointer" }}
+            >
+              <div className="db-nav-item-inner">
+                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 11a9 9 0 0 1 9 9" />
+                  <path d="M4 4a16 16 0 0 1 16 16" />
+                  <circle cx="5" cy="19" r="1" />
+                </svg>
+                <span>Feed Health</span>
+              </div>
+              <span className="db-coming-soon" style={{ background: "rgba(32, 214, 163, 0.15)", color: "#20D6A3", border: "1px solid rgba(32, 214, 163, 0.3)" }}>
+                Live
+              </span>
+            </div>
           </nav>
         </div>
 
@@ -672,12 +690,14 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* VIEW SWITCHER: FINDINGS VS OVERVIEW/ENGAGEMENTS/SCANS */}
+          {/* VIEW SWITCHER: FINDINGS VS FEEDS VS OVERVIEW/ENGAGEMENTS/SCANS */}
           {activeNav === "Findings" ? (
             <EnrichedFindingsView
               activeEngagement={activeEngagement}
               onSelectEngagementPrompt={() => setShowCreateModal(true)}
             />
+          ) : activeNav === "Feeds" ? (
+            <FeedHealthPanel />
           ) : (
             <>
               {/* BANNER: ACTIVE ENGAGEMENT SCOPE */}
@@ -1039,6 +1059,11 @@ export default function DashboardPage() {
               </form>
             </div>
 
+            {/* Feed Health Panel (B-3) */}
+            <div style={{ marginBottom: "1.2rem" }}>
+              <FeedHealthPanel />
+            </div>
+
             {/* Recent Scans Card */}
             <div className="db-card" id="db-section-scans">
               <div className="db-card-header">
@@ -1392,6 +1417,11 @@ export default function DashboardPage() {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* Intelligence Feeds Health Status */}
+          <div style={{ marginTop: "1.5rem" }}>
+            <FeedHealthPanel />
           </div>
             </>
           )}

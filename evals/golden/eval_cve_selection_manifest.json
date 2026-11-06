@@ -1,0 +1,113 @@
+{
+  "_generated_by": "evals/scripts/generate_eval_cve_list.py",
+  "generated_at": "2026-10-15T16:41:15.810747+00:00",
+  "seed": 20261011,
+  "selection_rule": "Stratified random sample from EPSS v4 mirror universe, split by KEV membership and EPSS score threshold bands.",
+  "mirrors": {
+    "cisa_kev": {
+      "path": "cisa_kev.json",
+      "sha256": "6ca5d289d4932aea583705c80bf25cca2cc3d9e7eba802bec79603f04b159611",
+      "synced_at": "2026-10-11T14:47:46.906706+00:00",
+      "size_bytes": 1386181
+    },
+    "epss_v4": {
+      "path": "epss_v4.json",
+      "sha256": "1a638ce526fd216296a0615e11b9a14d526016d879aa30e1181cfcb19ba2ff4d",
+      "synced_at": "2026-10-11T14:48:38.722296+00:00",
+      "size_bytes": 23291199
+    }
+  },
+  "strata": [
+    {
+      "name": "kev_high_epss",
+      "requested_n": 15,
+      "available_n": 866,
+      "selected_n": 15,
+      "selected": [
+        "CVE-2006-1547",
+        "CVE-2009-0563",
+        "CVE-2013-5223",
+        "CVE-2018-7445",
+        "CVE-2020-25079",
+        "CVE-2021-21985",
+        "CVE-2021-36934",
+        "CVE-2023-22515",
+        "CVE-2023-22527",
+        "CVE-2024-34102",
+        "CVE-2024-36401",
+        "CVE-2024-38812",
+        "CVE-2024-57727",
+        "CVE-2026-71362",
+        "CVE-2026-81578"
+      ]
+    },
+    {
+      "name": "kev_low_epss",
+      "requested_n": 10,
+      "available_n": 873,
+      "selected_n": 10,
+      "selected": [
+        "CVE-2018-0155",
+        "CVE-2020-1027",
+        "CVE-2020-6819",
+        "CVE-2022-1364",
+        "CVE-2022-20703",
+        "CVE-2023-28205",
+        "CVE-2024-23222",
+        "CVE-2024-4671",
+        "CVE-2025-48927",
+        "CVE-2026-102490"
+      ]
+    },
+    {
+      "name": "non_kev_high_epss",
+      "requested_n": 10,
+      "available_n": 1727,
+      "selected_n": 10,
+      "selected": [
+        "CVE-2010-3653",
+        "CVE-2014-9034",
+        "CVE-2018-16509",
+        "CVE-2020-25683",
+        "CVE-2022-36974",
+        "CVE-2023-35150",
+        "CVE-2023-39265",
+        "CVE-2023-50386",
+        "CVE-2025-34152",
+        "CVE-2025-4009"
+      ]
+    },
+    {
+      "name": "non_kev_mid_epss",
+      "requested_n": 10,
+      "available_n": 14289,
+      "selected_n": 10,
+      "selected": [
+        "CVE-2001-0154",
+        "CVE-2008-1051",
+        "CVE-2009-0305",
+        "CVE-2009-3613",
+        "CVE-2009-4223",
+        "CVE-2018-0795",
+        "CVE-2018-14718",
+        "CVE-2020-13818",
+        "CVE-2021-27145",
+        "CVE-2022-32409"
+      ]
+    },
+    {
+      "name": "non_kev_low_epss",
+      "requested_n": 5,
+      "available_n": 158120,
+      "selected_n": 5,
+      "selected": [
+        "CVE-2018-15203",
+        "CVE-2024-12069",
+        "CVE-2025-67975",
+        "CVE-2026-88916",
+        "CVE-2026-97074"
+      ]
+    }
+  ],
+  "total_selected": 50
+}

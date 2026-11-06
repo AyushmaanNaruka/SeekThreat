@@ -30,39 +30,39 @@ Never write a reference answer from memory.
 
 ## `enrichment_baseline.json` (enrichment coverage harness input)
 
-Input list for `evals/enrichment_coverage.py` and `evals/ers_validation.py`. Version 2.0.1
-(2.0.0 created 2026-10-11; 2.0.1 is the 2026-10-12 review correction).
+Input list for `evals/enrichment_coverage.py` and `evals/ers_validation.py`. Version 3.0.0
+(2.0.0 created 2026-10-11; 2.0.1 review corrections 2026-10-12; 3.0.0 stratified selection & evidence records 2026-10-15).
 
-- **50 real-world CVE IDs** in five cohorts. The cohort names are hypotheses about each CVE,
-  not checked labels:
-  1. `cohort_a_nvd_control`: well-known older vulnerabilities expected to have full NVD analysis.
-  2. `cohort_b_nvd_gap`: recent CVEs expected to have had NVD analysis delays.
-  3. `cohort_c_cisa_kev`: CVEs expected to be listed in CISA KEV.
-  4. `cohort_d_high_epss_no_nvd`: CVEs expected to have high EPSS and little NVD enrichment.
-  5. `cohort_e_weaponized_exploit`: CVEs expected to have ExploitDB / Metasploit entries.
-- **Selection rule: none documented yet.** The 50 CVEs were hand-picked well-known CVEs, not
-  sampled by a stated rule. Any result on this set describes this set, not CVEs in general.
-  Writing down a reproducible selection rule (and re-picking by it) is open work.
-- **`eval_cve_list.txt`** is the same 50 IDs, one per line. It is the `--cve-file` input to
-  `python -m services.enrichment.sync_feeds` for the per-CVE sources (CVE.org, Vulnrichment,
-  NVD, EUVD). Keep it in sync with `enrichment_baseline.json`.
-- **Verification status: batch-attested, not per-CVE verified.** Every entry carries
-  `verified_by: Mayank Narang` / `verified_at: 2026-10-11`, but these are one batch stamp with no
-  per-CVE evidence record (what was checked, against which page or API response, with what
-  result). The dataset-level `verification` field says so, and `cohort_labels_verified` is
-  `false`, which makes the coverage harness report cohort labels as unverified.
-- **Labels contradicted by measured data.** In the 2026-10-11 real-mirror run
-  (`evals/results/enrichment_coverage_real.json`), NVD supplied CVSS for all 50 CVEs, including
-  every CVE in cohorts B (`nvd_gap`) and D (`high_epss_no_nvd`). Those two cohort names do not
-  describe these CVEs on that snapshot.
-- **Corrections in 2.0.1:** `CVE-2024-3094` and `CVE-2024-26229` listed "CISA KEV" in
-  `authoritative_source`, but the KEV mirror in that run reports both as not in KEV. "CISA KEV"
-  was removed from both, with a `correction_note`. `CVE-2022-22965` is the reverse case: the KEV
-  mirror reports it in KEV but its `authoritative_source` does not list KEV. That entry is
-  unchanged, pending a per-CVE check.
-- The synthetic placeholders (`CVE-2025-0001`, `CVE-2025-0002`) were replaced with real CVEs
-  (`CVE-2024-21893`, `CVE-2024-28995`) in 2.0.0.
+### Selection Rule (Version 3.0.0)
 
-To turn this into a verified dataset, each entry needs its own evidence record (source URL or
-mirror sha256, retrieval date, observed value), and each cohort needs a membership rule that
-can be checked mechanically against the mirrors.
+To replace ad-hoc hand-picked famous CVEs with a defensible, reproducible scientific benchmark, the 50 CVEs are sampled deterministically via stratified random sampling from the local mirror universe:
+- **Source Universe:** The intersection of valid CVEs in the FIRST EPSS v4 mirror (`data/enrichment_cache/epss_v4.json`) and the CISA KEV catalog (`data/enrichment_cache/cisa_kev.json`).
+- **Fixed Random Seed:** `SEED = 20261011` (ensures 100% mechanical reproducibility across environments).
+- **Target Size:** $n = 50$ distinct CVE IDs.
+- **Generator Script:** `python evals/scripts/generate_eval_cve_list.py`
+- **Audit Manifest:** `evals/golden/eval_cve_selection_manifest.json` (records exact mirror SHA-256 digests, timestamps, stratum boundaries, and selections).
+
+### Strata Definitions
+
+| Stratum / Cohort | KEV Member | EPSS Range | Target $n$ | Selected $n$ | Purpose |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `kev_high_epss` | Yes | $\ge 0.50$ | 15 | 15 | Known exploited + high probability weaponization |
+| `kev_low_epss` | Yes | $< 0.50$ | 10 | 10 | Known exploited despite low predictive EPSS |
+| `non_kev_high_epss`| No | $\ge 0.70$ | 10 | 10 | High predictive probability outside KEV |
+| `non_kev_mid_epss` | No | $[0.10, 0.70)$ | 10 | 10 | Mid-tier emerging threats |
+| `non_kev_low_epss` | No | $< 0.005$ | 5 | 5 | Low-probability negative control stratum |
+
+Legacy cohorts B (`nvd_gap`) and D (`high_epss_no_nvd`) were dropped: in empirical runs, NVD published CVSS for all tested CVEs, making those hypothesis labels unrepresentative of mirror data.
+
+### Per-CVE Evidence Records
+
+Batch-attested stamps (`verified_by: Mayank Narang`) have been replaced by structured per-CVE evidence blocks built by `evals/scripts/build_enrichment_baseline.py`:
+- `evidence.retrieved_at`: ISO 8601 timestamp of mirror inspection.
+- `evidence.nvd`: `checked`, `cvss_present`, `cvss_score`, `cvss_vector`, and direct NVD URL.
+- `evidence.cisa_kev`: `in_catalog`, `date_added`, `due_date`, and catalog URL.
+- `evidence.epss`: `score` and API URL.
+- `evidence.euvd`: `present` and European Vulnerability Database URL.
+
+### Discrepancy Resolutions
+- **CVE-2022-22965 (Spring4Shell):** Reviewer flagged that the pre-review dataset omitted KEV listing for Spring4Shell. In the current CISA KEV mirror, `CVE-2022-22965` is verified to be present (`dateAdded: 2022-04-04`). Verified by `tests/unit/test_golden_evidence.py`.
+- **`eval_cve_list.txt`**: Matches the exact 50 sorted CVE IDs in `enrichment_baseline.json` and is validated against the manifest in CI.

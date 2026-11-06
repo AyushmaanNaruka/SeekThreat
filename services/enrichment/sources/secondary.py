@@ -237,7 +237,14 @@ class VulnrichmentSource(BaseEnrichmentSource[VulnrichmentRecord]):
 
 
 class NVDRecord(BaseSourceRecord):
-    """NVD 2.0 vulnerability record."""
+    """NVD 2.0 vulnerability record.
+
+    NVD 2.0 API responses include CISA KEV fields when the CVE is in the
+    catalog (``cisaExploitAdd``, ``cisaActionDue``, ``cisaRequiredAction``,
+    ``cisaVulnerabilityName``).  These are parsed so the NVD-only baseline
+    in ``evals/enrichment_coverage.py`` gets fair credit for KEV membership,
+    rather than attributing all KEV gain to multi-source fusion (D-035).
+    """
 
     source: Source = Source.NVD
     confidence: Confidence = Confidence.HIGH
@@ -250,6 +257,12 @@ class NVDRecord(BaseSourceRecord):
     cvss_source: str | None = None
     cwe_ids: list[str] = Field(default_factory=list)
     description: str = ""
+    # CISA KEV fields embedded in NVD 2.0 API responses.
+    # Present only when the CVE appears in the CISA Known Exploited Vulnerabilities catalog.
+    cisa_exploit_add: str | None = None  # ISO date: when added to KEV
+    cisa_action_due: str | None = None  # ISO date: remediation deadline
+    cisa_required_action: str | None = None  # free-text action description
+    cisa_vulnerability_name: str | None = None  # KEV catalog name
 
 
 def _select_nvd_metric(
@@ -381,6 +394,22 @@ class NVDSource(BaseEnrichmentSource[NVDRecord]):
         date_val = raw.get("lastModified") or raw.get("published") or raw.get("updated_at")
         retrieved_at = parse_feed_date(date_val) or fallback
 
+        # CISA KEV fields — present in NVD 2.0 when the CVE is in the KEV catalog.
+        # These are _string_ date fields from NVD, not datetime objects.
+        cisa_exploit_add: str | None = raw.get("cisaExploitAdd") or None
+        cisa_action_due: str | None = raw.get("cisaActionDue") or None
+        cisa_required_action: str | None = raw.get("cisaRequiredAction") or None
+        cisa_vulnerability_name: str | None = raw.get("cisaVulnerabilityName") or None
+        # Normalise: strip whitespace, treat empty string as None.
+        cisa_exploit_add = str(cisa_exploit_add).strip() or None if cisa_exploit_add else None
+        cisa_action_due = str(cisa_action_due).strip() or None if cisa_action_due else None
+        cisa_required_action = (
+            str(cisa_required_action).strip() or None if cisa_required_action else None
+        )
+        cisa_vulnerability_name = (
+            str(cisa_vulnerability_name).strip() or None if cisa_vulnerability_name else None
+        )
+
         return NVDRecord(
             cve_id=cve_id,
             source=Source.NVD,
@@ -394,6 +423,10 @@ class NVDSource(BaseEnrichmentSource[NVDRecord]):
             description=str(description) if description else "",
             retrieved_at=retrieved_at,
             raw_payload=raw,
+            cisa_exploit_add=cisa_exploit_add,
+            cisa_action_due=cisa_action_due,
+            cisa_required_action=cisa_required_action,
+            cisa_vulnerability_name=cisa_vulnerability_name,
         )
 
 
