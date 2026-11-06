@@ -51,6 +51,9 @@ services:
 
   internal-wiki:
     image: vulhub/confluence:7.13.6
+    # Confluence's JVM is killed by the OOM killer under concurrent scans (seen 2026-11-06);
+    # restart it like Juice Shop (D-044) so a scan run does not silently lose the host.
+    restart: unless-stopped
     networks:
       internal: { ipv4_address: 172.20.2.40 }
 

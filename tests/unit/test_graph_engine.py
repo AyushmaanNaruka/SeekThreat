@@ -475,3 +475,21 @@ def test_rules_digest_ignores_line_endings(tmp_path: Path) -> None:
         text = (RULES_DIR / name).read_bytes().replace(bytes([13, 10]), bytes([10]))
         (tmp_path / name).write_bytes(text.replace(bytes([10]), bytes([13, 10])))
     assert load_ruleset(tmp_path).digest == load_ruleset().digest
+
+
+def test_reach_edges_cite_service_facts_not_every_scanner_hit(
+    result: AttackGraphResult, facts: tuple[list[Observation], list[Finding]]
+) -> None:
+    kinds = {o.observation_id: o.kind for o in facts[0]}
+    reach_rules = {
+        "entry_zone_service_access",
+        "intra_zone_service_access",
+        "declared_flow_service_access",
+    }
+    reach = [e for e in result.edges if e.rule_name in reach_rules]
+    assert reach
+    for edge in reach:
+        cited = [kinds[i] for i in edge.evidence if i.startswith("obs:")]
+        assert cited
+        # Every fixture endpoint has nmap facts, so no vulnerability report is cited.
+        assert ObservationKind.VULN_CANDIDATE not in cited, edge.edge_id

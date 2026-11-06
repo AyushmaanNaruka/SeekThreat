@@ -74,7 +74,7 @@ Feasibility (lab/topology.yaml):
 | jenkins-ci | CVE-2024-23897 | True | True | True |
 | cache-redis | CVE-2022-0543 | False | None | False |
 
-Example path `path:cfc7042aa00097e2` (confidence low):
+Example path `path:edc9f9b15b151632` (confidence low):
 
 `attacker:dmz -> access:172.20.1.13:8080/tcp -> exec:spring-gateway -> access:172.20.2.25:8080/tcp -> read:host:172.20.2.25 -> creds:host:172.20.2.25 -> exec:bastion-ssh -> access:172.20.3.20:6379/tcp`
 
@@ -94,7 +94,7 @@ Feasibility (lab/topology.yaml):
 | dmz-proxy | CVE-2021-23017 | True | True | True |
 | internal-wiki | CVE-2022-26134 | True | True | True |
 
-Example path `path:29c794dfac2e6311` (confidence low):
+Example path `path:2e2fafa46fdccf32` (confidence low):
 
 `attacker:dmz -> access:172.20.1.12:80/tcp -> exec:dmz-proxy -> access:172.20.2.40:8090/tcp -> exec:host:172.20.2.40`
 

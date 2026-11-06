@@ -235,7 +235,7 @@
         "matching_paths": 1
       },
       "example_path": {
-        "path_id": "path:cfc7042aa00097e2",
+        "path_id": "path:edc9f9b15b151632",
         "confidence": "low",
         "hosts": [
           "spring-gateway",
@@ -325,7 +325,7 @@
         "matching_paths": 4
       },
       "example_path": {
-        "path_id": "path:29c794dfac2e6311",
+        "path_id": "path:2e2fafa46fdccf32",
         "confidence": "low",
         "hosts": [
           "dmz-proxy",

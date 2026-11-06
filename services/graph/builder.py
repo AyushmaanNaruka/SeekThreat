@@ -115,6 +115,16 @@ class ServiceFact:
     proto: str
     service_name: str = ""
     observation_ids: set[str] = field(default_factory=set)
+    # port_open / service_version facts only: what proves the service is there.
+    service_fact_ids: set[str] = field(default_factory=set)
+
+    @property
+    def reach_evidence(self) -> tuple[str, ...]:
+        """Ids proving the service exists. Prefer port/service facts; vulnerability
+        reports are only used when no such fact was observed (a scanner hitting the
+        endpoint still proves it is open). Keeps entry and lateral edges from citing
+        every scanner hit on a busy endpoint."""
+        return tuple(sorted(self.service_fact_ids or self.observation_ids))
 
     @property
     def endpoint(self) -> str:
@@ -225,6 +235,8 @@ class _Builder:
                 continue
             fact = self.services.setdefault(parsed, ServiceFact(*parsed))
             fact.observation_ids.add(obs.observation_id)
+            if obs.kind != ObservationKind.VULN_CANDIDATE:
+                fact.service_fact_ids.add(obs.observation_id)
             self.machine(parsed[0])
             if obs.kind == ObservationKind.SERVICE_VERSION:
                 name = obs.attributes.get("service_name", "")
@@ -335,7 +347,7 @@ class _Builder:
                         from_node=attacker,
                         to_node=self.access_node(svc),
                         rule_name=ENTRY,
-                        evidence=(self.topology.topology_id, *sorted(svc.observation_ids)),
+                        evidence=(self.topology.topology_id, *svc.reach_evidence),
                         description=(
                             f"{svc.endpoint} was observed open and is in attacker-entry "
                             f"zone {zone.name}"
@@ -433,7 +445,7 @@ class _Builder:
         if not ids:
             for svc in self.services.values():
                 if self.machine(svc.address) == machine:
-                    ids.update(svc.observation_ids)
+                    ids.update(svc.reach_evidence)
         if not machine.startswith("host:"):
             ids.add(self.topology.topology_id)
         return tuple(sorted(ids)) or (self.topology.topology_id,)
@@ -452,7 +464,7 @@ class _Builder:
                     from_node=node.node_id,
                     to_node=self.access_node(svc),
                     rule_name=rule_name,
-                    evidence=(self.topology.topology_id, *sorted(svc.observation_ids)),
+                    evidence=(self.topology.topology_id, *svc.reach_evidence),
                     description=(
                         f"{self.machine_label(node.machine)} {why}; "
                         f"{svc.endpoint} was observed open"
@@ -497,7 +509,7 @@ class _Builder:
                     from_node=node.node_id,
                     to_node=target,
                     rule_name=CRED_REUSE,
-                    evidence=(self.topology.topology_id, *sorted(svc.observation_ids)),
+                    evidence=(self.topology.topology_id, *svc.reach_evidence),
                     description=(
                         f"{svc.service_name} on {svc.endpoint} reachable from "
                         f"{self.machine_label(node.machine)} ({reach[1]}). "
