@@ -7,8 +7,9 @@ lab/topology.yaml. Observations are re-homed to the topology's engagement id.
 Nothing in the output is hand-written.
 
 From the repo root:
-    PYTHONPATH=. python apps/web/tests/fixtures/gen_lab_attack_graph.py apps/web/tests/fixtures/lab_attack_graph.json
+    PYTHONPATH=. python apps/web/tests/fixtures/gen_lab_attack_graph.py         apps/web/tests/fixtures/lab_attack_graph.json
 """
+
 import glob
 import json
 import sys
@@ -16,12 +17,12 @@ from datetime import datetime, timezone
 
 import yaml
 
-from packages.schema.models.observation import ScanResult
+from packages.schema.models.observation import Observation, ScanResult
 from packages.schema.models.topology import NetworkTopology
 from services.graph.engine import analyze, simulate_remediation
 from services.normalize.interim_bridge import findings_from_observations
 
-obs = []
+obs: list[Observation] = []
 for p in sorted(glob.glob("tests/fixtures/observations/*.json")):
     with open(p, encoding="utf-8") as fh:
         obs.extend(ScanResult.model_validate(json.load(fh)).observations)
@@ -45,5 +46,11 @@ if res.chokepoints:
 with open(sys.argv[1], "w", encoding="utf-8", newline="\n") as fh:
     json.dump(out, fh, sort_keys=True, separators=(",", ":"))
     fh.write("\n")
-print(len(res.paths), len(res.edges), len(res.chokepoints), len(res.unclassified_findings),
-      res.unzoned_addresses, res.truncated)
+print(
+    len(res.paths),
+    len(res.edges),
+    len(res.chokepoints),
+    len(res.unclassified_findings),
+    res.unzoned_addresses,
+    res.truncated,
+)
