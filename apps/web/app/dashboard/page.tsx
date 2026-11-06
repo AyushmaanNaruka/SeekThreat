@@ -6,6 +6,7 @@ import DashboardGlobe from "../../components/DashboardGlobe";
 import SidebarOrbit from "../../components/SidebarOrbit";
 import EnrichedFindingsView from "../../components/EnrichedFindingsView";
 import FeedHealthPanel from "../../components/FeedHealthPanel";
+import AttackPathsView from "../../components/AttackPathsView";
 import {
   api,
   EngagementItem,
@@ -530,6 +531,22 @@ export default function DashboardPage() {
             </div>
 
             <div
+              className={`db-nav-item ${activeNav === "AttackPaths" ? "active" : ""}`}
+              onClick={() => setActiveNav("AttackPaths")}
+              style={{ cursor: "pointer" }}
+            >
+              <div className="db-nav-item-inner">
+                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="5" cy="6" r="2" />
+                  <circle cx="19" cy="6" r="2" />
+                  <circle cx="12" cy="18" r="2" />
+                  <path d="M7 6h10M6 8l5 8.5M18 8l-5 8.5" />
+                </svg>
+                <span>Attack Paths</span>
+              </div>
+            </div>
+
+            <div
               className={`db-nav-item ${activeNav === "Feeds" ? "active" : ""}`}
               onClick={() => setActiveNav("Feeds")}
               style={{ cursor: "pointer" }}
@@ -724,6 +741,11 @@ export default function DashboardPage() {
           {/* VIEW SWITCHER: FINDINGS VS FEEDS VS OVERVIEW/ENGAGEMENTS/SCANS */}
           {activeNav === "Findings" ? (
             <EnrichedFindingsView
+              activeEngagement={activeEngagement}
+              onSelectEngagementPrompt={() => setShowCreateModal(true)}
+            />
+          ) : activeNav === "AttackPaths" ? (
+            <AttackPathsView
               activeEngagement={activeEngagement}
               onSelectEngagementPrompt={() => setShowCreateModal(true)}
             />
