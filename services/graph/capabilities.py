@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from packages.schema.models.finding import EnrichedFinding
 from packages.schema.models.observation import Observation
 from packages.schema.models.provenance import Confidence
-from services.graph.rules import CAPABILITIES, RuleSet
+from services.graph.ruleset import CAPABILITIES, RuleSet
 
 _CWE = re.compile(r"CWE-[0-9]{1,5}", re.ASCII)
 _RANK = {Confidence.LOW: 0, Confidence.MEDIUM: 1, Confidence.HIGH: 2}

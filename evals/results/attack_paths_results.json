@@ -39,7 +39,7 @@
     "expected": "evals/golden/attack_paths_expected.yaml",
     "topology": "lab/topology.yaml",
     "topology_id": "topology:sha256:71f641e935d9d577eded9eda",
-    "rules_digest": "rules:sha256:7773bc9141670f9f944cbe3e",
+    "rules_digest": "rules:sha256:56d64b9ef56ac5ecce4256dc",
     "engagement_id": "eng-lab-baseline",
     "max_depth": 12,
     "max_paths": 1000,
@@ -54,18 +54,18 @@
     }
   },
   "engine": {
-    "total_paths": 64,
+    "total_paths": 22,
     "truncated": false,
     "paths_by_confidence": {
       "high": 2,
       "medium": 0,
-      "low": 62
+      "low": 20
     },
     "paths_by_goal_kind": {
-      "code_execution": 32,
-      "network_access": 32
+      "code_execution": 10,
+      "network_access": 12
     },
-    "paths_to_crown_jewel_network_access": 32,
+    "paths_to_crown_jewel_network_access": 12,
     "unclassified_findings": [
       {
         "finding_id": "fnd-74d450d70307f49bebca8ae1",
@@ -84,7 +84,7 @@
         "cve_ids": [
           "CVE-2022-22947"
         ],
-        "paths_broken": 48,
+        "paths_broken": 11,
         "goals_cut": [
           "exec:spring-gateway"
         ]
@@ -95,7 +95,7 @@
         "cve_ids": [
           "CVE-2021-23017"
         ],
-        "paths_broken": 48,
+        "paths_broken": 11,
         "goals_cut": [
           "exec:dmz-proxy"
         ]
@@ -106,7 +106,7 @@
         "cve_ids": [
           "CVE-2022-26134"
         ],
-        "paths_broken": 36,
+        "paths_broken": 8,
         "goals_cut": [
           "exec:host:172.20.2.40"
         ]
@@ -117,7 +117,7 @@
         "cve_ids": [
           "CVE-2024-23897"
         ],
-        "paths_broken": 28,
+        "paths_broken": 6,
         "goals_cut": []
       }
     ]
@@ -232,7 +232,7 @@
       },
       "lenient": {
         "verdict": "FOUND",
-        "matching_paths": 6
+        "matching_paths": 1
       },
       "example_path": {
         "path_id": "path:cfc7042aa00097e2",
@@ -291,7 +291,7 @@
         }
       ],
       "diagnosis": [],
-      "summary": "path-2: strict FOUND (1 paths), lenient FOUND (6 paths); final host cache-redis reached as network_access; CVE-2022-22947 on spring-gateway exploited; CVE-2024-23897 on jenkins-ci exploited; CVE-2022-0543 on cache-redis NOT exploited on example path (no vuln_candidate observation reports CVE-2022-0543 on cache-redis in the fixtures)"
+      "summary": "path-2: strict FOUND (1 paths), lenient FOUND (1 paths); final host cache-redis reached as network_access; CVE-2022-22947 on spring-gateway exploited; CVE-2024-23897 on jenkins-ci exploited; CVE-2022-0543 on cache-redis NOT exploited on example path (no vuln_candidate observation reports CVE-2022-0543 on cache-redis in the fixtures)"
     },
     {
       "id": "path-3",
@@ -322,7 +322,7 @@
       },
       "lenient": {
         "verdict": "FOUND",
-        "matching_paths": 27
+        "matching_paths": 4
       },
       "example_path": {
         "path_id": "path:29c794dfac2e6311",
@@ -365,7 +365,7 @@
         }
       ],
       "diagnosis": [],
-      "summary": "path-3: strict FOUND (1 paths), lenient FOUND (27 paths); final host internal-wiki reached as code_execution; CVE-2021-23017 on dmz-proxy exploited; CVE-2022-26134 on internal-wiki exploited"
+      "summary": "path-3: strict FOUND (1 paths), lenient FOUND (4 paths); final host internal-wiki reached as code_execution; CVE-2021-23017 on dmz-proxy exploited; CVE-2022-26134 on internal-wiki exploited"
     }
   ],
   "summary": {
@@ -396,7 +396,7 @@
   "spurious": {
     "rule": "on route = path's host sequence is a prefix of some expected host list",
     "on_route_paths": 5,
-    "off_route_paths": 59,
+    "off_route_paths": 17,
     "off_route_sequences": [
       {
         "hosts": [
@@ -424,14 +424,6 @@
       {
         "hosts": [
           "dmz-proxy",
-          "bastion-ssh",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
           "internal-wiki",
           "bastion-ssh"
         ],
@@ -450,35 +442,6 @@
         "hosts": [
           "dmz-proxy",
           "internal-wiki",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "internal-wiki",
-          "jenkins-ci",
           "bastion-ssh",
           "db-primary"
         ],
@@ -512,165 +475,6 @@
       },
       {
         "hosts": [
-          "dmz-proxy",
-          "jenkins-ci",
-          "bastion-ssh",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "bastion-ssh",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "internal-wiki",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "internal-wiki",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "internal-wiki",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "jenkins-ci",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "jenkins-ci",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "jenkins-ci",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "dmz-proxy",
-          "spring-gateway",
-          "jenkins-ci",
-          "bastion-ssh",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
           "spring-gateway",
           "bastion-ssh"
         ],
@@ -689,164 +493,6 @@
           "spring-gateway",
           "bastion-ssh",
           "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "bastion-ssh",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "bastion-ssh",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "internal-wiki"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "internal-wiki",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "internal-wiki",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "internal-wiki",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "jenkins-ci",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "jenkins-ci",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "jenkins-ci",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "dmz-proxy",
-          "jenkins-ci",
-          "bastion-ssh",
-          "internal-wiki"
         ],
         "paths": 1
       },
@@ -886,58 +532,20 @@
       {
         "hosts": [
           "spring-gateway",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "internal-wiki",
-          "jenkins-ci",
-          "bastion-ssh",
-          "cache-redis"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "internal-wiki",
           "jenkins-ci",
           "bastion-ssh",
           "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "jenkins-ci",
-          "bastion-ssh",
-          "db-primary"
-        ],
-        "paths": 1
-      },
-      {
-        "hosts": [
-          "spring-gateway",
-          "jenkins-ci",
-          "bastion-ssh",
-          "internal-wiki"
         ],
         "paths": 1
       }
     ],
     "goal_hosts": {
-      "bastion-ssh": 16,
-      "cache-redis": 16,
-      "db-primary": 16,
-      "dmz-proxy": 2,
-      "internal-wiki": 12,
-      "spring-gateway": 2
+      "bastion-ssh": 6,
+      "cache-redis": 6,
+      "db-primary": 6,
+      "dmz-proxy": 1,
+      "internal-wiki": 2,
+      "spring-gateway": 1
     },
     "goal_hosts_not_on_any_expected_path": []
   }

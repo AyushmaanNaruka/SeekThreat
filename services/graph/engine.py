@@ -1,7 +1,10 @@
 """Path enumeration, chokepoints and remediation simulation.
 
 Enumeration is exhaustive up to the stated limits and deterministic: shortest paths
-first, ties broken by the sequence of edge ids. Nothing here scores, ranks or prunes by
+first, ties broken by the sequence of edge ids. Only shortcut-free paths are listed: a
+path that steps to a node some earlier node on it already has a direct edge to is a
+detour around a shorter path (e.g. compromising the proxy to reach a gateway the
+attacker could already reach from the entry zone), so it is not listed separately. Nothing here scores, ranks or prunes by
 risk (path scoring is pending sign-off, DECISIONS.md D-039). When a limit is hit the
 result says so; it never silently drops paths.
 """
@@ -23,7 +26,7 @@ from packages.schema.models.graph import (
 from packages.schema.models.observation import Observation
 from packages.schema.models.topology import NetworkTopology
 from services.graph.builder import AttackGraph, build_attack_graph
-from services.graph.rules import RuleSet, load_ruleset
+from services.graph.ruleset import RuleSet, load_ruleset
 
 DEFAULT_MAX_DEPTH = 12
 DEFAULT_MAX_PATHS = 1000
@@ -43,6 +46,11 @@ class _WalkState:
     budget_hit: bool = False
     deeper_exists: bool = False
     level: list[tuple[PathEdge, ...]] = field(default_factory=list)
+    successors: dict[str, frozenset[str]] = field(default_factory=dict)
+
+    def is_shortcut(self, node: str, target: str, visited: set[str]) -> bool:
+        """True when a node on the path other than `node` reaches `target` directly."""
+        return any(target in self.successors.get(v, frozenset()) for v in visited if v != node)
 
 
 def _walk(
@@ -60,11 +68,14 @@ def _walk(
     if len(trail) == depth:
         if node in graph.goal_nodes:
             state.level.append(tuple(trail))
-        if any(e.to_node not in visited for e in adjacency.get(node, [])):
+        if any(
+            e.to_node not in visited and not state.is_shortcut(node, e.to_node, visited)
+            for e in adjacency.get(node, [])
+        ):
             state.deeper_exists = True
         return
     for edge in adjacency.get(node, []):
-        if edge.to_node in visited:
+        if edge.to_node in visited or state.is_shortcut(node, edge.to_node, visited):
             continue
         state.expansions += 1
         if state.expansions > state.max_expansions:
@@ -89,7 +100,8 @@ def enumerate_paths(
     max_paths: int = DEFAULT_MAX_PATHS,
     max_expansions: int = DEFAULT_MAX_EXPANSIONS,
 ) -> PathEnumeration:
-    """Every simple path from an attacker node to a goal node, by iterative deepening.
+    """Every shortcut-free simple path from an attacker node to a goal node, by iterative
+    deepening.
 
     Level d collects all paths of exactly d edges, sorted by edge ids. Levels are taken
     in order until `max_paths` is reached, so a truncated result is always "every path
@@ -99,7 +111,10 @@ def enumerate_paths(
         raise ValueError("max_depth and max_paths must be positive")
     adjacency = {node: graph.out_edges(node) for node in graph.nodes}
     collected: list[tuple[PathEdge, ...]] = []
-    state = _WalkState(max_expansions=max_expansions)
+    state = _WalkState(
+        max_expansions=max_expansions,
+        successors={n: frozenset(e.to_node for e in edges) for n, edges in adjacency.items()},
+    )
     truncated = False
 
     for depth in range(1, max_depth + 1):

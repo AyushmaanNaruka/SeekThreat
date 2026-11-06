@@ -12,7 +12,7 @@ from services.graph.engine import (
     find_chokepoints,
     simulate_remediation,
 )
-from services.graph.rules import RuleSet, load_ruleset
+from services.graph.ruleset import RuleSet, load_ruleset
 
 __all__ = [
     "AttackGraph",

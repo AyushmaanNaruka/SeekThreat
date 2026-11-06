@@ -29,7 +29,7 @@ from packages.schema.models.graph import (
 from packages.schema.models.observation import Observation, ObservationKind
 from packages.schema.models.topology import NetworkTopology
 from services.graph.capabilities import CapabilityMatch, classify
-from services.graph.rules import CODE_EXECUTION, FILE_READ, RuleSet
+from services.graph.ruleset import CODE_EXECUTION, FILE_READ, RuleSet
 
 # Rule names, one per matcher below. Kept as constants so a typo is an import error.
 ENTRY = "entry_zone_service_access"

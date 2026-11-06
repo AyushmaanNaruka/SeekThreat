@@ -5,7 +5,7 @@
 **Mode:** fixture-based (not a lab run)  
 **Ground truth:** `lab/ground_truth.yaml` (hop lists: `evals/golden/attack_paths_expected.yaml`)  
 **Topology:** `lab/topology.yaml` (`topology:sha256:71f641e935d9d577eded9eda`)  
-**Rules digest:** `rules:sha256:7773bc9141670f9f944cbe3e`  
+**Rules digest:** `rules:sha256:56d64b9ef56ac5ecce4256dc`  
 **Engine limits:** max_depth 12, max_paths 1000  
 **Inputs:** 34 observations, 5 findings (interim bridge, detected_at fixed at 2026-01-01T00:00:00+00:00)  
 **Hosts with only synthetic observations:** bastion-ssh, cache-redis, db-primary, dmz-proxy, internal-api, internal-wiki, jenkins-ci, spring-gateway
@@ -32,8 +32,8 @@ Strict FOUND 2/3, lenient FOUND 2/3. Ground truth infeasible per topology: path-
 | Path | Hosts | Feasible per topology | Strict | Lenient | Final host reached as |
 |---|---|---|---|---|---|
 | path-1 | dvwa -> internal-api -> db-primary | **no** | NOT FOUND (0) | NOT FOUND (0) | - |
-| path-2 | spring-gateway -> jenkins-ci -> bastion-ssh -> cache-redis | yes | FOUND (1) | FOUND (6) | network_access |
-| path-3 | dmz-proxy -> internal-wiki | yes | FOUND (1) | FOUND (27) | code_execution |
+| path-2 | spring-gateway -> jenkins-ci -> bastion-ssh -> cache-redis | yes | FOUND (1) | FOUND (1) | network_access |
+| path-3 | dmz-proxy -> internal-wiki | yes | FOUND (1) | FOUND (4) | code_execution |
 
 ### path-1
 
@@ -59,7 +59,7 @@ Diagnosis:
 
 ### path-2
 
-path-2: strict FOUND (1 paths), lenient FOUND (6 paths); final host cache-redis reached as network_access; CVE-2022-22947 on spring-gateway exploited; CVE-2024-23897 on jenkins-ci exploited; CVE-2022-0543 on cache-redis NOT exploited on example path (no vuln_candidate observation reports CVE-2022-0543 on cache-redis in the fixtures)
+path-2: strict FOUND (1 paths), lenient FOUND (1 paths); final host cache-redis reached as network_access; CVE-2022-22947 on spring-gateway exploited; CVE-2024-23897 on jenkins-ci exploited; CVE-2022-0543 on cache-redis NOT exploited on example path (no vuln_candidate observation reports CVE-2022-0543 on cache-redis in the fixtures)
 
 Feasibility (lab/topology.yaml):
 
@@ -82,7 +82,7 @@ Rules: entry_zone_service_access, exploit_grants_code_execution, intra_zone_serv
 
 ### path-3
 
-path-3: strict FOUND (1 paths), lenient FOUND (27 paths); final host internal-wiki reached as code_execution; CVE-2021-23017 on dmz-proxy exploited; CVE-2022-26134 on internal-wiki exploited
+path-3: strict FOUND (1 paths), lenient FOUND (4 paths); final host internal-wiki reached as code_execution; CVE-2021-23017 on dmz-proxy exploited; CVE-2022-26134 on internal-wiki exploited
 
 Feasibility (lab/topology.yaml):
 
@@ -112,10 +112,10 @@ Reported, not corrected. The owner decides whether the lab wiring or the ground 
 
 ## Engine output
 
-- Total paths: 64 (truncated: False)
-- By confidence: high 2, medium 0, low 62
-- By goal kind: code_execution 32, network_access 32
-- Paths ending in network access to a crown-jewel zone: 32
+- Total paths: 22 (truncated: False)
+- By confidence: high 2, medium 0, low 20
+- By goal kind: code_execution 10, network_access 12
+- Paths ending in network access to a crown-jewel zone: 12
 - Unzoned addresses: none
 
 ### Unclassified findings
@@ -128,17 +128,17 @@ Reported, not corrected. The owner decides whether the lab wiring or the ground 
 
 | Rank | Host | CVEs | Paths broken | Goals cut |
 |---|---|---|---|---|
-| 1 | spring-gateway | CVE-2022-22947 | 48 | exec:spring-gateway |
-| 2 | dmz-proxy | CVE-2021-23017 | 48 | exec:dmz-proxy |
-| 3 | internal-wiki | CVE-2022-26134 | 36 | exec:host:172.20.2.40 |
-| 4 | jenkins-ci | CVE-2024-23897 | 28 | - |
+| 1 | spring-gateway | CVE-2022-22947 | 11 | exec:spring-gateway |
+| 2 | dmz-proxy | CVE-2021-23017 | 11 | exec:dmz-proxy |
+| 3 | internal-wiki | CVE-2022-26134 | 8 | exec:host:172.20.2.40 |
+| 4 | jenkins-ci | CVE-2024-23897 | 6 | - |
 
 ## Spurious-path analysis
 
 Rule: on route = path's host sequence is a prefix of some expected host list. Off-route paths are not necessarily wrong; ground truth lists three chains, not every chain.
 
-- On route: 5; off route: 59
-- Goal hosts (paths ending there): bastion-ssh 16, cache-redis 16, db-primary 16, dmz-proxy 2, internal-wiki 12, spring-gateway 2
+- On route: 5; off route: 17
+- Goal hosts (paths ending there): bastion-ssh 6, cache-redis 6, db-primary 6, dmz-proxy 1, internal-wiki 2, spring-gateway 1
 - Goal hosts not on any expected path: none
 
 | Off-route host sequence | Paths |
@@ -146,59 +146,17 @@ Rule: on route = path's host sequence is a prefix of some expected host list. Of
 | dmz-proxy -> bastion-ssh | 1 |
 | dmz-proxy -> bastion-ssh -> cache-redis | 1 |
 | dmz-proxy -> bastion-ssh -> db-primary | 1 |
-| dmz-proxy -> bastion-ssh -> internal-wiki | 1 |
 | dmz-proxy -> internal-wiki -> bastion-ssh | 1 |
 | dmz-proxy -> internal-wiki -> bastion-ssh -> cache-redis | 1 |
 | dmz-proxy -> internal-wiki -> bastion-ssh -> db-primary | 1 |
-| dmz-proxy -> internal-wiki -> jenkins-ci -> bastion-ssh | 1 |
-| dmz-proxy -> internal-wiki -> jenkins-ci -> bastion-ssh -> cache-redis | 1 |
-| dmz-proxy -> internal-wiki -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
 | dmz-proxy -> jenkins-ci -> bastion-ssh | 1 |
 | dmz-proxy -> jenkins-ci -> bastion-ssh -> cache-redis | 1 |
 | dmz-proxy -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
-| dmz-proxy -> jenkins-ci -> bastion-ssh -> internal-wiki | 1 |
-| dmz-proxy -> spring-gateway | 1 |
-| dmz-proxy -> spring-gateway -> bastion-ssh | 1 |
-| dmz-proxy -> spring-gateway -> bastion-ssh -> cache-redis | 1 |
-| dmz-proxy -> spring-gateway -> bastion-ssh -> db-primary | 1 |
-| dmz-proxy -> spring-gateway -> bastion-ssh -> internal-wiki | 1 |
-| dmz-proxy -> spring-gateway -> internal-wiki | 1 |
-| dmz-proxy -> spring-gateway -> internal-wiki -> bastion-ssh | 1 |
-| dmz-proxy -> spring-gateway -> internal-wiki -> bastion-ssh -> cache-redis | 1 |
-| dmz-proxy -> spring-gateway -> internal-wiki -> bastion-ssh -> db-primary | 1 |
-| dmz-proxy -> spring-gateway -> internal-wiki -> jenkins-ci -> bastion-ssh | 1 |
-| dmz-proxy -> spring-gateway -> internal-wiki -> jenkins-ci -> bastion-ssh -> cache-redis | 1 |
-| dmz-proxy -> spring-gateway -> internal-wiki -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
-| dmz-proxy -> spring-gateway -> jenkins-ci -> bastion-ssh | 1 |
-| dmz-proxy -> spring-gateway -> jenkins-ci -> bastion-ssh -> cache-redis | 1 |
-| dmz-proxy -> spring-gateway -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
-| dmz-proxy -> spring-gateway -> jenkins-ci -> bastion-ssh -> internal-wiki | 1 |
 | spring-gateway -> bastion-ssh | 1 |
 | spring-gateway -> bastion-ssh -> cache-redis | 1 |
 | spring-gateway -> bastion-ssh -> db-primary | 1 |
-| spring-gateway -> bastion-ssh -> internal-wiki | 1 |
-| spring-gateway -> dmz-proxy | 1 |
-| spring-gateway -> dmz-proxy -> bastion-ssh | 1 |
-| spring-gateway -> dmz-proxy -> bastion-ssh -> cache-redis | 1 |
-| spring-gateway -> dmz-proxy -> bastion-ssh -> db-primary | 1 |
-| spring-gateway -> dmz-proxy -> bastion-ssh -> internal-wiki | 1 |
-| spring-gateway -> dmz-proxy -> internal-wiki | 1 |
-| spring-gateway -> dmz-proxy -> internal-wiki -> bastion-ssh | 1 |
-| spring-gateway -> dmz-proxy -> internal-wiki -> bastion-ssh -> cache-redis | 1 |
-| spring-gateway -> dmz-proxy -> internal-wiki -> bastion-ssh -> db-primary | 1 |
-| spring-gateway -> dmz-proxy -> internal-wiki -> jenkins-ci -> bastion-ssh | 1 |
-| spring-gateway -> dmz-proxy -> internal-wiki -> jenkins-ci -> bastion-ssh -> cache-redis | 1 |
-| spring-gateway -> dmz-proxy -> internal-wiki -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
-| spring-gateway -> dmz-proxy -> jenkins-ci -> bastion-ssh | 1 |
-| spring-gateway -> dmz-proxy -> jenkins-ci -> bastion-ssh -> cache-redis | 1 |
-| spring-gateway -> dmz-proxy -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
-| spring-gateway -> dmz-proxy -> jenkins-ci -> bastion-ssh -> internal-wiki | 1 |
 | spring-gateway -> internal-wiki | 1 |
 | spring-gateway -> internal-wiki -> bastion-ssh | 1 |
 | spring-gateway -> internal-wiki -> bastion-ssh -> cache-redis | 1 |
 | spring-gateway -> internal-wiki -> bastion-ssh -> db-primary | 1 |
-| spring-gateway -> internal-wiki -> jenkins-ci -> bastion-ssh | 1 |
-| spring-gateway -> internal-wiki -> jenkins-ci -> bastion-ssh -> cache-redis | 1 |
-| spring-gateway -> internal-wiki -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
 | spring-gateway -> jenkins-ci -> bastion-ssh -> db-primary | 1 |
-| spring-gateway -> jenkins-ci -> bastion-ssh -> internal-wiki | 1 |
