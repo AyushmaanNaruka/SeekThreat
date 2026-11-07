@@ -106,3 +106,94 @@ python evals/attack_paths.py   # writes results/attack_paths_results.{json,md}
 - **Not a lab run.** 8 of the 10 hosts have only synthetic fixtures. This is not the manual
   N=50 attack path validity metric in the table above, and its counts are not a validity
   score. The output is deterministic, and a test fails if the committed results are stale.
+
+## Layer 4 assistant (Track B: faithfulness, context, citations)
+
+Layer 4 is done when faithfulness is measured on the golden set. **No measurement has been
+committed yet**: the harness needs `services/assistant` (built in parallel), and no number
+exists until `evals/assistant_eval.py` has run against a real model.
+
+### Golden set provenance
+
+`golden/{cve_lookups,remediation,attack_paths,prioritization,adversarial,multi_hop}.jsonl`
+are **fixture-derived and auto-generated** by `evals/scripts/build_assistant_golden.py`. No
+item was written by hand or from memory. Inputs: the observation fixtures (8 of 10 lab hosts
+synthetic, see `tests/fixtures/observations/README.md`), the interim-bridge findings,
+`services.graph.analyze` over `lab/topology.yaml`, and `lab/ground_truth.yaml`. The
+manifest (`golden/assistant_golden_manifest.json`) records each input's sha256, the rules
+digest, the topology id, per-category counts and the set's sha256.
+
+| Category | Items | Derived from |
+|---|---|---|
+| cve_lookups | 39 | nuclei `vuln_candidate` observations (CVE, endpoint, CVSS, CWE); nmap port and service observations |
+| remediation | 15 | findings plus the service observation on the same endpoint; chokepoint remediation text and paths broken. No vendor advice: the data holds none |
+| attack_paths | 28 | best-ranked path per goal host (6) and every enumerated path (22): host sequence, confidence, weakest step, assumption rules |
+| prioritization | 17 | chokepoint ranking, goals cut, pairwise order, top-ranked path, the unclassified finding |
+| adversarial | 23 | ground-truth CVEs the fixtures lack, foreign IPs and CVEs, out-of-scope asks, unsupported facts; all `expect_refusal` |
+| multi_hop | 16 | path + finding + service observation (exploited CVEs and versions, entry port, chokepoint service) |
+
+138 items, well short of the ~500 target above. That is deliberate: a fixture engagement of
+10 hosts, 5 findings, 22 paths and 4 chokepoints supports this many mechanically checkable
+questions, and padding it with templated near-duplicates would not add evidence. Real lab
+captures and more lab configurations are what grow it.
+
+Each item: `id, category, question, reference_answer, required_refs` (assistant document
+ids per D-048: `obs:`, `finding:`, `path:`, `chokepoint:`, `topology:`), `must_mention`
+(exact entities), `must_mention_aliases` (a host name's IPs count as the name),
+`expect_refusal, lab_configuration: baseline, source: fixture, verified_by:
+generated:evals/scripts/build_assistant_golden.py, verified_at`. The build fails if a
+"foreign" IP or CVE, or an "unsupported fact" marker, appears anywhere in the engagement.
+`tests/unit/test_golden_assistant.py` checks that the files are current (regeneration is a
+no-op) and well-formed, that every `required_ref` resolves to an engagement record, and that
+every `must_mention` entity is in one of the item's own records.
+
+```bash
+python evals/scripts/build_assistant_golden.py          # regenerate
+python evals/scripts/build_assistant_golden.py --check  # exit 1 if stale
+```
+
+### Metrics (`evals/assistant_eval.py`)
+
+The harness builds the same engagement, turns it into documents with
+`documents_for_engagement`, indexes them in `InMemoryVectorStore`, answers every item with
+`answer_question`, and reports overall and per category:
+
+- **Faithfulness (entity proxy)**: share of answers whose grounding check lists no
+  unsupported entity (a CVE id, IP or port absent from the cited documents and the
+  question) and no invalid citation. Headline over answered (non-refused) items; also over
+  all items, where refusals count as faithful. **This is not RAGAS faithfulness**: a wrong
+  claim that names no such entity passes.
+- **Claim-entity precision**: supported / checked grounding entities, answered items.
+- **LLM-judge faithfulness** (optional, `--judge-model`, default off): the judge model sees
+  the cited documents and answers yes/no plus the unsupported statements. Reported
+  separately and labelled with the judge model; uncited answers count as unsupported.
+- **Context precision / recall**: retrieved doc ids vs `required_refs`, plain set overlap.
+- **Citation accuracy**: a citation is correct when the id was retrieved and supplied to the
+  model **and** it is a `required_ref` or its document text contains a `must_mention`
+  entity. Micro-averaged over citations.
+- **Answer correctness (proxy)**: `must_mention` recall, whole-token, case-insensitive.
+- **Refusal accuracy** on `expect_refusal` items, and **false refusals** on the rest.
+- **Answer relevancy (embedding cosine)**: cosine of question and answer embeddings with
+  the retrieval embed model. Not RAGAS answer relevancy.
+- **Latency** per `answer_question` call (mean, p50, p95, max).
+
+Metadata: model, embed model, judge model, Ollama version, golden set sha256, item counts,
+run time and git SHA (with a dirty flag). The report also lists golden-set diagnostics:
+`required_refs` that are not indexed doc ids, and `must_mention` entities absent from the
+required documents. A mismatch between the document builder and the golden set is shown
+there instead of being scored as a model failure.
+
+```bash
+# Harness check: FakeModelClient, writes results/assistant_eval_harness_check.*,
+# carries a HARNESS CHECK banner. Never report its numbers.
+python evals/assistant_eval.py --fake
+
+# Measurement (local Ollama). Writes results/assistant_eval_<model>.{json,md}.
+python evals/assistant_eval.py --model qwen2.5:7b --embed-model nomic-embed-text
+# Options: --categories cve_lookups,adversarial  --limit-items 5 (first N per category)
+#          --judge-model qwen2.5:7b  --ollama-url http://localhost:11434
+#          --output-json PATH --output-md PATH
+```
+
+Every result carries the FIXTURE banner: it measures the assistant on fixture facts, not
+on a running lab.

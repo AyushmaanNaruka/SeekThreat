@@ -28,6 +28,13 @@ Entry format:
 Every entry must be verifiable against `lab/ground_truth.yaml` or an authoritative source.
 Never write a reference answer from memory.
 
+The six Layer 4 files above are generated, not hand-written, by
+`evals/scripts/build_assistant_golden.py` from the fixture engagement. They use
+`required_refs` (assistant document ids) instead of `required_sources`, plus `category`,
+`must_mention`, `must_mention_aliases`, `expect_refusal` and `source: fixture`. See
+`evals/README.md` ("Layer 4 assistant") and `assistant_golden_manifest.json`. Do not edit
+them by hand: change the generator and rerun it.
+
 ## `enrichment_baseline.json` (enrichment coverage harness input)
 
 Input list for `evals/enrichment_coverage.py` and `evals/ers_validation.py`. Version 3.0.0
