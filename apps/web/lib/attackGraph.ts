@@ -204,7 +204,7 @@ export function parseAttackGraphResult(raw: unknown): AttackGraphResult {
 // Evidence ids
 // ---------------------------------------------------------------------------
 
-export type EvidenceKind = "observation" | "finding" | "topology" | "unknown";
+export type EvidenceKind = "observation" | "finding" | "topology" | "path" | "chokepoint" | "unknown";
 
 export interface EvidenceRef {
   /** The id exactly as the edge cited it. */
@@ -217,6 +217,10 @@ export interface EvidenceRef {
    *   finding's own id already starts with "finding:" (services/graph/builder.py
    *   `_finding_ref` does not double-prefix such ids).
    * - topology: the full topology_id ("topology:sha256:...").
+   * - path: the full path_id ("path:<hex>", services/graph/engine.py path_id_for).
+   *   Only assistant citations use these; graph edges never cite a path.
+   * - chokepoint: the chokepoint's finding_id ("chokepoint:" stripped). Assistant
+   *   citations only.
    */
   lookupId: string;
 }
@@ -228,6 +232,15 @@ export interface EvidenceRef {
 export function parseEvidenceId(raw: string, knownFindingIds: readonly string[] = []): EvidenceRef {
   if (raw.startsWith("obs:")) return { raw, kind: "observation", lookupId: raw };
   if (raw.startsWith("topology:")) return { raw, kind: "topology", lookupId: raw };
+  if (raw.startsWith("path:")) {
+    if (raw === "path:") return { raw, kind: "unknown", lookupId: raw };
+    return { raw, kind: "path", lookupId: raw };
+  }
+  if (raw.startsWith("chokepoint:")) {
+    const stripped = raw.slice("chokepoint:".length);
+    if (stripped === "") return { raw, kind: "unknown", lookupId: raw };
+    return { raw, kind: "chokepoint", lookupId: stripped };
+  }
   if (raw.startsWith("finding:")) {
     if (knownFindingIds.includes(raw)) return { raw, kind: "finding", lookupId: raw };
     const stripped = raw.slice("finding:".length);
@@ -239,7 +252,10 @@ export function parseEvidenceId(raw: string, knownFindingIds: readonly string[] 
 
 /** Short display form: "sha256:" hashes cut to 12 hex chars. The full id stays in the title. */
 export function shortEvidenceLabel(ref: EvidenceRef): string {
-  const body = ref.kind === "finding" ? ref.lookupId : ref.raw.replace(/^(obs|topology):/, "");
+  const body =
+    ref.kind === "finding" || ref.kind === "chokepoint"
+      ? ref.lookupId
+      : ref.raw.replace(/^(obs|topology|path):/, "");
   return body.replace(/sha256:([0-9a-f]{12})[0-9a-f]+/i, "sha256:$1…");
 }
 

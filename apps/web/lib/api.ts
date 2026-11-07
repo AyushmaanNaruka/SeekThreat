@@ -7,6 +7,8 @@ import { normalizeEnrichedFinding } from "./findings";
 import type { EnrichedFindingItem } from "./findings";
 import { parseAttackGraphResult } from "./attackGraph";
 import type { AttackGraphResult, NetworkTopology, SimulationResult } from "./attackGraph";
+import { parseAnswer, parseAssistantStatus, parseIndexResult, parsePathNarration } from "./assistant";
+import type { Answer, AssistantStatus, IndexResult, PathNarration } from "./assistant";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -426,6 +428,60 @@ export const api = {
     const data = await handleResponse<SimulationResult>(res);
     parseAttackGraphResult(data.after);
     return data;
+  },
+
+  // -------------------------------------------------------------------------
+  // Assistant (Layer 4). The model answers from retrieved records and narrates
+  // paths the rules engine already proved; it never creates graph structure.
+  // -------------------------------------------------------------------------
+
+  /** GET /assistant/status: model server configuration and reachability. */
+  async getAssistantStatus(signal?: AbortSignal): Promise<AssistantStatus> {
+    const res = await fetch(`${API_BASE_URL}/assistant/status`, { signal });
+    return parseAssistantStatus(await handleResponse<unknown>(res));
+  },
+
+  /** POST /engagements/{id}/assistant/index: (re)build the retrieval index. */
+  async indexAssistant(engagementId: string, signal?: AbortSignal): Promise<IndexResult> {
+    const res = await fetch(
+      `${API_BASE_URL}/engagements/${encodeURIComponent(engagementId)}/assistant/index`,
+      { method: "POST", signal }
+    );
+    return parseIndexResult(await handleResponse<unknown>(res));
+  },
+
+  /**
+   * POST /engagements/{id}/assistant/ask. 409 when the engagement is not indexed,
+   * 503 when the model server is unreachable (both ApiError with the server's detail).
+   */
+  async askAssistant(
+    engagementId: string,
+    question: string,
+    opts: { limit?: number; signal?: AbortSignal } = {}
+  ): Promise<Answer> {
+    const body: { question: string; limit?: number } = { question };
+    if (opts.limit !== undefined) body.limit = opts.limit;
+    const res = await fetch(
+      `${API_BASE_URL}/engagements/${encodeURIComponent(engagementId)}/assistant/ask`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: opts.signal,
+      }
+    );
+    return parseAnswer(await handleResponse<unknown>(res));
+  },
+
+  /** POST /engagements/{id}/attack-graph/paths/{path_id}/narrate: narrate one proven path. */
+  async narratePath(engagementId: string, pathId: string, signal?: AbortSignal): Promise<PathNarration> {
+    const res = await fetch(
+      `${API_BASE_URL}/engagements/${encodeURIComponent(engagementId)}/attack-graph/paths/${encodeURIComponent(
+        pathId
+      )}/narrate`,
+      { method: "POST", signal }
+    );
+    return parsePathNarration(await handleResponse<unknown>(res));
   },
 
   /**

@@ -7,6 +7,7 @@ import SidebarOrbit from "../../components/SidebarOrbit";
 import EnrichedFindingsView from "../../components/EnrichedFindingsView";
 import FeedHealthPanel from "../../components/FeedHealthPanel";
 import AttackPathsView from "../../components/AttackPathsView";
+import AssistantView from "../../components/AssistantView";
 import {
   api,
   EngagementItem,
@@ -547,6 +548,19 @@ export default function DashboardPage() {
             </div>
 
             <div
+              className={`db-nav-item ${activeNav === "Assistant" ? "active" : ""}`}
+              onClick={() => setActiveNav("Assistant")}
+              style={{ cursor: "pointer" }}
+            >
+              <div className="db-nav-item-inner">
+                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <span>Assistant</span>
+              </div>
+            </div>
+
+            <div
               className={`db-nav-item ${activeNav === "Feeds" ? "active" : ""}`}
               onClick={() => setActiveNav("Feeds")}
               style={{ cursor: "pointer" }}
@@ -746,6 +760,11 @@ export default function DashboardPage() {
             />
           ) : activeNav === "AttackPaths" ? (
             <AttackPathsView
+              activeEngagement={activeEngagement}
+              onSelectEngagementPrompt={() => setShowCreateModal(true)}
+            />
+          ) : activeNav === "Assistant" ? (
+            <AssistantView
               activeEngagement={activeEngagement}
               onSelectEngagementPrompt={() => setShowCreateModal(true)}
             />
