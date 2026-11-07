@@ -9,7 +9,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-CitationKind = Literal["observation", "finding", "path", "source"]
+CitationKind = Literal["observation", "finding", "path", "topology", "source"]
 
 
 class Citation(BaseModel):

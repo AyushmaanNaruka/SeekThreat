@@ -7,6 +7,13 @@ Two invariants:
 """
 
 from packages.schema.models.asset import Asset, Service
+from packages.schema.models.assistant import (
+    Answer,
+    AssistantDocument,
+    GroundingCheck,
+    PathNarration,
+    RetrievedDocument,
+)
 from packages.schema.models.citation import Citation, CitationKind
 from packages.schema.models.engagement import (
     Authorization,
@@ -42,7 +49,9 @@ from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
 from packages.schema.models.topology import MultiHomedHost, NetworkTopology, Zone, ZoneFlow
 
 __all__ = [
+    "Answer",
     "Asset",
+    "AssistantDocument",
     "AttackGraphResult",
     "AttackPath",
     "Attributed",
@@ -57,14 +66,17 @@ __all__ = [
     "ExposureRiskScore",
     "Finding",
     "GraphNode",
+    "GroundingCheck",
     "MultiHomedHost",
     "NetworkTopology",
     "NodeKind",
     "Observation",
     "ObservationKind",
     "PathEdge",
+    "PathNarration",
     "Provenance",
     "RawArtifact",
+    "RetrievedDocument",
     "Rule",
     "ScanRequest",
     "ScanResult",
