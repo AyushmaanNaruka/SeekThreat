@@ -1,31 +1,22 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, ApiError, API_BASE_URL } from "../lib/api";
-import type { EngagementItem, ObservationItem } from "../lib/api";
-import type { EnrichedFindingItem } from "../lib/findings";
-import { formatCvss, formatEpss } from "../lib/findings";
-import {
-  assumptionFor,
-  classifyStep,
-  groupPathsByGoal,
-  nodeIndex,
-  nodeLabel,
-  parseEvidenceId,
-  pathHasAssumption,
-  shortEvidenceLabel,
-  splitAssumedDescription,
-} from "../lib/attackGraph";
+import React, { useEffect, useMemo, useState } from "react";
+import { api, ApiError } from "../lib/api";
+import type { EngagementItem } from "../lib/api";
+import { groupPathsByGoal, nodeIndex, nodeLabel } from "../lib/attackGraph";
 import type {
   AttackGraphResult,
   AttackPath,
   EvidenceRef,
   GraphNode,
   NetworkTopology,
-  PathEdge,
   SimulationResult,
-  StepClass,
 } from "../lib/attackGraph";
+import type { PathNarration } from "../lib/assistant";
+import { describeError, isAbortError, useEvidencePanel } from "./EvidencePanel";
+import { KV, PathChain, Step } from "./PathParts";
+import type { OpenEvidence } from "./PathParts";
+import { CitedText, GroundingWarning } from "./AssistantParts";
 
 interface AttackPathsViewProps {
   activeEngagement: EngagementItem | null;
@@ -44,328 +35,67 @@ type LoadState =
   | { key: string; status: "no-topology"; message: string }
   | { key: string; status: "error"; message: string };
 
-type EvidenceState =
-  | { ref: EvidenceRef; context: string; status: "loading" }
-  | { ref: EvidenceRef; context: string; status: "error"; message: string }
-  | { ref: EvidenceRef; context: string; status: "observation"; data: ObservationItem }
-  | { ref: EvidenceRef; context: string; status: "finding"; data: EnrichedFindingItem }
-  | { ref: EvidenceRef; context: string; status: "topology"; data: NetworkTopology };
-
 type SimState =
   | { status: "loading" }
   | { status: "ok"; result: SimulationResult }
   | { status: "error"; message: string };
 
-function describeError(err: unknown, what: string): string {
-  if (err instanceof ApiError) return `${what} failed (HTTP ${err.status}): ${err.message}`;
-  if (err instanceof TypeError) {
-    return `Could not reach the SeekThreat API at ${API_BASE_URL}. Check that the backend is running.`;
-  }
-  if (err instanceof Error) return `${what} failed: ${err.message}`;
-  return `${what} failed: ${String(err)}`;
-}
+type NarrState =
+  | { status: "loading" }
+  | { status: "ok"; narration: PathNarration }
+  | { status: "error"; message: string };
 
-function isAbortError(err: unknown): boolean {
-  return err instanceof DOMException && err.name === "AbortError";
-}
-
-// ---------------------------------------------------------------------------
-// Small presentational pieces
-// ---------------------------------------------------------------------------
-
-function ConfidenceBadge({ cls }: { cls: StepClass }) {
-  const label = cls === "assumption" ? "Assumption" : `${cls} confidence`;
-  return <span className={`ap-badge ap-badge-${cls}`}>{label}</span>;
-}
-
-function NodeChip({ node, nodeId }: { node: GraphNode | undefined; nodeId: string }) {
-  return (
-    <div className={`ap-node ${node?.goal ? "ap-node-goal" : ""}`} title={nodeId}>
-      <span className="ap-node-kind">{node ? node.kind.replace(/_/g, " ") : "unknown node"}</span>
-      <span className="ap-node-label">{node?.label ?? nodeId}</span>
-      {node && node.zones.length > 0 && <span className="ap-node-zones">{node.zones.join(", ")}</span>}
-    </div>
-  );
-}
-
-function EvidenceButtons({
-  edge,
-  onOpen,
-}: {
-  edge: PathEdge;
-  onOpen: (ref: EvidenceRef, context: string) => void;
-}) {
-  const context = `${edge.rule_name}: ${edge.from_node} → ${edge.to_node}`;
-  return (
-    <div className="ap-evidence-row">
-      <span className="ap-evidence-label">Evidence</span>
-      {edge.evidence.map((id) => {
-        const ref = parseEvidenceId(id, edge.finding_ids);
-        if (ref.kind === "unknown") {
-          return (
-            <span key={id} className="ap-evidence ap-evidence-unknown" title={`Unrecognized evidence id: ${id}`}>
-              unrecognized: {id}
-            </span>
-          );
-        }
-        return (
-          <button
-            key={id}
-            type="button"
-            className={`ap-evidence ap-evidence-${ref.kind}`}
-            title={`Open ${ref.kind} ${id}`}
-            onClick={() => onOpen(ref, context)}
-          >
-            <span className="ap-evidence-kind">{ref.kind === "observation" ? "obs" : ref.kind}</span>
-            {shortEvidenceLabel(ref)}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Step({
-  edge,
-  onOpen,
-}: {
-  edge: PathEdge;
-  onOpen: (ref: EvidenceRef, context: string) => void;
-}) {
-  const cls = classifyStep(edge);
-  // The engine already appends "Assumed, not observed: <assumption>" to the
-  // description of assumption-rule edges; split it out rather than repeat it.
-  const { fact, assumed } = splitAssumedDescription(edge.description);
-  const assumption = assumed ?? assumptionFor(edge.rule_name);
-  return (
-    <div className={`ap-step ap-step-${cls}`}>
-      <div className="ap-step-head">
-        <span className="ap-rule" title={edge.edge_id}>
-          {edge.rule_name}
-        </span>
-        <ConfidenceBadge cls={cls} />
-        {cls === "assumption" && edge.confidence !== "low" && (
-          <span className="ap-badge ap-badge-neutral">{edge.confidence} confidence</span>
-        )}
-      </div>
-      {fact && <div className="ap-step-desc">{fact}</div>}
-      {assumption && (
-        <div className="ap-assume-text">
-          <strong>Assumption, not observed by any scan:</strong> {assumption.replace(/^Not observed\.\s*/, "")}
-        </div>
-      )}
-      {cls === "low" && (
-        <div className="ap-lowconf-text">
-          The engine rated this step low confidence from the evidence it rests on.
-        </div>
-      )}
-      <EvidenceButtons edge={edge} onOpen={onOpen} />
-    </div>
-  );
-}
-
-function PathChain({
+/**
+ * Narrate button and result for one path. The narration is downstream of the
+ * engine: the server narrates a path it already proved, and the steps stay the
+ * source of truth.
+ */
+function PathNarrationBlock({
   path,
-  index,
-  nodes,
+  state,
+  onNarrate,
   onOpen,
 }: {
   path: AttackPath;
-  index: number;
-  nodes: Map<string, GraphNode>;
-  onOpen: (ref: EvidenceRef, context: string) => void;
+  state: NarrState | undefined;
+  onNarrate: () => void;
+  onOpen: OpenEvidence;
 }) {
-  const assumed = pathHasAssumption(path);
   return (
-    <div className="ap-path">
-      <div className="ap-path-head">
-        <span className="ap-path-num">
-          {typeof path.rank === "number" ? `Rank ${path.rank}` : `Path ${index + 1}`}
-        </span>
-        <span className="ap-mono ap-muted" title="path_id">
-          {path.path_id}
-        </span>
-        <span className="ap-muted">
-          {path.edges.length} step{path.edges.length === 1 ? "" : "s"}
-        </span>
-        <span title="A path is only as certain as its weakest step (computed by the server).">
-          <ConfidenceBadge cls={path.confidence} />
-        </span>
-        {assumed && <span className="ap-badge ap-badge-assumption">includes assumption</span>}
-      </div>
-      {path.rank_explanation && <p className="ap-muted ap-rank-why">{path.rank_explanation}</p>}
-      <div className="ap-chain">
-        <NodeChip node={nodes.get(path.entry_node)} nodeId={path.entry_node} />
-        {path.edges.map((edge) => (
-          <React.Fragment key={edge.edge_id}>
-            <Step edge={edge} onOpen={onOpen} />
-            <NodeChip node={nodes.get(edge.to_node)} nodeId={edge.to_node} />
-          </React.Fragment>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function KV({ k, v, mono }: { k: string; v: React.ReactNode; mono?: boolean }) {
-  return (
-    <div className="ap-kv">
-      <span className="ap-kv-k">{k}</span>
-      <span className={`ap-kv-v ${mono ? "ap-mono" : ""}`}>{v}</span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Evidence detail
-// ---------------------------------------------------------------------------
-
-function ObservationDetail({ obs, cited }: { obs: ObservationItem; cited: string }) {
-  const attrs = Object.entries(obs.attributes ?? {});
-  return (
-    <div className="ap-detail">
-      {obs.observation_id !== cited && (
-        <div className="ap-warn" role="alert">
-          The server returned observation {obs.observation_id}, not the cited {cited}.
+    <div className="as-narr">
+      <button
+        type="button"
+        className="db-btn-secondary ap-sim-btn"
+        disabled={state?.status === "loading"}
+        onClick={onNarrate}
+      >
+        {state?.status === "loading" ? "Narrating…" : state?.status === "ok" ? "Narrate again" : "Narrate"}
+      </button>
+      {state?.status === "error" && (
+        <div className="ap-error" role="alert">
+          <span>{state.message}</span>
         </div>
       )}
-      <KV k="Observation" v={obs.observation_id} mono />
-      <KV k="Scanner" v={obs.scanner} />
-      <KV k="Kind" v={obs.kind} />
-      <KV k="Subject" v={obs.subject} mono />
-      <KV k="Observed at" v={obs.observed_at} mono />
-      <KV k="Raw artifact" v={obs.artifact_id} mono />
-      <KV
-        k="Provenance"
-        v={
-          obs.provenance
-            ? `${obs.provenance.source} · ${obs.provenance.confidence} confidence · retrieved ${obs.provenance.retrieved_at}${
-                obs.provenance.note ? ` · ${obs.provenance.note}` : ""
-              }`
-            : "none returned"
-        }
-      />
-      <div className="ap-subhead">Attributes ({attrs.length})</div>
-      {attrs.length === 0 ? (
-        <div className="ap-muted">No attributes.</div>
-      ) : (
-        <div className="ap-table-wrap">
-          <table className="ap-table">
-            <tbody>
-              {attrs.map(([k, v]) => (
-                <tr key={k}>
-                  <td className="ap-mono">{k}</td>
-                  <td className="ap-mono ap-break">{typeof v === "string" ? v : JSON.stringify(v)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {state?.status === "ok" && (
+        <div className="as-narr-body">
+          <div className="as-narr-label">
+            Narration of an already-proven path (generated by {state.narration.model}); the steps above are the
+            source of truth.
+          </div>
+          {state.narration.path_id !== path.path_id && (
+            <div className="ap-warn" role="alert">
+              The server narrated {state.narration.path_id}, not {path.path_id}.
+            </div>
+          )}
+          <CitedText
+            text={state.narration.text}
+            grounding={state.narration.grounding}
+            citations={state.narration.citations}
+            context={`Narration of ${path.path_id}`}
+            onOpen={onOpen}
+          />
+          <GroundingWarning grounding={state.narration.grounding} />
         </div>
-      )}
-    </div>
-  );
-}
-
-function FindingDetail({ f }: { f: EnrichedFindingItem }) {
-  return (
-    <div className="ap-detail">
-      <KV k="Finding" v={f.finding_id} mono />
-      <KV k="Title" v={f.title || "—"} />
-      <KV k="Asset" v={f.asset_id} mono />
-      <KV k="Scanner" v={f.scanner} />
-      <KV k="CVEs" v={f.cve_ids.length > 0 ? f.cve_ids.join(", ") : "none reported"} mono />
-      <KV k="Detected at" v={f.detected_at} mono />
-      <KV
-        k="CWE"
-        v={f.cwe_ids && f.cwe_ids.value.length > 0 ? `${f.cwe_ids.value.join(", ")} (${f.cwe_ids.provenance.source})` : "—"}
-      />
-      <KV k="CVSS" v={f.cvss ? `${formatCvss(f.cvss.value)} (${f.cvss.provenance.source})` : "—"} />
-      <KV k="EPSS" v={f.epss ? `${formatEpss(f.epss.value)} (${f.epss.provenance.source})` : "—"} />
-      <KV
-        k="CISA KEV"
-        v={
-          f.in_kev
-            ? `${f.in_kev.value === null ? "unknown" : f.in_kev.value ? "listed" : "not listed"} (${f.in_kev.provenance.source})`
-            : "—"
-        }
-      />
-      <div className="ap-subhead">Scanner report (verbatim)</div>
-      <pre className="ap-pre">{f.scanner_report || "—"}</pre>
-      <div className="ap-muted" style={{ fontSize: "0.75rem" }}>
-        The Exposure Risk Score and its per-component explanation are in the Findings view.
-      </div>
-    </div>
-  );
-}
-
-function TopologyDetail({ t, cited }: { t: NetworkTopology; cited: string | null }) {
-  return (
-    <div className="ap-detail">
-      {cited !== null && t.topology_id !== cited && (
-        <div className="ap-warn" role="alert">
-          The engagement&apos;s current topology is {t.topology_id}, but this step cites {cited}. The declaration
-          has changed since this graph was built; rebuild the graph to cite the current version.
-        </div>
-      )}
-      <KV k="Topology" v={t.topology_id} mono />
-      <KV k="Declared by" v={t.declared_by} />
-      <KV k="Declared at" v={t.declared_at} mono />
-      <KV k="Source" v={t.source_note || "—"} />
-      <KV k="Intra-zone reachable" v={t.intra_zone_reachable ? "yes (flat segments)" : "no"} />
-      <div className="ap-subhead">Zones ({t.zones.length})</div>
-      <div className="ap-table-wrap">
-        <table className="ap-table">
-          <thead>
-            <tr>
-              <th>Zone</th>
-              <th>CIDRs</th>
-              <th>Role</th>
-              <th>Description</th>
-            </tr>
-          </thead>
-          <tbody>
-            {t.zones.map((z) => (
-              <tr key={z.name}>
-                <td className="ap-mono">{z.name}</td>
-                <td className="ap-mono">{z.cidrs.join(", ")}</td>
-                <td>
-                  {[z.attacker_entry ? "attacker entry" : null, z.crown_jewel ? "crown jewel (goal)" : null]
-                    .filter(Boolean)
-                    .join(", ") || "—"}
-                </td>
-                <td>{z.description || "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="ap-subhead">Multi-homed hosts ({t.multi_homed_hosts.length})</div>
-      {t.multi_homed_hosts.length === 0 ? (
-        <div className="ap-muted">None declared.</div>
-      ) : (
-        <ul className="ap-list">
-          {t.multi_homed_hosts.map((h) => (
-            <li key={h.name}>
-              <span className="ap-mono">{h.name}</span>: {h.addresses.join(", ")}
-            </li>
-          ))}
-        </ul>
-      )}
-      <div className="ap-subhead">Declared cross-zone flows ({t.flows.length})</div>
-      {t.flows.length === 0 ? (
-        <div className="ap-muted">None declared.</div>
-      ) : (
-        <ul className="ap-list">
-          {t.flows.map((f, i) => (
-            <li key={`${f.from_zone}-${f.to_zone}-${i}`}>
-              <span className="ap-mono">
-                {f.from_zone} → {f.to_zone}
-              </span>{" "}
-              ports {f.ports.length > 0 ? f.ports.join(", ") : "all"}
-              {f.description ? ` · ${f.description}` : ""}
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   );
@@ -380,10 +110,8 @@ export default function AttackPathsView({ activeEngagement, onSelectEngagementPr
   const [reloadToken, setReloadToken] = useState(0);
   const loadKey = engagementId ? `${engagementId}#${reloadToken}` : null;
   const [load, setLoad] = useState<LoadState | null>(null);
-  const [evidence, setEvidence] = useState<EvidenceState | null>(null);
-  const evidenceReq = useRef(0);
-  const evidenceAbort = useRef<AbortController | null>(null);
   const [sims, setSims] = useState<Record<string, SimState>>({});
+  const [narrations, setNarrations] = useState<Record<string, NarrState>>({});
   const [openGroups, setOpenGroups] = useState<Record<string, number>>({});
   const [showAllEdges, setShowAllEdges] = useState(false);
 
@@ -418,56 +146,26 @@ export default function AttackPathsView({ activeEngagement, onSelectEngagementPr
     return () => controller.abort();
   }, [engagementId, loadKey]);
 
-  // Close the evidence panel on Escape; abort any in-flight lookup on unmount.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setEvidence(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      evidenceAbort.current?.abort();
-    };
-  }, []);
-
   const current = load && load.key === loadKey ? load : null;
   const graph = current?.status === "ok" ? current.graph : null;
 
   const nodes = useMemo(() => (graph ? nodeIndex(graph.nodes) : new Map<string, GraphNode>()), [graph]);
   const groups = useMemo(() => (graph ? groupPathsByGoal(graph.paths, graph.nodes) : []), [graph]);
 
-  const openEvidence = useCallback(
-    async (ref: EvidenceRef, context: string) => {
-      if (!engagementId) return;
-      evidenceAbort.current?.abort();
-      const controller = new AbortController();
-      evidenceAbort.current = controller;
-      const req = ++evidenceReq.current;
-      setEvidence({ ref, context, status: "loading" });
-      try {
-        let next: EvidenceState;
-        if (ref.kind === "observation") {
-          next = { ref, context, status: "observation", data: await api.getObservation(ref.lookupId, engagementId, controller.signal) };
-        } else if (ref.kind === "finding") {
-          next = { ref, context, status: "finding", data: await api.getFinding(ref.lookupId, engagementId, controller.signal) };
-        } else if (ref.kind === "topology") {
-          next = { ref, context, status: "topology", data: await api.getTopology(engagementId, controller.signal) };
-        } else {
-          next = { ref, context, status: "error", message: `Unrecognized evidence id: ${ref.raw}` };
-        }
-        if (req === evidenceReq.current) setEvidence(next);
-      } catch (err: unknown) {
-        if (req !== evidenceReq.current || isAbortError(err)) return;
-        setEvidence({ ref, context, status: "error", message: describeError(err, `Fetching ${ref.kind} ${ref.lookupId}`) });
-      }
-    },
-    [engagementId]
-  );
+  const { openEvidence, panel: evidencePanel } = useEvidencePanel(engagementId, graph);
 
-  const closeEvidence = () => {
-    evidenceAbort.current?.abort();
-    evidenceReq.current += 1;
-    setEvidence(null);
+  const narrKey = (pathId: string) => `${loadKey}|${pathId}`;
+
+  const runNarration = async (pathId: string) => {
+    if (!engagementId) return;
+    const key = narrKey(pathId);
+    setNarrations((s) => ({ ...s, [key]: { status: "loading" } }));
+    try {
+      const narration = await api.narratePath(engagementId, pathId);
+      setNarrations((s) => ({ ...s, [key]: { status: "ok", narration } }));
+    } catch (err: unknown) {
+      setNarrations((s) => ({ ...s, [key]: { status: "error", message: describeError(err, "Narration") } }));
+    }
   };
 
   const simKey = (findingId: string) => `${loadKey}|${findingId}`;
@@ -660,7 +358,14 @@ export default function AttackPathsView({ activeEngagement, onSelectEngagementPr
                   {shown > 0 && (
                     <div className="ap-group-body">
                       {g.paths.slice(0, shown).map((p, i) => (
-                        <PathChain key={p.path_id} path={p} index={i} nodes={nodes} onOpen={openEvidence} />
+                        <PathChain key={p.path_id} path={p} index={i} nodes={nodes} onOpen={openEvidence}>
+                          <PathNarrationBlock
+                            path={p}
+                            state={narrations[narrKey(p.path_id)]}
+                            onNarrate={() => void runNarration(p.path_id)}
+                            onOpen={openEvidence}
+                          />
+                        </PathChain>
                       ))}
                       {shown < g.paths.length && (
                         <button
@@ -848,48 +553,7 @@ export default function AttackPathsView({ activeEngagement, onSelectEngagementPr
         </>
       )}
 
-      {/* ---------- Evidence panel ---------- */}
-      {evidence && (
-        <div className="db-modal-overlay" onClick={closeEvidence}>
-          <div
-            className="db-modal-box ap-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Evidence detail"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="db-modal-header">
-              <div className="db-modal-title">
-                Evidence
-                <span className={`ap-evidence ap-evidence-${evidence.ref.kind}`}>{evidence.ref.kind}</span>
-              </div>
-              <button type="button" className="db-modal-close-btn" aria-label="Close" onClick={closeEvidence}>
-                ✕
-              </button>
-            </div>
-            <KV k="Cited id" v={evidence.ref.raw} mono />
-            <KV k="Cited by" v={evidence.context} mono />
-            <div className="ap-modal-body">
-              {evidence.status === "loading" && <div className="ap-muted">Fetching {evidence.ref.kind}…</div>}
-              {evidence.status === "error" && (
-                <div className="ap-error" role="alert">
-                  <span>{evidence.message}</span>
-                  <button
-                    type="button"
-                    className="db-card-action-btn"
-                    onClick={() => void openEvidence(evidence.ref, evidence.context)}
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-              {evidence.status === "observation" && <ObservationDetail obs={evidence.data} cited={evidence.ref.lookupId} />}
-              {evidence.status === "finding" && <FindingDetail f={evidence.data} />}
-              {evidence.status === "topology" && <TopologyDetail t={evidence.data} cited={evidence.ref.lookupId} />}
-            </div>
-          </div>
-        </div>
-      )}
+      {evidencePanel}
     </div>
   );
 }
