@@ -43,6 +43,61 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-048 — Layer 4 assistant: one fact per chunk, hybrid retrieval, cite-or-refuse, deterministic grounding check
+**Date:** 2026-11-07
+**Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**
+**Type:** Addition (settles docs/02-architecture.md "Still open" item 3)
+**Status:** Active, pending confirmation
+
+**Decision**
+- **Chunking:** one retrievable document per fact: each observation, enriched finding,
+  attack path, chokepoint and declared topology. The document id is the id a citation
+  uses (`obs:...`, `finding:...`, `path:...`, `chokepoint:...`, `topology:...`), so every
+  citation resolves to exactly one stored record. Document text is built deterministically
+  from the record (`services/assistant/documents.py`), never by the model.
+- **Retrieval:** hybrid. Exact-term hits (CVE ids, IPs, ports, host names pulled out of
+  the question) come first, then cosine-nearest vectors above a floor. Everything is
+  engagement-scoped, stored in pgvector inside Postgres (D-005) and indexed explicitly
+  per engagement.
+- **Answering:** the model sees only the retrieved documents and must cite every claim as
+  `[cite:<doc_id>]`. If retrieval returns nothing, the assistant refuses without calling
+  the model. If the documents do not answer the question, the model must reply with the
+  fixed refusal text.
+- **Grounding check (deterministic, after generation):** every CVE id, IP and port in the
+  answer must appear in a cited document or in the question, and every citation must name
+  a supplied document. Failures are returned and shown in the UI; the answer is not
+  silently rewritten.
+- **Narration:** `narrate_path` receives one already-proven `AttackPath` plus its evidence
+  documents. It may not add steps, must label assumption steps as assumptions, and is
+  grounding-checked too. Narration is never written back into graph results.
+- **Model:** reached only through `ModelClient` (D-006), with model names from
+  configuration. Development and the first measurements use what is installed locally
+  (`qwen2.5:7b`, with `nomic-embed-text` for embeddings). Foundation-Sec-8B-Reasoning stays
+  the target model and is not pulled yet. Every result records the model it came from.
+
+**Why**
+Fact-level chunks make citation accuracy checkable by id, with no fuzzy span matching. A
+sliding-window chunk can mix two hosts' facts and cite neither precisely. Exact-term
+retrieval first, because security questions name CVEs and IPs, which embeddings handle
+badly. Refusing before generation when nothing is retrieved removes the easiest kind of
+hallucination. The grounding check is a cheap proxy that cannot be talked around; an
+LLM judge is an optional second measure, reported separately. Rejected: letting the model
+browse the graph or the database (breaks the firewall), and LLM-generated summaries as
+retrieval units (unattributable text).
+
+**Impact on plan**
+Layer 4 builds on Layer 3's `AttackGraphResult` without touching the engine. The import
+firewall stays as it is: `services/assistant` imports only `packages.schema`. The golden set
+is generated from the fixture engagement and ground truth, so its size is limited by what
+the fixtures can verify, and that limit is stated in the results.
+
+**Cost if we're wrong**
+Low to moderate. Chunking and retrieval sit behind `VectorStore` and `Retriever`, and the
+corpus is small enough to re-index in seconds. The main risk is reporting: the
+entity-level faithfulness proxy must not be presented as RAGAS-style claim faithfulness.
+
+---
+
 ### D-047 — Ordinal path ranking instead of a numeric path score
 **Date:** 2026-11-06
 **Decided by:** Claude, under the graph owner's delegation ("build as you like"). **Ayushmaan to confirm.**
