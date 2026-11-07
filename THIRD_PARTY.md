@@ -47,6 +47,9 @@ dependency manifests.
 | ssh-audit | MIT (jtesta/ssh-audit LICENSE) | Service | Invoked as subprocess, `-j` JSON output parsed. Source never vendored (D-043) | Claude agent read LICENSE — human to confirm | 2026-10-12 |
 | Greenbone / OpenVAS | GPL | Service | Run as container, GMP API via python-gvm | | |
 | Foundation-Sec-8B-Reasoning | Open weights | Service | Local model serving | | |
+| Ollama (`ollama/ollama` image) | MIT | Service | `ollama` container under the `model` compose profile (D-006); spoken to over its HTTP API only. Never vendored | Claude agent — human to confirm | 2026-11-07 |
+| Qwen2.5-7B-Instruct (`qwen2.5:7b`) | Apache-2.0 (7B size; other Qwen2.5 sizes such as 3B and 72B use the Qwen licence) | Service | Interim default `ASSISTANT_MODEL` until Foundation-Sec-8B-Reasoning is pulled on dev machines; served by Ollama, weights not redistributed | Claude agent — human to confirm | 2026-11-07 |
+| nomic-embed-text (v1.5) | Apache-2.0 | Service | Default `ASSISTANT_EMBED_MODEL`: embeddings for the assistant's pgvector index (D-005); served by Ollama | Claude agent — human to confirm | 2026-11-07 |
 | CISA Vulnrichment | CC0-1.0 (Public Domain, cisagov/vulnrichment LICENSE) | Data | Per-CVE files fetched for CVEs we have seen: SSVC decision points, CWE, CVSS fallback | Mayank Narang | 2026-10-11 |
 | CISA KEV catalog | CC0-1.0 (Public Domain, cisagov/kev-data LICENSE; no CISA/DHS seal use or implied endorsement) | Data | Full catalog JSON mirrored daily; confirmed-exploitation flag, date added, ransomware use | Mayank Narang | 2026-10-11 |
 | FIRST EPSS | Free use; attribution requested (FIRST EPSS FAQ). Cite Jacobs et al. 2021 — see note [E] | Data | Daily bulk CSV (`epss_scores-current.csv.gz`). Attribution to FIRST EPSS SIG / Empirical Security in documentation and UI | Mayank Narang (no terms page cited; see note [E]) | 2026-10-11 |

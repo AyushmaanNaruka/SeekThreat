@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 #: Must equal services.enrichment.sources.sync.DEFAULT_CACHE_DIR (the FeedSyncer
@@ -153,6 +153,45 @@ class Settings(BaseSettings):
         description=(
             "NEO4J_CONNECTION_TIMEOUT_SECONDS: how long the projection waits for Neo4j "
             "before answering 503."
+        ),
+    )
+
+    # Layer 4 assistant (D-006): one Ollama server behind the ModelClient interface,
+    # served by the `model` compose profile. Unreachable Ollama never breaks the rest
+    # of the API: the assistant endpoints answer 503 and say how to start it.
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        validation_alias=AliasChoices("OLLAMA_BASE_URL", "OLLAMA_HOST"),
+        description=(
+            "OLLAMA_BASE_URL (OLLAMA_HOST also accepted): http://localhost:11434 for "
+            "native dev, http://ollama:11434 inside the compose network."
+        ),
+    )
+    # D-006 names Foundation-Sec-8B-Reasoning as the target model. It is not pulled on
+    # the dev machines yet, so the default is a general model that is; switch with
+    # ASSISTANT_MODEL once Foundation-Sec is available in Ollama.
+    assistant_model: str = Field(
+        default="qwen2.5:7b",
+        description="ASSISTANT_MODEL: Ollama tag of the text model that answers and narrates.",
+    )
+    assistant_embed_model: str = Field(
+        default="nomic-embed-text",
+        description=(
+            "ASSISTANT_EMBED_MODEL: Ollama tag of the embedding model. Changing it needs a "
+            "re-index (POST /engagements/{id}/assistant/index); vectors are stored per model."
+        ),
+    )
+    assistant_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        description="ASSISTANT_TIMEOUT_SECONDS: per-request timeout for generate/embed calls.",
+    )
+    assistant_status_timeout_seconds: float = Field(
+        default=3.0,
+        gt=0,
+        description=(
+            "ASSISTANT_STATUS_TIMEOUT_SECONDS: timeout of the cheap /api/tags probe behind "
+            "GET /assistant/status."
         ),
     )
 

@@ -36,3 +36,15 @@ namespace_packages = true
 [[tool.mypy.overrides]]
 module = ["networkx.*", "celery.*"]
 ignore_missing_imports = true
+
+# Layer 4 core modules are built on a parallel branch; apps/api/assistant_runtime.py
+# imports them lazily. Remove this override once they are merged (it is a no-op then).
+[[tool.mypy.overrides]]
+module = [
+  "services.assistant.client",
+  "services.assistant.documents",
+  "services.assistant.retrieval",
+  "services.assistant.answer",
+  "services.assistant.narration",
+]
+ignore_missing_imports = true
