@@ -556,10 +556,9 @@ def ollama_version(base_url: str) -> str | None:
 
 def build_documents() -> tuple[str, list[Any]]:
     """The fixture engagement as assistant documents. Imports the assistant at call time."""
-    from services.assistant.documents import documents_for_engagement
-
     from evals.scripts.build_assistant_golden import load_engagement
     from packages.schema.models.finding import EnrichedFinding
+    from services.assistant.documents import documents_for_engagement
 
     eng = load_engagement()
     docs = documents_for_engagement(

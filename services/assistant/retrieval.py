@@ -23,6 +23,7 @@ from services.assistant.interfaces import ModelClient, VectorStore
 # ----------------------------------------------------------------------- term extraction
 
 _CVE = re.compile(r"(?<![A-Za-z0-9])CVE-[0-9]{4}-[0-9]{4,7}(?![0-9])", re.IGNORECASE)
+_CWE = re.compile(r"(?<![A-Za-z0-9])CWE-[0-9]{1,5}(?![0-9])", re.IGNORECASE)
 _IPV4 = re.compile(r"(?<![0-9.])(?:[0-9]{1,3}\.){3}[0-9]{1,3}(?![0-9]|\.[0-9])")
 _IPV6 = re.compile(r"(?<![\w:])[0-9A-Fa-f]{0,4}(?::[0-9A-Fa-f]{0,4}){2,7}(?![\w:])")
 _PORT_PROTO = re.compile(r"(?<![A-Za-z0-9])([0-9]{1,5})/(tcp|udp|sctp)(?![A-Za-z0-9])", re.I)
@@ -75,12 +76,14 @@ def _hostname(token: str) -> str | None:
 def extract_terms(text: str) -> list[str]:
     """Exact identifiers in `text`, in order of first appearance, de-duplicated.
 
-    CVE ids (upper case), IPv4/IPv6 addresses (canonical form), `port/proto`
+    CVE and CWE ids (upper case), IPv4/IPv6 addresses (canonical form), `port/proto`
     (`8080/tcp`), bare ports after the word "port" (`22`), and host-name-like dotted
     tokens (lower case). Deterministic: pure regex, no model.
     """
     found: list[tuple[int, str]] = []
     for m in _CVE.finditer(text):
+        found.append((m.start(), m.group(0).upper()))
+    for m in _CWE.finditer(text):
         found.append((m.start(), m.group(0).upper()))
     ipv4_spans: list[tuple[int, int]] = []
     for m in _IPV4.finditer(text):

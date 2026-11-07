@@ -131,3 +131,9 @@ def test_fake_embeddings_are_stable() -> None:
     b = FakeModelClient().embed(["CVE-2021-41773 on 172.20.1.10"])
     assert a == b
     assert len(a[0]) == 64
+
+
+def test_extract_terms_includes_cwe_ids() -> None:
+    from services.assistant.retrieval import extract_terms
+
+    assert extract_terms("weakness cwe-94 and CWE-22, not CWE-") == ["CWE-94", "CWE-22"]

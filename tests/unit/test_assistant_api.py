@@ -711,9 +711,8 @@ class TestRealCore:
         assert resp.json()["path_id"] == path["path_id"]
 
     def test_model_unavailable_maps_to_503(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        from services.assistant.client import FakeModelClient, ModelUnavailableError
-
         from services.assistant import retrieval
+        from services.assistant.client import FakeModelClient, ModelUnavailableError
 
         def boom(self: Any, documents: Any) -> int:
             raise ModelUnavailableError("down")
