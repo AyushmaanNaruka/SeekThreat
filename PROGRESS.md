@@ -41,24 +41,24 @@ fallback* (`docs/02-architecture.md`, Sequence).
   on 2026-11-10 with `scripts/seed_fixture_demo.py`. Live mode (Docker + lab) was **not**
   re-run that day, because the Docker daemon was not running.
 
-Work in progress on other branches: the `services/normalize` identity and dedup merge
-(D-045), version-based findings, a report export endpoint, and assistant quality changes.
-None of these is reflected below until it lands.
+Merged into `feat/layer4-assistant` on 2026-11-10: the `services/normalize` identity and
+dedup work (D-045), version-matched CVE candidates (D-049), the path-1 analysis (D-050) and
+the engagement report export (D-051). Assistant quality changes are still on another branch.
 
 ### Open decisions and gaps (the short list)
 
 | Item | State | Where |
 |---|---|---|
-| **D-045** Track 1 identity resolution + dedup | **Proposed**, not merged here. Needs Utkarsh's review | branch `feat/normalize-dedup`. D-045 is not yet in this branch's `DECISIONS.md` |
+| **D-045** Track 1 identity resolution + dedup | **Proposed**, merged and wired into the scan task. Needs Utkarsh's review | `DECISIONS.md`, `services/normalize/` |
 | **D-047** ordinal path ranking | Active, **pending Ayushmaan's confirmation** | `DECISIONS.md` |
 | **D-048** assistant design | Active, **pending Ayushmaan's confirmation** | `DECISIONS.md` |
 | **D-039** numeric path score | **Proposed, not adopted**. Its open items (barrier values, the 0.001 EPSS floor, cost of edges with no CVE/EPSS, Tier 2 weights, tier disagreement) are all still open | `DECISIONS.md` |
-| **Ground-truth path-1** (dvwa → internal-api → db-primary) | **Infeasible as the lab is wired**: no zone or flow connects those hops. Three `reachable_from` claims in `lab/ground_truth.yaml` also contradict `lab/topology.yaml`. Left unedited for the owner: change the lab wiring or the ground truth | D-046; `evals/results/attack_paths_results.md` |
-| **Live-lab classifiable findings** | Live scans have not produced findings the capability rules classify (Nuclei `rce`/OAST templates are excluded for safety), so a live engagement shows no attack paths. Reported from the Layer 3 live run, not in a committed result, not re-checked 2026-11-10. Undecided how to fix | `docs/04-demo-runbook.md` §3.3 |
+| **Ground-truth path-1** (dvwa → internal-api → db-primary) | **Infeasible as the lab is wired** — no network route between the hops, and dvwa / internal-api / db-primary versions do not match the claimed CVEs. Path-2's last hop has the same problem (CVE-2022-0543 does not apply to `redis:alpine`). **D-050 Proposed**: A = change the lab, B = restate the ground truth. Ground truth left unedited | D-050; `evals/results/attack_paths_results.md` |
+| **Live-lab classifiable findings** | **D-049 Proposed**: deterministic version-match rules turn nmap `service_version` facts into LOW-confidence, "unconfirmed" CVE candidates; edges on them are capped LOW. Every range in `services/normalize/rules/version_cves.yaml` is `verified: false` (written without network access) and needs checking against its advisory. Fixture-tested only; not run against the live lab | D-049; `docs/04-demo-runbook.md` §3.3 |
 | **Foundation-Sec-8B-Reasoning** | D-006's target model. **Not pulled, never measured.** No Ollama tag for it has been checked. The only real assistant measurement used `qwen2.5:7b` | D-006, D-048; `evals/results/assistant_eval_qwen2_5_7b.md` |
 | **`docs/00-scope.md`** | Still a **placeholder stub** ("Paste the full scope and research document here"). Only its Timeline section is real (D-022), yet `CLAUDE.md` and `HOW-THIS-REPO-WORKS.md` call it authoritative | `docs/00-scope.md` |
 | Neo4j `THIRD_PARTY.md` rows | Marked "Claude agent — human to confirm" | `THIRD_PARTY.md` |
-| Report output format | "Still open" item 4 in the architecture doc. An export endpoint is in progress on another branch | `docs/02-architecture.md` |
+| Report output format | **D-051, Ayushmaan to confirm**: Markdown + JSON from one pure builder, `GET /engagements/{id}/report?format=md\|json`, dashboard download buttons. Narrations are not in the API export (they are not stored) | D-051; `services/report/` |
 | Staffing question (graph engine owner) | The architecture doc asked for a decision in September. None is logged | `docs/02-architecture.md` |
 
 ---
@@ -109,11 +109,13 @@ None of these is reflected below until it lands.
 - ✅ `enriched_findings` table, `/findings` API, engagement-scoped (D-031, D-032).
   Provenance gate: findings must cite the engagement's observations (D-040)
 - ✅ Interim observation→Finding bridge — `services/normalize/interim_bridge.py` (D-044)
-- 🔨 Identity resolution + cross-scanner dedup (Track 1, D-045 Proposed). On branch
-  `feat/normalize-dedup`; a merge into this line is in progress elsewhere. Until it lands,
-  `services/normalize` here is the interim bridge only
-- 🔨 Version-based findings (CVE matching from `service_version`) — in progress on another
-  branch. ssh-audit 3.x reports no CVEs, so SSH CVEs depend on this (D-043)
+- ⚠️ Identity resolution + cross-scanner dedup (Track 1, D-045 Proposed) —
+  `services/normalize/{identity,dedup,pipeline}.py`, called from `apps/api/tasks/scans.py`
+  with the engagement's stored observations as context. Awaiting Utkarsh's review. The
+  assistant golden generator and web fixture generator still use the D-044 bridge
+- ⚠️ Version-matched CVE candidates (D-049 Proposed) — `services/normalize/version_match.py`,
+  rules in `services/normalize/rules/version_cves.yaml`, all ranges unverified. Added after
+  dedup; never merged with scanner reports
 
 ## Layer 3 — Reasoning ✅
 
