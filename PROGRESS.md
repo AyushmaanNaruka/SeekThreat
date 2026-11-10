@@ -43,7 +43,8 @@ fallback* (`docs/02-architecture.md`, Sequence).
 
 Merged into `feat/layer4-assistant` on 2026-11-10: the `services/normalize` identity and
 dedup work (D-045), version-matched CVE candidates (D-049), the path-1 analysis (D-050) and
-the engagement report export (D-051). Assistant quality changes are still on another branch.
+the engagement report export (D-051) and the assistant quality changes (D-052, not yet
+re-measured).
 
 ### Open decisions and gaps (the short list)
 
@@ -58,6 +59,7 @@ the engagement report export (D-051). Assistant quality changes are still on ano
 | **Foundation-Sec-8B-Reasoning** | D-006's target model. **Not pulled, never measured.** No Ollama tag for it has been checked. The only real assistant measurement used `qwen2.5:7b` | D-006, D-048; `evals/results/assistant_eval_qwen2_5_7b.md` |
 | **`docs/00-scope.md`** | Still a **placeholder stub** ("Paste the full scope and research document here"). Only its Timeline section is real (D-022), yet `CLAUDE.md` and `HOW-THIS-REPO-WORKS.md` call it authoritative | `docs/00-scope.md` |
 | Neo4j `THIRD_PARTY.md` rows | Marked "Claude agent — human to confirm" | `THIRD_PARTY.md` |
+| **D-052** assistant quality | **Proposed**, not re-measured; overfitting risk to the golden templates | `DECISIONS.md`, `services/assistant/` |
 | Report output format | **D-051, Ayushmaan to confirm**: Markdown + JSON from one pure builder, `GET /engagements/{id}/report?format=md\|json`, dashboard download buttons. Narrations are not in the API export (they are not stored) | D-051; `services/report/` |
 | Staffing question (graph engine owner) | The architecture doc asked for a decision in September. None is logged | `docs/02-architecture.md` |
 
@@ -153,7 +155,9 @@ the engagement report export (D-051). Assistant quality changes are still on ano
   `.../attack-graph/paths/{path_id}/narrate`, `GET /assistant/status`
 - ✅ Dashboard Assistant view and Narrate button — `apps/web/components/AssistantView.tsx`,
   `AttackPathsView.tsx`
-- 🔨 Assistant quality changes — in progress on another branch
+- ⚠️ Assistant quality changes (D-052 Proposed): unambiguous citation repair, partial
+  answers, entity-first retrieval. **Not re-measured** — the qwen2.5:7b numbers above predate
+  them. Needs a real run, ideally on Foundation-Sec and a held-out question set
 
 ## Eval harness — `evals/`
 

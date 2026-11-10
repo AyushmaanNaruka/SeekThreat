@@ -46,10 +46,19 @@ export interface RetrievedDocument {
   method: RetrievalMethod | string;
 }
 
+/** A near-miss citation id resolved to exactly one supplied document (D-052). */
+export interface CitationRepair {
+  cited: string;
+  resolved: string;
+  rule: string;
+}
+
 export interface GroundingCheck {
   checked_entities: string[];
   unsupported_entities: string[];
   invalid_citations: string[];
+  /** Absent in responses from before D-052. */
+  repaired_citations?: CitationRepair[];
 }
 
 export interface Answer {

@@ -43,6 +43,47 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-052 — Assistant quality: unambiguous citation repair, partial answers, entity-first retrieval
+**Date:** 2026-11-10
+**Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**
+**Type:** Change (extends D-048)
+**Status:** Proposed — not yet re-measured
+
+**Context**
+The first real Track B run (`evals/results/assistant_eval_qwen2_5_7b.md`, qwen2.5:7b) showed
+a false refusal rate of 0.600, 36 of 79 citations invalid, and context precision 0.117.
+Per-item inspection: malformed citation markers (`chokepoint:path:...`, one-character-off
+path ids, `[cite:path:x, step 2]`), named paths never retrieved, and refusals despite
+relevant context.
+
+**Decision**
+- **Citation repair** (`services/assistant/citations.py`): a cited id that is not supplied
+  maps to a supplied id only when exactly one supplied id fits a named rule (fragment or
+  punctuation, case, extra/missing kind prefix, truncation, one character off for ids of
+  12+ chars). Different kind prefixes, document numbers, unsupplied ids and ambiguous
+  matches are never repaired. Each repair is kept in `GroundingCheck.repaired_citations`
+  (new schema field, defaults empty) and logged.
+- **Grounding check unchanged.** Every entity flagged in the run was genuinely absent from
+  the cited documents; loosening it was rejected.
+- **Partial answers:** a reply containing the refusal sentence but carrying at least one
+  valid citation and other content is kept as an answer. Bare refusals stay refusals.
+- **Retrieval:** ids named in the question are fetched directly; host names map to the
+  addresses the engagement's own documents tie to them; path/chokepoint documents lead only
+  for path/fix questions with the engine's rank as tie-break; exact-identifier hits shrink
+  the context to at most 4 documents; one evidence hop for product/version/port questions.
+- **Firewall unchanged.** `services/assistant` still imports only `packages.schema`;
+  repair only maps between documents already supplied, so no model output reaches the graph.
+
+**Consequences**
+- No metric has been re-measured. The eval harness now reports repaired citations per item,
+  so the next run separates "valid" from "valid after repair".
+- **Overfitting risk:** the retrieval rules were designed while reading the template-generated
+  golden questions. A held-out question set is needed for an honest number.
+- `PgVectorStore.lexical` (apps/api) matches substrings while the in-memory store matches
+  whole identifiers; align before trusting pgvector-backed results.
+
+---
+
 ### D-051 — Engagement report: Markdown and JSON from one pure, deterministic builder
 **Date:** 2026-11-10
 **Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**
