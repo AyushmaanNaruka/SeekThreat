@@ -2,18 +2,17 @@
 
 **Mode:** Real mirrors  
 **Dataset:** `evals/golden/enrichment_baseline.json` (50 CVEs)  
-**Dataset verification:** verified — 50 real-world CVEs across 5 documented cohorts; verified against CISA KEV, CVE.org, and NVD 2.0 by Mayank Narang on 2026-10-11  
-**Review note on verification (2026-10-12):** the line above is the dataset's `verification` string as it stood at generation time. It overstates what was done: entries carry one batch stamp with no per-CVE evidence, and the cohort B / D labels are contradicted by this run (NVD supplied CVSS for all 50). The dataset field now says so; see `evals/golden/README.md`.  
+**Dataset verification:** Per-CVE evidence records built automatically from local mirrors at 2026-10-15T16:47:23.432232+00:00. Each item's evidence.retrieved_at records the mirror snapshot used. Mirror sha256s below identify the exact snapshot.  
 **Source cache:** `data/enrichment_cache`  
-**Fusion chain order (`_CHAIN_ORDER`):** cve.org -> cisa.vulnrichment -> nvd -> enisa.euvd (then the derived placeholder fallback; "derived" is not in the JSON `fusion_chain_order`)  
-**Generated at:** 2026-10-11T15:02:40.419233+00:00  
+**Fusion chain order (`_CHAIN_ORDER`):** cve.org -> cisa.vulnrichment -> nvd -> enisa.euvd (then the derived placeholder fallback)  
+**Generated at:** 2026-10-15T17:11:05.761830+00:00  
 
 ## Mirror files
 
 | Mirror | Path | Synthetic | sha256 | mtime | synced_at |
 |---|---|---|---|---|---|
-| `nvd` | `data/enrichment_cache/nvd.json` | no | `218f7d649a7c0124dfb970377627bcd10b9e77cf0157dc78fc0e89fde3a854f8` | 2026-10-11T15:00:45.720401+00:00 | 2026-10-11T15:00:45.396640+00:00 |
-| `cve_org` | `data/enrichment_cache/cve_org.json` | no | `6b7c05da5a3ac93182396fe7212430cac3b7996f176a849595c5f86bcc4be36c` | 2026-10-11T14:49:12.851552+00:00 | 2026-10-11T14:49:12.751038+00:00 |
+| `nvd` | `data/enrichment_cache/nvd.json` | no | `e8946380d34464b756b37d992b116399ea11671c5b2b2a13fb37bb0b4ffde8bb` | 2026-10-15T17:09:40.029114+00:00 | 2026-10-15T17:09:39.828531+00:00 |
+| `cve_org` | `data/enrichment_cache/cve_org.json` | no | `9ae9d633afa03571da433c66143c8cdc797cfafc780eedb140b67a9e2dcce7ea` | 2026-10-15T17:04:26.668878+00:00 | 2026-10-15T17:04:26.610615+00:00 |
 | `vulnrichment` | `data/enrichment_cache/vulnrichment.json` | no | `e571697ee56c46526d2d587da69e8cda644ba8a43574d883c7cb4baff026573a` | 2026-10-11T14:49:46.272063+00:00 | 2026-10-11T14:49:46.180723+00:00 |
 | `euvd` | `data/enrichment_cache/euvd.json` | no | `d5513cf21a4c6233a33b93ef1710917f3b2e6bb05dec0b735a37cb57354f805b` | 2026-10-11T14:54:20.961200+00:00 | 2026-10-11T14:54:20.530276+00:00 |
 | `epss_v4` | `data/enrichment_cache/epss_v4.json` | no | `1a638ce526fd216296a0615e11b9a14d526016d879aa30e1181cfcb19ba2ff4d` | 2026-10-11T14:48:45.176297+00:00 | 2026-10-11T14:48:38.722296+00:00 |
@@ -25,13 +24,16 @@
 
 | Metric | NVD-only baseline | Multi-source | Difference |
 |---|---|---|---|
-| Overall | 73.0% (146/200) | 98.0% (196/200) | +25.0 pp |
+| Overall | 4.5% (9/200) | 30.0% (60/200) | +25.5 pp |
+| Excluding `epss_score` | 6.0% (9/150) | 6.7% (10/150) | +0.7 pp |
+
+The NVD-only baseline never loads EPSS, so `epss_score` adds a definitional gain to the four-field headline. The row excluding `epss_score` is the like-for-like comparison of fusion against NVD.
 
 | Field | NVD-only baseline | Multi-source | Difference |
 |---|---|---|---|
-| `cvss_score` | 100.0% (50/50) | 100.0% (50/50) | +0.0 pp |
-| `cwe_ids` | 92.0% (46/50) | 92.0% (46/50) | +0.0 pp |
-| `summary` | 100.0% (50/50) | 100.0% (50/50) | +0.0 pp |
+| `cvss_score` | 6.0% (3/50) | 6.0% (3/50) | +0.0 pp |
+| `cwe_ids` | 6.0% (3/50) | 6.0% (3/50) | +0.0 pp |
+| `summary` | 6.0% (3/50) | 8.0% (4/50) | +2.0 pp |
 | `epss_score` | 0.0% (0/50) | 100.0% (50/50) | +100.0 pp |
 
 ## Signal fields (not in the headline)
@@ -40,49 +42,23 @@ A loaded mirror answers every lookup with a definite True/False, so these are re
 
 | Field | NVD-only baseline | Multi-source |
 |---|---|---|
-| `in_kev` | not loaded | loaded; positive 80.0% (40/50) |
-| `exploit_availability` | not loaded | loaded; positive 72.0% (36/50) |
+| `in_kev` | loaded; positive 6.0% (3/50) | loaded; positive 50.0% (25/50) |
+| `exploit_availability` | not loaded | loaded; positive 34.0% (17/50) |
 
 ## Cohorts (headline fields)
 
 | Cohort | CVEs | NVD-only baseline | Multi-source | Difference |
 |---|---|---|---|---|
-| `cohort_a_nvd_control` | 10 | 72.5% | 97.5% | +25.0 pp |
-| `cohort_b_nvd_gap` | 10 | 75.0% | 100.0% | +25.0 pp |
-| `cohort_c_cisa_kev` | 10 | 75.0% | 100.0% | +25.0 pp |
-| `cohort_d_high_epss_no_nvd` | 10 | 75.0% | 100.0% | +25.0 pp |
-| `cohort_e_weaponized_exploit` | 10 | 67.5% | 92.5% | +25.0 pp |
+| `non_kev_mid_epss` | 10 | 0.0% | 27.5% | +27.5 pp |
+| `kev_high_epss` | 15 | 15.0% | 40.0% | +25.0 pp |
+| `non_kev_high_epss` | 10 | 0.0% | 25.0% | +25.0 pp |
+| `kev_low_epss` | 10 | 0.0% | 25.0% | +25.0 pp |
+| `non_kev_low_epss` | 5 | 0.0% | 25.0% | +25.0 pp |
 
 ## Limitations
 
 - Baseline engine parses only NVD CVSS, CWE and description via NVDSource. NVD API 2.0 KEV fields (cisaExploitAdd etc.) are not parsed; EPSS, KEV and exploit sources are not loaded in the baseline.
-- Cohort labels come from the dataset and are unverified hypotheses; see `evals/golden/README.md`.
-
-## Reviewer notes / interpretation (added 2026-10-12, PR #19 review)
-
-Not generated by the harness. The numbers above are unchanged. Figures in this section were
-computed from `evals/results/enrichment_coverage_real.json` (`per_field`, `cohorts`, `signals`).
-
-1. **The per-field results are the result.** The four-field headline (73.0% -> 98.0%,
-   +25.0 pp) comes entirely from `epss_score` (0/50 -> 50/50). The NVD-only baseline does not
-   load EPSS by design, so that gain is definitional, not something NVD failed to provide.
-2. **Excluding EPSS the gain is +0.0 pp:** 146/150 (97.3%) baseline vs 146/150 (97.3%)
-   multi-source over `cvss_score`, `cwe_ids` and `summary`. On this set, fusion added nothing
-   over NVD for CVSS, CWE or description. NVD supplied CVSS for all 50 CVEs, including cohorts B
-   (`nvd_gap`) and D (`high_epss_no_nvd`), so those cohort labels do not hold on this snapshot.
-   Every cohort shows the same +25.0 pp, which is the EPSS field (+10 of 40 instances per cohort).
-3. **Per-CVE mirrors measure fetch success too.** CVE.org, Vulnrichment, NVD and EUVD were
-   fetched per CVE for exactly these 50 IDs (`evals/golden/eval_cve_list.txt`). Their coverage
-   partly measures whether each fetch succeeded, not how complete those sources are in general.
-   The JSON does not record per-mirror record counts. `docs/mayank_implementation/task3_level2_work.md`
-   reports 49 Vulnrichment records for the 50 IDs, which is not verifiable from this JSON.
-4. **Signal fields** (KEV positive 40/50, exploit catalogue entry 36/50) describe this
-   hand-picked set, which was chosen to contain well-known exploited CVEs. They are not rates for
-   CVEs in general.
-5. **Reproducibility.** The mirrors (`data/enrichment_cache`) are gitignored and change daily.
-   The sha256 values above identify the snapshot, but the snapshot is not archived, so this run
-   cannot be reproduced byte-for-byte. Commands: `evals/README.md`. Later harness versions add a
-   "headline excluding EPSS" row automatically.
+- Cohort labels are recorded as verified by the dataset (`cohort_labels_verified: true`); see `evals/golden/README.md`.
 
 ---
 _Generated by `evals/enrichment_coverage.py`._

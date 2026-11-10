@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from packages.schema.models.citation import Citation
 from packages.schema.models.graph import AttackPath, Chokepoint, PathEdge, Rule
+from packages.schema.models.provenance import Confidence
 
 
 def _edge() -> PathEdge:
@@ -12,6 +13,7 @@ def _edge() -> PathEdge:
         rule_name="remote_code_execution_on_exposed_service",
         evidence=["fnd-001", "obs-001"],
         description="Apache 2.4.49 path traversal reachable from outside",
+        confidence=Confidence.HIGH,
     )
 
 
@@ -22,6 +24,7 @@ def test_edge_requires_evidence() -> None:
             to_node="ast-001",
             rule_name="some_rule",
             evidence=[],
+            confidence=Confidence.HIGH,
         )
 
 
@@ -32,6 +35,7 @@ def test_edge_requires_a_named_rule() -> None:
             to_node="ast-001",
             rule_name="   ",
             evidence=["fnd-001"],
+            confidence=Confidence.HIGH,
         )
 
 
@@ -65,6 +69,7 @@ def test_rule_preconditions_cannot_be_mutated_in_place() -> None:
         preconditions=[{"kind": "service_version"}, {"kind": "vuln_candidate"}],
         effect="code_execution",
         citation="CAPEC-233",
+        confidence=Confidence.HIGH,
     )
     with pytest.raises(AttributeError):
         rule.preconditions.append({"kind": "reachability"})  # type: ignore[attr-defined]
@@ -87,6 +92,7 @@ def test_rule_is_data_and_can_cite_itself() -> None:
         preconditions=[{"kind": "service_version"}, {"kind": "vuln_candidate"}],
         effect="code_execution",
         citation="CAPEC-233",
+        confidence=Confidence.HIGH,
     )
     assert rule.citation == "CAPEC-233"
 

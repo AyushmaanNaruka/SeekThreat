@@ -43,6 +43,482 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-052 — Assistant quality: unambiguous citation repair, partial answers, entity-first retrieval
+**Date:** 2026-11-10
+**Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**
+**Type:** Change (extends D-048)
+**Status:** Proposed — not yet re-measured
+
+**Context**
+The first real Track B run (`evals/results/assistant_eval_qwen2_5_7b.md`, qwen2.5:7b) showed
+a false refusal rate of 0.600, 36 of 79 citations invalid, and context precision 0.117.
+Per-item inspection: malformed citation markers (`chokepoint:path:...`, one-character-off
+path ids, `[cite:path:x, step 2]`), named paths never retrieved, and refusals despite
+relevant context.
+
+**Decision**
+- **Citation repair** (`services/assistant/citations.py`): a cited id that is not supplied
+  maps to a supplied id only when exactly one supplied id fits a named rule (fragment or
+  punctuation, case, extra/missing kind prefix, truncation, one character off for ids of
+  12+ chars). Different kind prefixes, document numbers, unsupplied ids and ambiguous
+  matches are never repaired. Each repair is kept in `GroundingCheck.repaired_citations`
+  (new schema field, defaults empty) and logged.
+- **Grounding check unchanged.** Every entity flagged in the run was genuinely absent from
+  the cited documents; loosening it was rejected.
+- **Partial answers:** a reply containing the refusal sentence but carrying at least one
+  valid citation and other content is kept as an answer. Bare refusals stay refusals.
+- **Retrieval:** ids named in the question are fetched directly; host names map to the
+  addresses the engagement's own documents tie to them; path/chokepoint documents lead only
+  for path/fix questions with the engine's rank as tie-break; exact-identifier hits shrink
+  the context to at most 4 documents; one evidence hop for product/version/port questions.
+- **Firewall unchanged.** `services/assistant` still imports only `packages.schema`;
+  repair only maps between documents already supplied, so no model output reaches the graph.
+
+**Consequences**
+- No metric has been re-measured. The eval harness now reports repaired citations per item,
+  so the next run separates "valid" from "valid after repair".
+- **Overfitting risk:** the retrieval rules were designed while reading the template-generated
+  golden questions. A held-out question set is needed for an honest number.
+- `PgVectorStore.lexical` (apps/api) matches substrings while the in-memory store matches
+  whole identifiers; align before trusting pgvector-backed results.
+
+---
+
+### D-051 — Engagement report: Markdown and JSON from one pure, deterministic builder
+**Date:** 2026-11-10
+**Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**
+**Type:** Addition (settles docs/02-architecture.md "Still open" item 4)
+**Status:** Active, pending confirmation
+
+**Decision**
+- **Formats:** Markdown for the analyst to read and hand over, JSON for machines and for
+  archiving. Both are rendered from one `EngagementReport` model built by
+  `services/report.build_report`. JSON is that model serialised, Markdown is a rendering
+  of it, so the two cannot disagree. No HTML or PDF export for now.
+- **Builder is pure:** no clock (the caller passes `generated_at`), no database, no
+  network, no model call. Inputs are sorted into a fixed order, so the same facts give
+  identical bytes. An architecture test (`tests/architecture/test_report_purity.py`)
+  enforces the import and clock rules, like the graph engine's purity test.
+- **Contents, in order:** engagement and authorization reference; scan inventory; assets
+  and services from host and service observations, with scanner, source and confidence on
+  each; findings ordered by stored ERS, each ERS shown with its weighted components and
+  `explain()` text, and every enriched field with its source and confidence (a missing
+  score shows as "not scored", never 0); attack paths in D-047 rank order, each step with
+  its rule name and evidence ids; chokepoints; the remediation simulation for the
+  top-ranked chokepoint; coverage and limitations; an appendix that resolves every cited
+  evidence id.
+- **Graph discipline (Hard Rule 1):** paths, chokepoints and the simulation come from
+  `services.graph` unchanged. The report never adds, edits or filters an edge. Assistant
+  narrations are optional input, attached only to the path they narrate, labelled
+  model-generated and not evidence. Narrations are not stored, so the API export does not
+  include them.
+- **Endpoint:** `GET /engagements/{id}/report?format=md|json`, a file download. It is
+  audited like the attack-graph endpoints (actor, target, engagement id as the
+  authorization reference), and the success event records the SHA-256 of the bytes
+  served. With no topology declared, the report is still produced, and the attack-graph
+  section says why it is missing.
+
+**Why**
+The January deliverable has to be readable by an evaluator and checkable by a machine.
+Markdown reads well as plain text, renders on GitHub and in most editors, and converts to
+PDF with any external tool without this project taking on a dependency. JSON keeps every
+id and attribution in a form a script can verify against the database. Building both from
+one model keeps them in step. Rejected: HTML or PDF generation in the API (a PDF library
+is a new dependency; HTML adds a template surface for scanner-supplied text to escape);
+a template engine such as Jinja (a dependency for what f-strings already do); and having
+the model write the report (Hard Rule 1, and it could not be reproduced).
+
+**Impact on plan**
+The report deliverable exists now. The dashboard has "Download report (.md)" and "JSON"
+buttons on the engagement banner. If a PDF is needed later, it can be produced from the
+Markdown outside the platform, or added as a new decision with its dependency flagged.
+
+**Cost if we're wrong**
+Low. Renderers are separate functions over one model. Adding a format means adding one
+renderer. Changing the layout does not touch the builder. The JSON shape is versioned
+(`report_format: seekthreat.report/1`), so a breaking change can bump the version.
+
+### D-050 — Ground-truth path-1 cannot exist in the lab as built: fix the lab or restate the path
+**Date:** 2026-11-10
+**Decided by:** Proposed by Claude. **Needs Ayushmaan (lab + ground-truth owner) to choose.**
+**Type:** Divergence (lab vs. its own ground truth)
+**Status:** Proposed. `lab/ground_truth.yaml` and `lab/docker-compose.yml` are unchanged.
+
+**Decision (to be made)**
+Path-1 (`dvwa -> internal-api -> db-primary`, "DVWA SSRF pivot -> Internal API leak -> DB")
+is wrong on four separate counts, not only the wiring D-046 found. Pick one:
+
+- **Option A: change the lab so path-1 is real.** All four of these, in `lab/docker-compose.yml`:
+  1. Attach `dvwa` to the `internal` network too (multi-homed, like `dmz-proxy`), and add
+     it to `multi_homed_hosts` in `lab/topology.yaml`.
+  2. Run an Apache httpd 2.4.49 image configured for CVE-2021-41773 instead of
+     `vulnerables/web-dvwa`. Or keep DVWA for the web-app demos and add a separate 2.4.49
+     host.
+  3. Attach `internal-api` to `data`, and make it an app that holds database credentials.
+     Today it is `python -m http.server`, which holds none and is not Werkzeug, so
+     CVE-2022-29361 does not apply either.
+  4. Pin a PostgreSQL release from before the CVE-2020-14349 fix (a 12.3 tag, for example),
+     or replace that CVE in the ground truth.
+
+  Each change then needs a live capture to confirm it. Docker is offline on the machine
+  this was written on, so none of it is verified.
+- **Option B: restate or drop path-1 in the ground truth to match the lab.** Log the
+  change. The eval denominator drops to two chains, or path-1 is rewritten around hosts
+  the lab really has. The only DMZ-to-data routes are through `dmz-proxy`/`spring-gateway`
+  and then `bastion-ssh`.
+
+Recommendation: **A, if path-1's story (web foothold, credential leak, database) is
+wanted for the demo.** Otherwise B. Either is better than the current state, where every
+attack-path metric counts a chain the lab cannot produce as a miss.
+
+**Evidence**
+- *Wiring.* In `lab/docker-compose.yml`, `dvwa` is on `dmz` only, `internal-api` on
+  `internal` only, `db-primary` on `data` only. All three networks are `internal: true`
+  and nothing routes between them. `lab/topology.yaml` transcribes this.
+  `evals/results/attack_paths_results.md` marks both hops of path-1 **INFEASIBLE**, and
+  lists the `reachable_from` claims for internal-api, db-primary and cache-redis as
+  contradicting compose.
+- *dvwa's version.* The only real capture of dvwa (`tests/fixtures/observations/
+  lab_baseline.json`, from `tests/fixtures/nmap/lab_baseline.xml`) reports
+  `Apache httpd 2.4.25` (`cpe:/a:apache:http_server:2.4.25`), not 2.4.49.
+  CVE-2021-41773 affects 2.4.49 only. The ground truth's `version: "2.4.49"` and its
+  `confidence: certain` for CVE-2021-41773 do not match the image. The version-match
+  rules (D-049) correctly derive nothing for it (`test_real_dvwa_capture_yields_no_candidate`).
+- *internal-api.* The compose service is `python:3.9-slim` running `python -m http.server
+  8080`. The ground truth calls it `werkzeug-http 2.0.1`, which only the synthetic fixture
+  repeats. It has no credentials to leak.
+- *db-primary.* PostgreSQL's advisory names 12.4, 11.9 and 10.14 as the fixed releases for
+  CVE-2020-14349, so `postgres:12.4-alpine` is outside the affected range. This was
+  transcribed without network access and must be checked against the advisory. The
+  ground-truth note ("pg_dump ... arbitrary SQL") also reads more like CVE-2020-14350.
+- *cache-redis (path-2's last hop, the same kind of problem).* CVE-2022-0543 comes from
+  Debian/Ubuntu Redis packaging, and the lab runs `redis:5.0.7-alpine`. Path-2's final
+  exploit step is not real as built either. Its network hops are.
+
+**Why a proposal and not an edit**
+Ground truth is the denominator for every metric (D-016). Editing it until the eval passes
+would make the metric meaningless. Option A means swapping images and changing networks,
+and none of that can be checked here. Both options belong to the owner.
+
+**Cost if we're wrong**
+Low to do either. Leaving it is expensive: every reported path-recall number is
+understated by a chain that cannot exist, and a viva examiner who opens compose will
+find it.
+
+---
+
+### D-049 — Version-match CVE candidates from nmap service versions, so live scans feed the graph
+**Date:** 2026-11-10
+**Decided by:** Proposed by Claude. **Needs Ayushmaan (graph owner) to sign off.**
+**Type:** Addition. **Touches what feeds the graph engine** (Hard Rule 1 flag): new
+findings reach `services/graph`. The engine still creates edges only through its named
+rules, and gains a data-driven confidence cap.
+**Status:** Proposed. Implemented on `feat/layer3-livefindings`, not merged.
+
+**Decision**
+- `services/normalize/version_match.py` turns nmap `service_version` observations into
+  `Finding`s with `scanner="version-match"`. It uses named rules in
+  `services/normalize/rules/version_cves.yaml`: product names or CPE vendor:product,
+  half-open affected intervals, and a reference URL for each rule.
+- Each finding:
+  - cites the one observation it was derived from;
+  - names its rule id, the matched interval, the rule-file digest, source
+    `version-match` and confidence `low` in its description;
+  - is titled "unconfirmed".
+- Only numeric dotted versions are compared. Versions from LOW-confidence service facts
+  (nmap `conf` < 7) are skipped.
+- `run_scan` dispatches these findings alongside the D-044 bridge's.
+- The post-scan sync (D-041) also syncs their CVE records. The graph classifies a finding
+  only from its tags and CWE ids, so fused `cwe_ids` from CVE.org, Vulnrichment or NVD are
+  what make these findings usable.
+- `services/graph/rules/capabilities.yaml` adds `derived_findings: {version-match: low}`.
+  An edge built on such a finding is capped at LOW and says "derived by version-match,
+  not observed". Every path that uses one is therefore LOW. This changes the rules digest
+  (`rules:sha256:e716105c88164a4c6a8ba1da`).
+- Not matched, with reasons recorded in the rule file: CVE-2022-0543 (Debian packaging),
+  CVE-2020-15778 (needs a login, and the vendor disputes it), CVE-2020-14349 (12.4 is the
+  fixed release, see D-050).
+
+**Why (root cause of "live scan, 0 paths")**
+1. The graph only builds exploit edges from findings, and findings only came from
+   `vuln_candidate` observations (D-044). nmap emits none by design (D-012,
+   `nmap_xml.py`: CPE-to-CVE matching "belongs to our own enrichment"). That matching
+   was never built.
+2. Nuclei runs with `EXCLUDE_TAGS = dos,intrusive,fuzz,bruteforce,rce,default-login`
+   (D-023, Hard Rule 4). The lab's nuclei CVE templates for spring-gateway, confluence and
+   redis are tagged `rce`, and dmz-proxy's is tagged `dos` (see the tags in
+   `tests/fixtures/observations/lab_extended_nuclei.json`). So they never run, and the
+   tag/CWE evidence the capability rules need never arrives.
+3. Nikto and ssh-audit findings carry no rce/lfi tags and no mapped CWE ids.
+   ssh-audit's CVE-2023-48795 (Terrapin) is not a code-execution or file-read class.
+
+**Considered and rejected**
+- *Enabling nuclei `rce` templates for lab targets.* They send code-execution payloads.
+  Hard Rule 4 and D-023 exclude them for exactly that reason, and an authorization record
+  does not change what a payload does.
+- *Hand-written detection-only nuclei templates for the lab CVEs.* Allowed in principle,
+  but each needs a live lab to prove it is benign and that it fires. Docker is offline
+  here, so a template that cannot be tested would be one more unverified claim. It
+  remains a good follow-up, and it would give HIGH or MEDIUM evidence where version
+  matching gives LOW.
+- *Building the CPE match from the NVD mirror's configurations.* The mirror is targeted
+  per CVE (D-036), so it only holds CVEs we already know about. That is circular for
+  discovery. A full NVD CPE dictionary would be a new, large dependency.
+- *Putting CWE ids in the rule file.* That would duplicate enrichment without its
+  provenance. CWE stays with the enrichment sources.
+
+**Impact on plan**
+A live nmap scan of the lab can now produce LOW-confidence attack paths, once CVE records
+are synced. The fixture eval is unchanged apart from the rules digest: it still runs only
+the D-044 bridge, so its verdicts are comparable with earlier runs. Track 1's normalizer
+should absorb `version_match_findings` together with the bridge.
+
+**What needs the developer's sign-off**
+- The ranges in `version_cves.yaml` were transcribed by hand from the cited advisories
+  without network access, and every rule is marked `verified: false`. Check each one
+  against its reference and flip the flag.
+- The product spellings other than `Apache httpd`, `nginx` and `Werkzeug httpd` come from
+  the ground truth. What nmap really reports for those images must come from a live
+  capture.
+- Whether LOW is the right cap. It is deliberately the floor, so a version-match path
+  never outranks an observed one (D-047 ranks on weakest-step confidence first).
+
+**Cost if we're wrong**
+Low to undo. Remove the dispatch line in `apps/api/tasks/scans.py` and the
+`derived_findings` block, and the engine is back to D-046. The real risk is presentation:
+these findings must stay labelled as derived and unconfirmed in the UI and the assistant's
+narration. If they read as confirmed, the platform reports CVEs it never observed.
+
+---
+
+### D-048 — Layer 4 assistant: one fact per chunk, hybrid retrieval, cite-or-refuse, deterministic grounding check
+**Date:** 2026-11-07
+**Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**
+**Type:** Addition (settles docs/02-architecture.md "Still open" item 3)
+**Status:** Active, pending confirmation
+
+**Decision**
+- **Chunking:** one retrievable document per fact: each observation, enriched finding,
+  attack path, chokepoint and declared topology. The document id is the id a citation
+  uses (`obs:...`, `finding:...`, `path:...`, `chokepoint:...`, `topology:...`), so every
+  citation resolves to exactly one stored record. Document text is built deterministically
+  from the record (`services/assistant/documents.py`), never by the model.
+- **Retrieval:** hybrid. Exact-term hits (CVE ids, IPs, ports, host names pulled out of
+  the question) come first, then cosine-nearest vectors above a floor. Everything is
+  engagement-scoped, stored in pgvector inside Postgres (D-005) and indexed explicitly
+  per engagement.
+- **Answering:** the model sees only the retrieved documents and must cite every claim as
+  `[cite:<doc_id>]`. If retrieval returns nothing, the assistant refuses without calling
+  the model. If the documents do not answer the question, the model must reply with the
+  fixed refusal text.
+- **Grounding check (deterministic, after generation):** every CVE id, IP and port in the
+  answer must appear in a cited document or in the question, and every citation must name
+  a supplied document. Failures are returned and shown in the UI; the answer is not
+  silently rewritten.
+- **Narration:** `narrate_path` receives one already-proven `AttackPath` plus its evidence
+  documents. It may not add steps, must label assumption steps as assumptions, and is
+  grounding-checked too. Narration is never written back into graph results.
+- **Model:** reached only through `ModelClient` (D-006), with model names from
+  configuration. Development and the first measurements use what is installed locally
+  (`qwen2.5:7b`, with `nomic-embed-text` for embeddings). Foundation-Sec-8B-Reasoning stays
+  the target model and is not pulled yet. Every result records the model it came from.
+
+**Why**
+Fact-level chunks make citation accuracy checkable by id, with no fuzzy span matching. A
+sliding-window chunk can mix two hosts' facts and cite neither precisely. Exact-term
+retrieval first, because security questions name CVEs and IPs, which embeddings handle
+badly. Refusing before generation when nothing is retrieved removes the easiest kind of
+hallucination. The grounding check is a cheap proxy that cannot be talked around; an
+LLM judge is an optional second measure, reported separately. Rejected: letting the model
+browse the graph or the database (breaks the firewall), and LLM-generated summaries as
+retrieval units (unattributable text).
+
+**Impact on plan**
+Layer 4 builds on Layer 3's `AttackGraphResult` without touching the engine. The import
+firewall stays as it is: `services/assistant` imports only `packages.schema`. The golden set
+is generated from the fixture engagement and ground truth, so its size is limited by what
+the fixtures can verify, and that limit is stated in the results.
+
+**Cost if we're wrong**
+Low to moderate. Chunking and retrieval sit behind `VectorStore` and `Retriever`, and the
+corpus is small enough to re-index in seconds. The main risk is reporting: the
+entity-level faithfulness proxy must not be presented as RAGAS-style claim faithfulness.
+
+---
+
+### D-047 — Ordinal path ranking instead of a numeric path score
+**Date:** 2026-11-06
+**Decided by:** Claude, under the graph owner's delegation ("build as you like"). **Ayushmaan to confirm.**
+**Type:** Addition (closes the Layer 3 ranking gap without adopting D-039)
+**Status:** Active, pending confirmation
+
+**Decision**
+Enumerated attack paths are ranked lexicographically, with no weights and no composite
+number:
+1. **Weakest-step confidence**, high first. A fully observed path outranks one that rests
+   on a LOW assumption edge.
+2. **Highest stored ERS** among the findings the path exploits, highest first. Paths with
+   no scored finding come last. ERS is read from `EnrichedFinding.ers` and never recomputed
+   (D-028).
+3. **Fewer steps.**
+4. **Edge ids**, as a deterministic tie break.
+
+Each path carries `rank` and a `rank_explanation` sentence naming the weakest step and the
+ERS it was ranked on. `AttackPath.score` stays `None`. Ranking runs after enumeration and
+only reorders; it never adds or drops a path. Truncation still keeps the shortest-first
+enumeration prefix.
+
+**Why**
+The architecture calls for ERS-based ranking in Layer 3. D-039's numeric tiers still have
+every open item listed there: unjustified barrier values, the 0.001 EPSS floor, undefined
+cost for edges with no CVE or EPSS, unjustified Tier 2 weights, and the Tier 1/Tier 2
+disagreement. An ordinal rule needs none of those constants. It multiplies nothing (D-008,
+D-029). Every position can be explained in one sentence, which meets "every risk score
+renders its own explanation". Confidence comes before ERS because a high ERS on a pivot
+that was only assumed should not outrank a fully observed chain. Rejected: adopting D-039
+as written, which would quote its open constants as if they were calibrated; and staying
+unranked, which leaves the Layer 3 deliverable incomplete.
+
+**Impact on plan**
+Layer 3 ranking is done without waiting on D-039. The API and UI show rank and
+explanation. D-039 stays a proposal. If its open items are ever closed, a numeric score
+could replace step 2 in a new decision.
+
+**Cost if we're wrong**
+Low. The rule is one function, `services/graph/engine.py:rank_paths`. Changing the key
+order or swapping in a score is a local change with tests. The risk is that lexicographic
+order hides magnitude: a path with ERS 9.9 and one with 9.8 sit next to each other with no
+"how much worse". That is accepted on purpose and stated in the explanation text.
+
+---
+
+### D-046 — Layer 3 engine: declared topology for reachability, evidence-only capabilities, unranked enumeration
+**Date:** 2026-11-06
+**Decided by:** Ayushmaan (graph owner), implemented with Claude
+**Type:** Addition
+**Status:** Active
+
+**Decision**
+`services/graph` builds an attacker-state graph (`attacker`, `network_access`,
+`code_execution`, `file_read`, `credentials` nodes) from observations, findings and a
+**declared network topology** (`packages/schema/models/topology.py`, one per engagement,
+content-hashed, attributed to a named person). Seven named rules in
+`services/graph/rules/core.yaml` are the only way an edge is created; each has one matcher
+in `builder.py`, and a test fails if the two drift. What a finding grants is decided only
+from the scanner's template tags and CWE ids (`rules/capabilities.yaml`), never free text.
+Paths are enumerated exhaustively up to stated limits, shortest first, ties by edge ids,
+and are **not scored** (`AttackPath.score` is `None`) until D-039 is signed off.
+
+**Why**
+- *Reachability cannot be observed from one vantage point.* The scanner sits in the DMZ
+  (worker attached to every segment per D-020), so every open port looks reachable. Real
+  engagements get reachability from the network owner, so it is declared like an
+  authorization. Every lateral edge cites the `topology_id` **and** an observed open
+  service. Rejected: inferring reachability from subnets alone (cannot see dual-homed
+  hosts; scanners see each address as a separate host), and having the model propose
+  reachability (Hard Rule 1). `ObservationKind.REACHABILITY` exists unused; vantage-aware
+  scans could later supply observed reachability and replace parts of the declaration.
+- *Capabilities from evidence, narrow on purpose.* Nuclei tags (`rce`, `lfi`, ...) are
+  scanner evidence (high); CWE classes are weakness types, not outcomes (medium);
+  memory corruption may only crash (low). Smuggling, SSRF, XSS and DoS are not mapped,
+  because their outcome depends on deployment. Unmapped findings are listed with the
+  evidence that was checked, never dropped silently.
+- *Two rules are explicit assumptions*, both LOW confidence and labelled in every edge
+  description: local access exposes credentials, and those credentials work on a
+  reachable remote-login service. Without them no multi-hop credential pivot can be
+  represented (ground-truth path-2 needs one); with them the UI must show they are
+  assumed, not observed. A path's confidence is its weakest edge.
+- *Chokepoints rank by goals cut, then paths broken.* Raw path counts reward findings
+  that sit on many detours.
+- *Unranked.* D-039's open items (barrier values, the EPSS floor, cost of edges without
+  CVE/EPSS, Tier 2 weights, tier disagreement) are still open. Ordering is structural only.
+
+**Impact on plan**
+Layer 3 core (graph, rules, paths, chokepoints, remediation simulation) lands in November
+as scheduled. Ranking waits on D-039. The engine reads the D-040 `asset_id` format and works
+with either the D-044 bridge or the proposed D-045 normalizer. `lab/topology.yaml`
+transcribes `lab/docker-compose.yml`. **Found while doing this:** per compose, ground-truth
+`path-1` (dvwa -> internal-api -> db-primary) is not reachable, because dvwa is DMZ-only and
+internal-api is internal-only. Several `reachable_from` lists in `lab/ground_truth.yaml`
+also contradict compose. Left unedited pending the owner's call.
+
+**Cost if we're wrong**
+Low to moderate. Rules and capability maps are data and cheap to change. The topology
+model is a new schema type and table; replacing declared reachability with observed
+reachability later is additive. The real risk is presentation. If assumption edges are
+shown without their label, or paths are read as ranked, analysts trust orderings and pivots
+the scan never proved.
+
+---
+
+### D-045 — Track 1 identity resolution and cross-scanner dedup: evidence-only joins, CVE-keyed merges
+**Date:** 2026-11-06
+**Decided by:** Ayushmaan (proposed); review pending from Utkarsh (Track 1 owner)
+**Type:** Addition (pre-empts Track 1; replaces the D-044 interim bridge in the scan task)
+**Status:** Proposed
+
+**Decision**
+Add `services/normalize/identity.py`, `dedup.py` and `pipeline.py`, and call
+`normalize_scan_observations` from `run_scan` instead of the D-044 bridge. This settles
+"Still open" item 1 in `docs/02-architecture.md`, pending review:
+- **Identity — canonicalise, then join only on observed evidence.** Brackets, IPv6
+  compression, case and FQDN trailing dots are normalised to the D-040 `asset_id` forms.
+  Joins use only what scanners reported: addresses in one nmap `HOST_UP` (`ipv4`/`ipv6`/
+  `mac`) are one host (resolved IPv4 > IPv6 > MAC); nmap `hostnames` (user or PTR) and a
+  nuclei/Nikto record's own `host`+`ip` pair point a hostname at a host. Hostname links are
+  one-way, so a name can never glue two addresses together. No DNS, no network.
+- **Ambiguity is never guessed.** A hostname whose evidence points at two hosts, or an
+  address component holding two IPv4s (e.g. one MAC seen with two IPs), is left unjoined
+  (`host:<itself>`) and returned as an `Ambiguity` with its evidence. Every join records
+  its rule and the observation ids that justified it.
+- **Merge rule.** Findings merge only on (a) same asset, same port/proto, identical
+  non-empty CVE set, any scanner; or (b) same asset, port, scanner and scanner identity
+  keys (the same check twice). Nothing else merges. Merged findings keep every
+  `observation_id`, list every scanner in `scanner`, and carry each scanner's confidence
+  in the description. `finding_id` hashes the merge key, so re-runs upsert.
+- **Engagement context.** The scan task normalises the engagement's stored observations
+  together with the new scan's, and enqueues only findings the scan touched (supported by
+  one of its observations, or whose asset join rests on one).
+
+**Why**
+D-044 made one finding per observation with no joining, so nuclei-by-hostname and
+nmap-by-IP facts never met and the same CVE from two scanners showed twice. Rejected:
+resolving DNS (mutable, attacker-influenced, and a network action outside authorization);
+fuzzy merging on title/template similarity (a false merge hides evidence, a duplicate only
+repeats it); transitive union through hostnames (one bad PTR would merge two hosts). PTR
+names are still accepted as evidence because a conflicting claim makes the name ambiguous
+rather than re-pointing it; the link records `nmap_hostname:PTR` so it is visible.
+
+**Impact on plan**
+Pre-empts Utkarsh's Track 1 work; he may replace any of it. The D-040 `asset_id` model
+validator was *not* added to `Finding`: existing tests use `asset_id="a"`, and persisted
+bridge-era rows are re-validated on read, so a strict validator would ripple into the
+findings API. `identity.is_valid_asset_id` exists for when it lands. `interim_bridge.py`
+stays (still exported, still tested) but is marked superseded.
+
+**Cost if we're wrong**
+Low to moderate. Reverting the import in `apps/api/tasks/scans.py` restores D-044.
+Known costs: CVE finding ids change once versus bridge-era rows (old rows linger until
+cleaned up), and a finding whose asset later joins (hostname -> IP after a new nmap scan)
+gets a new id while the old `host:<hostname>` row is not deleted.
+
+**Update 2026-11-10 — integrated into the Layer 3/4 line.** `feat/normalize-dedup` is merged
+into `feat/integrate-normalize` (on top of `feat/layer4-assistant`). Wiring was already in
+place through `run_scan`: the attack-graph and assistant routers read findings only from the
+enriched rows the scan task enqueues, so they now see normalised findings with no router
+change. `evals/attack_paths.py` now builds its findings with `normalize_observations` instead
+of the D-044 bridge, so the eval exercises the same path as production. On the current
+fixtures nothing merges (5 findings either way, same assets, same path and confidence
+counts, same verdicts). Only finding ids change (they hash the merge key, not the
+observation), and with them two example path ids and the order of the two chokepoints tied at
+11 paths broken (ties break on finding id). `evals/results/attack_paths_results.*` were
+regenerated. The assistant golden set (`evals/scripts/build_assistant_golden.py`) and the web
+fixture `apps/web/tests/fixtures/gen_lab_attack_graph.py` still use the bridge, because
+regenerating them would invalidate the committed assistant eval run; switch them when the
+assistant eval is re-run. Status stays **Proposed** pending Utkarsh's review.
+
+---
+
 ### D-044 — Interim observation→Finding bridge so scans reach enrichment and the UI
 **Date:** 2026-10-15
 **Decided by:** Ayushmaan
@@ -256,7 +732,7 @@ Low. The contract aligns directly with the existing Pydantic validation and API 
 **Date:** 2026-10-11 (revised 2026-10-12 after PR #19 review)
 **Decided by:** Proposed by Mayank; pending sign-off by Ayushmaan (graph owner)
 **Type:** Reversal
-**Status:** Proposed
+**Status:** Proposed, not adopted. Layer 3 ships the ordinal ranking in D-047 instead; this numeric proposal stays open for if its open items are ever closed.
 
 **Decision**
 Proposal to retire the multiplicative path score (`EPSS × exploit_availability × privilege_delta`) that D-029 flagged as a viva risk, and replace it with two separately defined tiers. The proposal is not settled. D-029 stays Active until the graph owner signs off.

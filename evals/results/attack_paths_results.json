@@ -1,0 +1,552 @@
+{
+  "metadata": {
+    "banner": "FIXTURE-BASED, NOT A LAB RUN. The engine ran over tests/fixtures/observations/, in which 8 of 10 lab hosts are covered only by synthetic fixtures (hand-authored tool output run through the real parsers, per tests/fixtures/observations/README.md). These verdicts check the engine and the ground truth against those facts; they are not measurements of the lab.",
+    "mode": "fixture-based (not a lab run)",
+    "fixtures": [
+      {
+        "file": "lab_baseline.json",
+        "provenance": "real"
+      },
+      {
+        "file": "lab_dmz_extended.json",
+        "provenance": "synthetic"
+      },
+      {
+        "file": "lab_internal.json",
+        "provenance": "synthetic"
+      },
+      {
+        "file": "lab_data.json",
+        "provenance": "synthetic"
+      },
+      {
+        "file": "lab_extended_nuclei.json",
+        "provenance": "synthetic"
+      }
+    ],
+    "hosts_with_only_synthetic_observations": [
+      "bastion-ssh",
+      "cache-redis",
+      "db-primary",
+      "dmz-proxy",
+      "internal-api",
+      "internal-wiki",
+      "jenkins-ci",
+      "spring-gateway"
+    ],
+    "hosts_total": 10,
+    "ground_truth": "lab/ground_truth.yaml",
+    "expected": "evals/golden/attack_paths_expected.yaml",
+    "topology": "lab/topology.yaml",
+    "topology_id": "topology:sha256:71f641e935d9d577eded9eda",
+    "rules_digest": "rules:sha256:e716105c88164a4c6a8ba1da",
+    "engagement_id": "eng-lab-baseline",
+    "max_depth": 12,
+    "max_paths": 1000,
+    "findings_detected_at": "2026-01-01T00:00:00+00:00",
+    "observations": 34,
+    "findings": 5,
+    "matching_rules": {
+      "host_sequence": "engine machines mapped to ground-truth hosts by ip/secondary_ip; attacker node skipped; consecutive repeats collapsed",
+      "strict": "host sequence equals the expected host list exactly",
+      "lenient": "expected hosts appear in order; other hosts may appear anywhere",
+      "visited": "a host counts as visited at any capability, network access included"
+    }
+  },
+  "engine": {
+    "total_paths": 22,
+    "truncated": false,
+    "paths_by_confidence": {
+      "high": 2,
+      "medium": 0,
+      "low": 20
+    },
+    "paths_by_goal_kind": {
+      "code_execution": 10,
+      "network_access": 12
+    },
+    "paths_to_crown_jewel_network_access": 12,
+    "unclassified_findings": [
+      {
+        "finding_id": "fnd-8213cf3867b585f28d4dc3ee",
+        "host": "internal-api",
+        "cve_ids": [
+          "CVE-2022-29361"
+        ],
+        "reason": "no capability rule matches its evidence (CWE-444, tag:cve, tag:cve2022, tag:smuggling, tag:werkzeug)"
+      }
+    ],
+    "unzoned_addresses": [],
+    "chokepoints": [
+      {
+        "rank": 1,
+        "host": "dmz-proxy",
+        "cve_ids": [
+          "CVE-2021-23017"
+        ],
+        "paths_broken": 11,
+        "goals_cut": [
+          "exec:dmz-proxy"
+        ]
+      },
+      {
+        "rank": 2,
+        "host": "spring-gateway",
+        "cve_ids": [
+          "CVE-2022-22947"
+        ],
+        "paths_broken": 11,
+        "goals_cut": [
+          "exec:spring-gateway"
+        ]
+      },
+      {
+        "rank": 3,
+        "host": "internal-wiki",
+        "cve_ids": [
+          "CVE-2022-26134"
+        ],
+        "paths_broken": 8,
+        "goals_cut": [
+          "exec:host:172.20.2.40"
+        ]
+      },
+      {
+        "rank": 4,
+        "host": "jenkins-ci",
+        "cve_ids": [
+          "CVE-2024-23897"
+        ],
+        "paths_broken": 6,
+        "goals_cut": []
+      }
+    ]
+  },
+  "expected_paths": [
+    {
+      "id": "path-1",
+      "hosts": [
+        "dvwa",
+        "internal-api",
+        "db-primary"
+      ],
+      "feasibility": {
+        "feasible": false,
+        "hops": [
+          {
+            "from": "attacker",
+            "to": "dvwa",
+            "feasible": true,
+            "reason": "dvwa is in attacker-entry zone dmz"
+          },
+          {
+            "from": "dvwa",
+            "to": "internal-api",
+            "feasible": false,
+            "reason": "dvwa (dmz) and internal-api (internal) share no zone and no flow connects them"
+          },
+          {
+            "from": "internal-api",
+            "to": "db-primary",
+            "feasible": false,
+            "reason": "internal-api (internal) and db-primary (data) share no zone and no flow connects them"
+          }
+        ]
+      },
+      "strict": {
+        "verdict": "NOT FOUND",
+        "matching_paths": 0
+      },
+      "lenient": {
+        "verdict": "NOT FOUND",
+        "matching_paths": 0
+      },
+      "example_path": null,
+      "final_host_reached_as": null,
+      "cve_checks": [
+        {
+          "host": "dvwa",
+          "cve": "CVE-2021-41773",
+          "finding_in_fixtures": false,
+          "classified": null,
+          "exploited_on_example_path": null,
+          "note": "no vuln_candidate observation reports CVE-2021-41773 on dvwa in the fixtures"
+        },
+        {
+          "host": "db-primary",
+          "cve": "CVE-2020-14349",
+          "finding_in_fixtures": false,
+          "classified": null,
+          "exploited_on_example_path": null,
+          "note": "no vuln_candidate observation reports CVE-2020-14349 on db-primary in the fixtures"
+        }
+      ],
+      "diagnosis": [
+        "hop dvwa -> internal-api unreachable per lab/topology.yaml (ground truth infeasible): dvwa (dmz) and internal-api (internal) share no zone and no flow connects them",
+        "hop internal-api -> db-primary unreachable per lab/topology.yaml (ground truth infeasible): internal-api (internal) and db-primary (data) share no zone and no flow connects them",
+        "no observed vulnerability on dvwa (172.20.1.10) in the fixtures (no vuln_candidate observation, so no finding), so the engine has no foothold there",
+        "no foothold on internal-api: CVE-2022-29361 unclassified: no capability rule matches its evidence (CWE-444, tag:cve, tag:cve2022, tag:smuggling, tag:werkzeug)"
+      ],
+      "summary": "path-1: strict NOT FOUND (0 paths), lenient NOT FOUND (0 paths). Reasons: hop dvwa -> internal-api unreachable per lab/topology.yaml (ground truth infeasible): dvwa (dmz) and internal-api (internal) share no zone and no flow connects them | hop internal-api -> db-primary unreachable per lab/topology.yaml (ground truth infeasible): internal-api (internal) and db-primary (data) share no zone and no flow connects them | no observed vulnerability on dvwa (172.20.1.10) in the fixtures (no vuln_candidate observation, so no finding), so the engine has no foothold there | no foothold on internal-api: CVE-2022-29361 unclassified: no capability rule matches its evidence (CWE-444, tag:cve, tag:cve2022, tag:smuggling, tag:werkzeug)"
+    },
+    {
+      "id": "path-2",
+      "hosts": [
+        "spring-gateway",
+        "jenkins-ci",
+        "bastion-ssh",
+        "cache-redis"
+      ],
+      "feasibility": {
+        "feasible": true,
+        "hops": [
+          {
+            "from": "attacker",
+            "to": "spring-gateway",
+            "feasible": true,
+            "reason": "spring-gateway is in attacker-entry zone dmz"
+          },
+          {
+            "from": "spring-gateway",
+            "to": "jenkins-ci",
+            "feasible": true,
+            "reason": "spring-gateway and jenkins-ci share zone internal"
+          },
+          {
+            "from": "jenkins-ci",
+            "to": "bastion-ssh",
+            "feasible": true,
+            "reason": "jenkins-ci and bastion-ssh share zone internal"
+          },
+          {
+            "from": "bastion-ssh",
+            "to": "cache-redis",
+            "feasible": true,
+            "reason": "bastion-ssh and cache-redis share zone data"
+          }
+        ]
+      },
+      "strict": {
+        "verdict": "FOUND",
+        "matching_paths": 1
+      },
+      "lenient": {
+        "verdict": "FOUND",
+        "matching_paths": 1
+      },
+      "example_path": {
+        "path_id": "path:13de37ba4c149723",
+        "confidence": "low",
+        "hosts": [
+          "spring-gateway",
+          "jenkins-ci",
+          "bastion-ssh",
+          "cache-redis"
+        ],
+        "nodes": [
+          "attacker:dmz",
+          "access:172.20.1.13:8080/tcp",
+          "exec:spring-gateway",
+          "access:172.20.2.25:8080/tcp",
+          "read:host:172.20.2.25",
+          "creds:host:172.20.2.25",
+          "exec:bastion-ssh",
+          "access:172.20.3.20:6379/tcp"
+        ],
+        "rules": [
+          "entry_zone_service_access",
+          "exploit_grants_code_execution",
+          "intra_zone_service_access",
+          "exploit_grants_file_read",
+          "local_access_exposes_credentials",
+          "credential_reuse_remote_login",
+          "intra_zone_service_access"
+        ]
+      },
+      "final_host_reached_as": "network_access",
+      "cve_checks": [
+        {
+          "host": "spring-gateway",
+          "cve": "CVE-2022-22947",
+          "finding_in_fixtures": true,
+          "classified": true,
+          "exploited_on_example_path": true,
+          "note": "finding is classified"
+        },
+        {
+          "host": "jenkins-ci",
+          "cve": "CVE-2024-23897",
+          "finding_in_fixtures": true,
+          "classified": true,
+          "exploited_on_example_path": true,
+          "note": "finding is classified"
+        },
+        {
+          "host": "cache-redis",
+          "cve": "CVE-2022-0543",
+          "finding_in_fixtures": false,
+          "classified": null,
+          "exploited_on_example_path": false,
+          "note": "no vuln_candidate observation reports CVE-2022-0543 on cache-redis in the fixtures"
+        }
+      ],
+      "diagnosis": [],
+      "summary": "path-2: strict FOUND (1 paths), lenient FOUND (1 paths); final host cache-redis reached as network_access; CVE-2022-22947 on spring-gateway exploited; CVE-2024-23897 on jenkins-ci exploited; CVE-2022-0543 on cache-redis NOT exploited on example path (no vuln_candidate observation reports CVE-2022-0543 on cache-redis in the fixtures)"
+    },
+    {
+      "id": "path-3",
+      "hosts": [
+        "dmz-proxy",
+        "internal-wiki"
+      ],
+      "feasibility": {
+        "feasible": true,
+        "hops": [
+          {
+            "from": "attacker",
+            "to": "dmz-proxy",
+            "feasible": true,
+            "reason": "dmz-proxy is in attacker-entry zone dmz"
+          },
+          {
+            "from": "dmz-proxy",
+            "to": "internal-wiki",
+            "feasible": true,
+            "reason": "dmz-proxy and internal-wiki share zone internal"
+          }
+        ]
+      },
+      "strict": {
+        "verdict": "FOUND",
+        "matching_paths": 1
+      },
+      "lenient": {
+        "verdict": "FOUND",
+        "matching_paths": 4
+      },
+      "example_path": {
+        "path_id": "path:47887195137a123f",
+        "confidence": "low",
+        "hosts": [
+          "dmz-proxy",
+          "internal-wiki"
+        ],
+        "nodes": [
+          "attacker:dmz",
+          "access:172.20.1.12:80/tcp",
+          "exec:dmz-proxy",
+          "access:172.20.2.40:8090/tcp",
+          "exec:host:172.20.2.40"
+        ],
+        "rules": [
+          "entry_zone_service_access",
+          "exploit_grants_code_execution",
+          "intra_zone_service_access",
+          "exploit_grants_code_execution"
+        ]
+      },
+      "final_host_reached_as": "code_execution",
+      "cve_checks": [
+        {
+          "host": "dmz-proxy",
+          "cve": "CVE-2021-23017",
+          "finding_in_fixtures": true,
+          "classified": true,
+          "exploited_on_example_path": true,
+          "note": "finding is classified"
+        },
+        {
+          "host": "internal-wiki",
+          "cve": "CVE-2022-26134",
+          "finding_in_fixtures": true,
+          "classified": true,
+          "exploited_on_example_path": true,
+          "note": "finding is classified"
+        }
+      ],
+      "diagnosis": [],
+      "summary": "path-3: strict FOUND (1 paths), lenient FOUND (4 paths); final host internal-wiki reached as code_execution; CVE-2021-23017 on dmz-proxy exploited; CVE-2022-26134 on internal-wiki exploited"
+    }
+  ],
+  "summary": {
+    "expected": 3,
+    "strict_found": 2,
+    "lenient_found": 2,
+    "ground_truth_infeasible": [
+      "path-1"
+    ]
+  },
+  "ground_truth_contradictions": [
+    {
+      "host": "internal-api",
+      "claim": "reachable_from dvwa",
+      "reason": "dvwa (dmz) and internal-api (internal) share no zone and no flow connects them"
+    },
+    {
+      "host": "db-primary",
+      "claim": "reachable_from internal-api",
+      "reason": "internal-api (internal) and db-primary (data) share no zone and no flow connects them"
+    },
+    {
+      "host": "cache-redis",
+      "claim": "reachable_from internal-api",
+      "reason": "internal-api (internal) and cache-redis (data) share no zone and no flow connects them"
+    }
+  ],
+  "spurious": {
+    "rule": "on route = path's host sequence is a prefix of some expected host list",
+    "on_route_paths": 5,
+    "off_route_paths": 17,
+    "off_route_sequences": [
+      {
+        "hosts": [
+          "dmz-proxy",
+          "bastion-ssh"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "bastion-ssh",
+          "cache-redis"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "bastion-ssh",
+          "db-primary"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "internal-wiki",
+          "bastion-ssh"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "internal-wiki",
+          "bastion-ssh",
+          "cache-redis"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "internal-wiki",
+          "bastion-ssh",
+          "db-primary"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "jenkins-ci",
+          "bastion-ssh"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "jenkins-ci",
+          "bastion-ssh",
+          "cache-redis"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "dmz-proxy",
+          "jenkins-ci",
+          "bastion-ssh",
+          "db-primary"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "bastion-ssh"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "bastion-ssh",
+          "cache-redis"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "bastion-ssh",
+          "db-primary"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "internal-wiki"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "internal-wiki",
+          "bastion-ssh"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "internal-wiki",
+          "bastion-ssh",
+          "cache-redis"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "internal-wiki",
+          "bastion-ssh",
+          "db-primary"
+        ],
+        "paths": 1
+      },
+      {
+        "hosts": [
+          "spring-gateway",
+          "jenkins-ci",
+          "bastion-ssh",
+          "db-primary"
+        ],
+        "paths": 1
+      }
+    ],
+    "goal_hosts": {
+      "bastion-ssh": 6,
+      "cache-redis": 6,
+      "db-primary": 6,
+      "dmz-proxy": 1,
+      "internal-wiki": 2,
+      "spring-gateway": 1
+    },
+    "goal_hosts_not_on_any_expected_path": []
+  }
+}

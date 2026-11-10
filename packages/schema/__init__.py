@@ -7,6 +7,14 @@ Two invariants:
 """
 
 from packages.schema.models.asset import Asset, Service
+from packages.schema.models.assistant import (
+    Answer,
+    AssistantDocument,
+    CitationRepair,
+    GroundingCheck,
+    PathNarration,
+    RetrievedDocument,
+)
 from packages.schema.models.citation import Citation, CitationKind
 from packages.schema.models.engagement import (
     Authorization,
@@ -15,7 +23,17 @@ from packages.schema.models.engagement import (
     target_matches,
 )
 from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
-from packages.schema.models.graph import AttackPath, Chokepoint, PathEdge, Rule
+from packages.schema.models.graph import (
+    AttackGraphResult,
+    AttackPath,
+    Chokepoint,
+    GraphNode,
+    NodeKind,
+    PathEdge,
+    Rule,
+    SimulationResult,
+    UnclassifiedFinding,
+)
 from packages.schema.models.observation import (
     Observation,
     ObservationKind,
@@ -29,31 +47,47 @@ from packages.schema.models.provenance import (
     Source,
 )
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
+from packages.schema.models.topology import MultiHomedHost, NetworkTopology, Zone, ZoneFlow
 
 __all__ = [
+    "Answer",
     "Asset",
+    "AssistantDocument",
+    "AttackGraphResult",
     "AttackPath",
     "Attributed",
     "Authorization",
     "Chokepoint",
     "Citation",
     "CitationKind",
+    "CitationRepair",
     "Confidence",
     "Engagement",
     "EnrichedFinding",
     "EnrichmentValue",
     "ExposureRiskScore",
     "Finding",
+    "GraphNode",
+    "GroundingCheck",
+    "MultiHomedHost",
+    "NetworkTopology",
+    "NodeKind",
     "Observation",
     "ObservationKind",
     "PathEdge",
+    "PathNarration",
     "Provenance",
     "RawArtifact",
+    "RetrievedDocument",
     "Rule",
     "ScanRequest",
     "ScanResult",
     "ScoreComponent",
     "Service",
+    "SimulationResult",
     "Source",
     "target_matches",
+    "UnclassifiedFinding",
+    "Zone",
+    "ZoneFlow",
 ]

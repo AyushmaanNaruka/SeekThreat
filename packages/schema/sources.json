@@ -1,0 +1,20 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SeekThreat Intelligence and Provenance Sources",
+  "description": "Canonical list of intelligence and provenance sources derived from packages.schema.models.provenance.Source.",
+  "sources": [
+    "cve.org",
+    "cisa.vulnrichment",
+    "cisa.kev",
+    "first.epss",
+    "nvd",
+    "enisa.euvd",
+    "osv.dev",
+    "github.advisories",
+    "exploitdb",
+    "metasploit",
+    "bron",
+    "derived",
+    "scanner"
+  ]
+}

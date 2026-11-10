@@ -5,6 +5,9 @@ import Link from "next/link";
 import DashboardGlobe from "../../components/DashboardGlobe";
 import SidebarOrbit from "../../components/SidebarOrbit";
 import EnrichedFindingsView from "../../components/EnrichedFindingsView";
+import FeedHealthPanel from "../../components/FeedHealthPanel";
+import AttackPathsView from "../../components/AttackPathsView";
+import AssistantView from "../../components/AssistantView";
 import {
   api,
   EngagementItem,
@@ -21,6 +24,7 @@ import {
   DEFAULT_POLLING_CONFIG,
 } from "../../lib/polling";
 import { scannerTitle, type ScannerName } from "../../lib/scanOptions";
+import type { ReportFormat } from "../../lib/report";
 import "./dashboard.css";
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
@@ -103,6 +107,20 @@ function formatScanTarget(scan: ScanItem): string {
 export default function DashboardPage() {
   const [activeNav, setActiveNav] = useState("Overview");
 
+  // Sidebar items are divs styled as nav rows; give them button semantics so they
+  // are reachable and operable from the keyboard.
+  const navItemProps = (activate: () => void) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    onClick: activate,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate();
+      }
+    },
+  });
+
   // Overview, Engagements and Scans share one combined view; the nav scrolls to
   // the matching section (after the view re-renders if Findings was showing).
   const goToSection = (nav: string, sectionId: string) => {
@@ -160,11 +178,36 @@ export default function DashboardPage() {
   } | null>(null);
   const [obsLoading, setObsLoading] = useState(false);
 
+  // Engagement report download (GET /engagements/{id}/report)
+  const [reportDownloading, setReportDownloading] = useState<ReportFormat | null>(null);
+
   // Active Engagement derivation
   const activeEngagement =
     engagements.find((e) => e.engagement_id === selectedEngagementId) ||
     engagements[0] ||
     null;
+
+  const handleDownloadReport = async (format: ReportFormat) => {
+    if (!activeEngagement || reportDownloading) return;
+    setReportDownloading(format);
+    try {
+      const { blob, filename } = await api.downloadReport(activeEngagement.engagement_id, format);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setApiError(
+        err instanceof Error ? `Report download failed: ${err.message}` : "Report download failed."
+      );
+    } finally {
+      setReportDownloading(null);
+    }
+  };
 
   // "none" (not "expired") when no engagement exists yet: nothing has lapsed.
   const authStatus = activeEngagement
@@ -475,7 +518,7 @@ export default function DashboardPage() {
           <nav className="db-nav">
             <div
               className={`db-nav-item ${activeNav === "Overview" ? "active" : ""}`}
-              onClick={() => goToSection("Overview", "db-section-top")}
+              {...navItemProps(() => goToSection("Overview", "db-section-top"))}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -488,7 +531,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Engagements" ? "active" : ""}`}
-              onClick={() => goToSection("Engagements", "db-section-engagements")}
+              {...navItemProps(() => goToSection("Engagements", "db-section-engagements"))}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -500,7 +543,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Scans" ? "active" : ""}`}
-              onClick={() => goToSection("Scans", "db-section-scans")}
+              {...navItemProps(() => goToSection("Scans", "db-section-scans"))}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -513,7 +556,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Findings" ? "active" : ""}`}
-              onClick={() => setActiveNav("Findings")}
+              {...navItemProps(() => setActiveNav("Findings"))}
               style={{ cursor: "pointer" }}
             >
               <div className="db-nav-item-inner">
@@ -528,6 +571,52 @@ export default function DashboardPage() {
               </span>
             </div>
 
+            <div
+              className={`db-nav-item ${activeNav === "AttackPaths" ? "active" : ""}`}
+              {...navItemProps(() => setActiveNav("AttackPaths"))}
+              style={{ cursor: "pointer" }}
+            >
+              <div className="db-nav-item-inner">
+                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="5" cy="6" r="2" />
+                  <circle cx="19" cy="6" r="2" />
+                  <circle cx="12" cy="18" r="2" />
+                  <path d="M7 6h10M6 8l5 8.5M18 8l-5 8.5" />
+                </svg>
+                <span>Attack Paths</span>
+              </div>
+            </div>
+
+            <div
+              className={`db-nav-item ${activeNav === "Assistant" ? "active" : ""}`}
+              {...navItemProps(() => setActiveNav("Assistant"))}
+              style={{ cursor: "pointer" }}
+            >
+              <div className="db-nav-item-inner">
+                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+                <span>Assistant</span>
+              </div>
+            </div>
+
+            <div
+              className={`db-nav-item ${activeNav === "Feeds" ? "active" : ""}`}
+              {...navItemProps(() => setActiveNav("Feeds"))}
+              style={{ cursor: "pointer" }}
+            >
+              <div className="db-nav-item-inner">
+                <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M4 11a9 9 0 0 1 9 9" />
+                  <path d="M4 4a16 16 0 0 1 16 16" />
+                  <circle cx="5" cy="19" r="1" />
+                </svg>
+                <span>Feed Health</span>
+              </div>
+              <span className="db-coming-soon" style={{ background: "rgba(32, 214, 163, 0.15)", color: "#20D6A3", border: "1px solid rgba(32, 214, 163, 0.3)" }}>
+                Live
+              </span>
+            </div>
           </nav>
         </div>
 
@@ -703,12 +792,24 @@ export default function DashboardPage() {
             </div>
           )}
 
-          {/* VIEW SWITCHER: FINDINGS VS OVERVIEW/ENGAGEMENTS/SCANS */}
+          {/* VIEW SWITCHER: FINDINGS VS FEEDS VS OVERVIEW/ENGAGEMENTS/SCANS */}
           {activeNav === "Findings" ? (
             <EnrichedFindingsView
               activeEngagement={activeEngagement}
               onSelectEngagementPrompt={() => setShowCreateModal(true)}
             />
+          ) : activeNav === "AttackPaths" ? (
+            <AttackPathsView
+              activeEngagement={activeEngagement}
+              onSelectEngagementPrompt={() => setShowCreateModal(true)}
+            />
+          ) : activeNav === "Assistant" ? (
+            <AssistantView
+              activeEngagement={activeEngagement}
+              onSelectEngagementPrompt={() => setShowCreateModal(true)}
+            />
+          ) : activeNav === "Feeds" ? (
+            <FeedHealthPanel />
           ) : (
             <>
               {/* BANNER: ACTIVE ENGAGEMENT SCOPE */}
@@ -725,6 +826,26 @@ export default function DashboardPage() {
                 <h1 className="db-banner-title">
                   {activeEngagement ? activeEngagement.name : "No Engagement Selected"}
                 </h1>
+                <div className="db-banner-report-actions">
+                  <button
+                    type="button"
+                    className="db-btn-secondary"
+                    disabled={!activeEngagement || reportDownloading !== null}
+                    onClick={() => handleDownloadReport("md")}
+                    title="Engagement report as Markdown, built by the deterministic report builder"
+                  >
+                    {reportDownloading === "md" ? "Preparing report…" : "Download report (.md)"}
+                  </button>
+                  <button
+                    type="button"
+                    className="db-btn-secondary"
+                    disabled={!activeEngagement || reportDownloading !== null}
+                    onClick={() => handleDownloadReport("json")}
+                    title="The same report as JSON"
+                  >
+                    {reportDownloading === "json" ? "Preparing…" : "JSON"}
+                  </button>
+                </div>
               </div>
 
               <div className="db-banner-meta-grid">
@@ -1039,7 +1160,12 @@ export default function DashboardPage() {
                           <ul className="db-plan-list">
                             {plan.planned.map((item, idx) => (
                               <li key={`${item.target}-${idx}`} className="db-plan-row">
-                                <span className="db-plan-target">{item.target}</span>
+                                <span className="db-plan-target">
+                                  {item.target}
+                                  {typeof item.options.port === "string" || typeof item.options.port === "number"
+                                    ? `:${item.options.port}`
+                                    : ""}
+                                </span>
                                 <span className="db-plan-kind">{item.kind}</span>
                                 {item.note && <span className="db-plan-note">{item.note}</span>}
                               </li>
@@ -1144,6 +1270,11 @@ export default function DashboardPage() {
                   </svg>
                 </button>
               </form>
+            </div>
+
+            {/* Feed Health Panel (B-3) */}
+            <div style={{ marginBottom: "1.2rem" }}>
+              <FeedHealthPanel />
             </div>
 
             {/* Recent Scans Card */}
@@ -1500,6 +1631,7 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
             </>
           )}
         </div>

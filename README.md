@@ -47,8 +47,10 @@ unverifiable. We can defend every claim our system makes.
 
 ## Status
 
-Early development. **No metric in this repository has been measured yet.** Everything in the
-scope documents is a target.
+All four layers have code, tests and a dashboard view. See [PROGRESS.md](./PROGRESS.md) for
+what is verified and what is open. The few numbers measured so far are in `evals/results/`,
+each with its caveats; most are fixture-based, not lab runs. Every other figure in the scope
+documents is a target.
 
 ---
 
@@ -79,7 +81,8 @@ Then, on the dashboard:
 
 1. **Create Engagement:** name, a named authorizer, and the allowlist. `172.20.0.0/16` is the
    whole lab. The authorization is valid for 7 days.
-2. **Launch New Scan:** pick a scanner, enter **one host** (ranges are refused by the gate),
+2. **Launch New Scan:** pick a scanner, enter targets (IPs, CIDRs, ranges, hostnames
+   or URLs; the API expands them and the scope preview shows which are inside the allowlist),
    and add a port where the service is not on the default port. Examples:
 
    | Scanner | Target | What it is |
@@ -94,6 +97,22 @@ Then, on the dashboard:
 4. **Findings:** each scan's vulnerability observations become findings and are enriched
    automatically (DECISIONS.md D-044). Click **Refresh** once a scan completes, then expand a
    row for the risk-score breakdown and the source of every field.
+5. **Attack Paths:** declare the lab's network topology for your engagement once, then open
+   the view. Every edge opens its evidence; **Simulate fix** on a chokepoint shows which paths
+   disappear, and **Narrate** has the model explain one proven path:
+
+   ```bash
+   docker compose -f infra/docker-compose.yml -f infra/docker-compose.lab.yml --profile core \
+     exec api python -m apps.api.cli.load_topology --engagement-id <id> lab/topology.yaml
+   ```
+
+6. **Assistant:** needs Ollama (`--profile model`, then pull `qwen2.5:7b` and
+   `nomic-embed-text`; see `docs/04-demo-runbook.md`). Press **Index engagement**, then ask.
+   Every answer shows its citations and the grounding check.
+
+No Docker? `docs/04-demo-runbook.md` section 4 runs the API natively on SQLite and loads the
+lab fixtures with `python -m scripts.seed_fixture_demo`, so every view except scan launch
+works offline.
 
 Never point a scan at anything outside `lab/` without an authorization record.
 
@@ -109,6 +128,7 @@ Never point a scan at anything outside `lab/` without an authorization record.
 | [docs/01-open-source-policy.md](./docs/01-open-source-policy.md) | Rules for using external code |
 | [docs/02-architecture.md](./docs/02-architecture.md) | System design |
 | [docs/03-dashboard-spec.md](./docs/03-dashboard-spec.md) | What the dashboard contains, and in what order |
+| [docs/04-demo-runbook.md](./docs/04-demo-runbook.md) | Running the demo, live or from fixtures |
 | [DECISIONS.md](./DECISIONS.md) | Why things changed |
 | [THIRD_PARTY.md](./THIRD_PARTY.md) | What we have borrowed |
 | [CLAUDE.md](./CLAUDE.md) | Rules for AI assistants |

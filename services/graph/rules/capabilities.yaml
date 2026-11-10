@@ -1,0 +1,56 @@
+# What a finding lets an attacker do (its "capability"), decided from evidence the
+# scanner or enrichment already holds. Never from model output, never from free text.
+#
+# Signals are checked in order; every matching signal is recorded on the edge, and the
+# edge takes the highest confidence any matching signal supports for that capability.
+# A finding no signal classifies produces no edge and is listed as unclassified.
+#
+# Mapped classes are deliberately narrow. Request smuggling (CWE-444), XSS, SSRF, DoS
+# and similar are NOT mapped: what they lead to depends on the deployment, and guessing
+# would create edges no fact supports.
+version: 1
+
+# Nuclei template tags on the finding's own observations. A matched template of this
+# class is direct scanner evidence of the vulnerability class.
+scanner_tags:
+  confidence: high
+  code_execution: [rce, deserialization, ssti]
+  file_read: [lfi, traversal, xxe]
+
+# CWE ids from the finding's observations (scanner-reported) or from fused enrichment
+# (`cwe_ids` field). CWE is a weakness class, not a confirmed outcome, hence medium.
+cwe:
+  - confidence: medium
+    code_execution:
+      - CWE-77   # Command Injection
+      - CWE-78   # OS Command Injection
+      - CWE-94   # Code Injection
+      - CWE-95   # Eval Injection
+      - CWE-434  # Unrestricted Upload of Dangerous File Type
+      - CWE-502  # Deserialization of Untrusted Data
+      - CWE-917  # Expression Language Injection
+      - CWE-1336 # Template Injection
+    file_read:
+      - CWE-22   # Path Traversal
+      - CWE-23   # Relative Path Traversal
+      - CWE-36   # Absolute Path Traversal
+      - CWE-73   # External Control of File Name or Path
+      - CWE-98   # PHP Remote File Inclusion
+      - CWE-611  # XML External Entity Reference
+  # Memory corruption can lead to code execution but often only crashes. Low.
+  - confidence: low
+    code_execution:
+      - CWE-119  # Improper Restriction of Operations within Memory Bounds
+      - CWE-120  # Classic Buffer Overflow
+      - CWE-122  # Heap-based Buffer Overflow
+      - CWE-416  # Use After Free
+      - CWE-787  # Out-of-bounds Write
+    file_read: []
+
+# Findings a named rule derived rather than a scanner reported, keyed by Finding.scanner.
+# The edge built on such a finding never exceeds this confidence, whatever its CWE or tag
+# signals support: the derivation itself is the weakest link. `version-match` findings say
+# only that a banner's product and version fall in a CVE's affected range
+# (services/normalize/version_match.py, DECISIONS.md D-049, Proposed).
+derived_findings:
+  version-match: low

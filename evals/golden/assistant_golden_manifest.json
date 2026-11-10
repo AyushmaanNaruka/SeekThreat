@@ -1,0 +1,30 @@
+{
+  "generator": "evals/scripts/build_assistant_golden.py",
+  "generator_version": "1.0.0",
+  "verified_at": "2026-11-07",
+  "provenance": "FIXTURE-DERIVED, AUTO-GENERATED. Every item is derived mechanically from the observation fixtures (8 of 10 lab hosts synthetic), the interim-bridge findings, services.graph.analyze over lab/topology.yaml, and lab/ground_truth.yaml. No reference answer was written by hand or from memory. Not a lab run.",
+  "engagement_id": "eng-lab-baseline",
+  "topology_id": "topology:sha256:71f641e935d9d577eded9eda",
+  "rules_digest": "rules:sha256:e716105c88164a4c6a8ba1da",
+  "findings_detected_at": "2026-01-01T00:00:00+00:00",
+  "inputs": {
+    "tests/fixtures/observations/lab_baseline.json": "724435cbeae406e3499440c4e7a70c932035a6a18bdc491c08d15fef9029058d",
+    "tests/fixtures/observations/lab_dmz_extended.json": "f2f4c703a908d7d0bcfb6f7d7e90bd906688dc6226435b14ded2cd07fc3e48c4",
+    "tests/fixtures/observations/lab_internal.json": "fc05dd7476aa60f7589dd4a9d475ecf61af21e7e1f640f65ed9a3499913665a1",
+    "tests/fixtures/observations/lab_data.json": "b09233b168d6e66a0828a7d1ff4eac00659a24a9199b7c1d0b77e61d6bbd592b",
+    "tests/fixtures/observations/lab_extended_nuclei.json": "234d20973f69b18955b69bdd3351ba0dd35a9c8dc30d85a0f85b3a092865d9ad",
+    "lab/ground_truth.yaml": "afaaf2dc172ce38fb101e72182b3bca3b94b21e8fb1b9794d59cf80a74c72cfe",
+    "lab/topology.yaml": "75224253c192b3ab312f6c49f90b98d2e07bd97e6f6dcae009e90d1aa2cec6b2"
+  },
+  "counts": {
+    "cve_lookups": 39,
+    "remediation": 15,
+    "attack_paths": 28,
+    "prioritization": 17,
+    "adversarial": 23,
+    "multi_hop": 16,
+    "total": 138
+  },
+  "golden_sha256": "e53f73b5d74386fc613abc6415fd9179ae4e9b4c3039f16672f9ea103f3a2366",
+  "golden_sha256_rule": "sha256 of the six JSONL files concatenated in category order"
+}

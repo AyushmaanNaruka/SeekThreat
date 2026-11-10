@@ -1,0 +1,37 @@
+# Declared network model for the lab (packages/schema/models/topology.py).
+#
+# Transcribed from lab/docker-compose.yml, which is the source of truth for the lab's
+# wiring. Keep the two in sync; tests/unit/test_lab_topology.py checks it.
+#
+# - Each compose network is one zone. Containers on the same network reach each other
+#   on every port, so intra_zone_reachable is true.
+# - The networks are `internal: true` and no container routes between them, so no
+#   cross-zone flows are declared. The only way between zones is a container attached
+#   to both (multi_homed_hosts).
+# - The scanner container sits in the DMZ, so the DMZ is the attacker entry zone.
+# - The data segment holds the databases, so it is the crown-jewel zone.
+engagement_id: eng-lab-baseline
+declared_by: Ayushmaan
+declared_at: "2026-11-06T00:00:00Z"
+source_note: lab/docker-compose.yml networks and ipv4_address assignments
+intra_zone_reachable: true
+zones:
+  - name: dmz
+    cidrs: ["172.20.1.0/24"]
+    attacker_entry: true
+    description: Internet-facing web tier; the scanner's vantage point
+  - name: internal
+    cidrs: ["172.20.2.0/24"]
+    description: Internal application tier
+  - name: data
+    cidrs: ["172.20.3.0/24"]
+    crown_jewel: true
+    description: Databases and caches
+multi_homed_hosts:
+  - name: dmz-proxy
+    addresses: ["172.20.1.12", "172.20.2.12"]
+  - name: spring-gateway
+    addresses: ["172.20.1.13", "172.20.2.13"]
+  - name: bastion-ssh
+    addresses: ["172.20.2.50", "172.20.3.50"]
+flows: []

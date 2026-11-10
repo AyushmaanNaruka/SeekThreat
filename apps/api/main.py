@@ -4,7 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from apps.api.core.config import settings
-from apps.api.routers import engagements, findings, observations, scans
+from apps.api.routers import (
+    assistant,
+    attack_graph,
+    engagements,
+    findings,
+    observations,
+    reports,
+    scans,
+)
+from apps.api.routers import feeds as feeds_router
 
 app = FastAPI(
     title="SeekThreat",
@@ -27,6 +36,10 @@ def health() -> dict[str, str]:
 
 
 app.include_router(engagements.router, prefix="/engagements", tags=["engagements"])
+app.include_router(attack_graph.router, prefix="/engagements", tags=["attack-graph"])
+app.include_router(reports.router, prefix="/engagements", tags=["reports"])
+app.include_router(assistant.router, tags=["assistant"])
 app.include_router(scans.router, prefix="/scans", tags=["scans"])
 app.include_router(observations.router, prefix="/observations", tags=["observations"])
 app.include_router(findings.router, prefix="/findings", tags=["findings"])
+app.include_router(feeds_router.router, tags=["feeds"])

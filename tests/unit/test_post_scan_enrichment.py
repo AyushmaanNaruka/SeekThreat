@@ -258,6 +258,32 @@ class TestCveIdsFromArtifact:
 
         assert result == []
 
+    def test_includes_version_match_cves_from_service_versions(self, db_session):
+        """SERVICE_VERSION facts in a version rule's range add their CVE (D-049), so the
+        derived finding's CVE record and CWE ids get synced too."""
+        artifact = _make_artifact()
+        RawArtifactRepository(db_session).save(artifact)
+        svc = Observation(
+            observation_id=f"obs-{uuid.uuid4().hex[:12]}",
+            engagement_id="eng-test",
+            scanner="nmap",
+            kind=ObservationKind.SERVICE_VERSION,
+            subject="172.20.1.10:80/tcp",
+            attributes={"product": "Apache httpd", "version": "2.4.49", "conf": "10"},
+            artifact_id=artifact.artifact_id,
+            observed_at=_now(),
+            provenance=Provenance(
+                source=Source.SCANNER, confidence=Confidence.HIGH, retrieved_at=_now()
+            ),
+        )
+        vuln = _make_vuln_observation(artifact.artifact_id, ["CVE-2021-44228"])
+        ObservationRepository(db_session).save_all([svc, vuln])
+        db_session.commit()
+
+        result = _cve_ids_from_artifact(db_session, artifact.artifact_id)
+
+        assert result == ["CVE-2021-41773", "CVE-2021-42013", "CVE-2021-44228"]
+
     def test_deduplicates_cve_ids_across_observations(self, db_session):
         """The same CVE ID reported by two observations is deduplicated."""
         artifact = _make_artifact()

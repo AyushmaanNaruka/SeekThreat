@@ -169,6 +169,15 @@ def sync_feeds(
         report, actor, cve_ids_requested=len(ids), db_error=db_error, retries=retries
     )
     if report.ok:
+        # B-4: Beat-sync re-enrichment. If the sync updated records for any CVE IDs,
+        # re-enrich findings across *all* engagements whose CVEs intersect the freshly-
+        # synced set. This is keyset-paged (500 rows) and audited per-engagement.
+        synced_cves: set[str] = set()
+        for result in report.results:
+            if result.success and result.cve_ids_synced:
+                synced_cves.update(result.cve_ids_synced)
+        if synced_cves:
+            details["beat_reenrichment"] = _beat_reenrich(synced_cves, actor)
         return details
 
     failed = [r.key for r in report.failed]
@@ -178,3 +187,127 @@ def sync_feeds(
     except MaxRetriesExceededError:
         logger.error("feed_sync: retries exhausted; mirrors for %s may be stale", failed)
         raise error from None
+
+
+# ---------------------------------------------------------------------------
+# B-4: Beat-sync re-enrichment (engagement-scoped)
+# ---------------------------------------------------------------------------
+
+#: Maximum rows of findings read per round trip during beat re-enrichment.
+_BEAT_REENRICH_CHUNK = 500
+
+
+def _engagement_ids_for_cves(session: Session, cve_ids: set[str]) -> list[str]:
+    """Return distinct engagement IDs whose findings reference any of ``cve_ids``.
+
+    Scans ``enriched_findings.finding_data`` JSONB for ``cve_ids`` overlap.
+    This must be a full scan (no index on JSONB array contents), but the beat
+    sync runs at 02:00 UTC so off-peak latency is acceptable.
+    """
+    from apps.api.db.models import EnrichedFindingModel
+
+    engagement_ids: set[str] = set()
+    wanted = {c.upper() for c in cve_ids}
+    stmt = select(
+        EnrichedFindingModel.engagement_id, EnrichedFindingModel.finding_data
+    ).execution_options(yield_per=_YIELD_PER)
+    for eid, finding_data in session.execute(stmt):
+        if not isinstance(finding_data, dict):
+            continue
+        stored = finding_data.get("cve_ids")
+        if isinstance(stored, list) and wanted.intersection(
+            c.upper() for c in stored if isinstance(c, str)
+        ):
+            engagement_ids.add(eid)
+    return sorted(engagement_ids)
+
+
+def _beat_reenrich(synced_cves: set[str], actor: str) -> dict[str, Any]:
+    """Re-enrich findings per engagement for CVEs freshly synced by beat.
+
+    Returns a summary dict keyed by engagement_id. Each engagement is audited
+    separately (actor=system:celery_beat, target=engagement:<id>/beat_sync).
+    """
+    from apps.api.db.models import EnrichedFindingModel
+    from apps.api.db.repositories import EnrichedFindingRepository
+    from packages.schema.models.finding import Finding
+    from services.enrichment.service import EnrichmentService
+
+    summary: dict[str, Any] = {
+        "cves_synced": sorted(synced_cves),
+        "engagements": {},
+    }
+    try:
+        with SessionLocal() as session:
+            engagement_ids = _engagement_ids_for_cves(session, synced_cves)
+    except SQLAlchemyError as exc:
+        logger.error("beat_reenrich: DB error finding engagements: %s", exc)
+        summary["error"] = str(exc)
+        return summary
+
+    wanted = {c.upper() for c in synced_cves}
+
+    for eid in engagement_ids:
+        try:
+            with SessionLocal() as session:
+                repo = EnrichedFindingRepository(session)
+                service = EnrichmentService(
+                    repository=repo, cache_dir=settings.enrichment_cache_dir
+                )
+                total = 0
+                last_id: str | None = None
+                while True:
+                    stmt = (
+                        select(
+                            EnrichedFindingModel.finding_id,
+                            EnrichedFindingModel.finding_data,
+                        )
+                        .where(EnrichedFindingModel.engagement_id == eid)
+                        .order_by(EnrichedFindingModel.finding_id.asc())
+                        .limit(_BEAT_REENRICH_CHUNK)
+                    )
+                    if last_id is not None:
+                        stmt = stmt.where(EnrichedFindingModel.finding_id > last_id)
+                    rows = session.execute(stmt).all()
+                    if not rows:
+                        break
+                    last_id = rows[-1][0]
+                    matches: list[Finding] = []
+                    for _fid, fdata in rows:
+                        if not isinstance(fdata, dict):
+                            continue
+                        stored = fdata.get("cve_ids")
+                        if isinstance(stored, list) and wanted.intersection(
+                            c.upper() for c in stored if isinstance(c, str)
+                        ):
+                            try:
+                                matches.append(Finding.model_validate(fdata))
+                            except Exception:  # noqa: BLE001
+                                continue
+                    if matches:
+                        total += len(service.enrich_batch(matches, persist=True))
+                    if len(rows) < _BEAT_REENRICH_CHUNK:
+                        break
+                session.commit()
+                summary["engagements"][eid] = {"findings_reenriched": total}
+                logger.info(
+                    "beat_reenrich: re-enriched %d findings for engagement %s",
+                    total,
+                    eid,
+                )
+                log_audit_event(
+                    event="beat_sync.reenrichment",
+                    actor=actor,
+                    target=f"engagement:{eid}/beat_sync",
+                    engagement_id=eid,
+                    scanner=AUDIT_SCANNER,
+                    status="success",
+                    details={
+                        "findings_reenriched": total,
+                        "cves_synced": sorted(synced_cves),
+                    },
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("beat_reenrich: failed for engagement %s: %s", eid, exc)
+            summary["engagements"][eid] = {"error": f"{type(exc).__name__}: {exc}"}
+    return summary

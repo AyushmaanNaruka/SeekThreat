@@ -1,0 +1,117 @@
+# Version-match rules (DECISIONS.md D-049, Proposed).
+#
+# Each rule says: a service whose nmap-identified product is one of `products` (or whose
+# CPE vendor:product is one of `cpes`) at a version inside an `affected` interval is a
+# CANDIDATE for `cve`. It is not an observation that the CVE is present: banners can be
+# wrong, distributions backport fixes, and the vulnerable component may not be enabled.
+# Every finding these rules produce is attributed to the rule id and carries LOW
+# confidence, and the graph engine caps its edges at LOW (services/graph/rules/
+# capabilities.yaml, `derived_findings`).
+#
+# Intervals are half-open: `introduced` inclusive, `fixed` exclusive. Versions are compared
+# only when they are purely numeric dotted strings (e.g. "2.4.49"); anything else
+# ("8.3p1", "2.4.x", "1.18.0-alpine") is skipped, never guessed.
+#
+# PROVENANCE OF THIS FILE. The ranges were transcribed by hand (Claude, 2026-11-10) from
+# the vendor advisories named in `reference`, without network access to re-check them.
+# Each rule is marked `verified: false` until a developer has compared it against the
+# advisory. Unverified rules still run (so the pipeline is testable end to end) and say so
+# in every finding they produce.
+#
+# Product names: "Apache httpd", "nginx" and "Werkzeug httpd" are nmap's own spellings.
+# The others are the spellings used in lab/ground_truth.yaml and the synthetic fixtures;
+# what nmap really reports for those lab images is unconfirmed until a live capture.
+version: 1
+
+rules:
+  - id: vm-apache-httpd-cve-2021-41773
+    cve: CVE-2021-41773
+    products: ["apache httpd"]
+    cpes: ["apache:http_server"]
+    affected:
+      - {introduced: "2.4.49", fixed: "2.4.50"}
+    reference: https://httpd.apache.org/security/vulnerabilities_24.html
+    verified: false
+
+  - id: vm-apache-httpd-cve-2021-42013
+    cve: CVE-2021-42013
+    products: ["apache httpd"]
+    cpes: ["apache:http_server"]
+    affected:
+      - {introduced: "2.4.49", fixed: "2.4.51"}
+    reference: https://httpd.apache.org/security/vulnerabilities_24.html
+    verified: false
+
+  - id: vm-nginx-cve-2021-23017
+    cve: CVE-2021-23017
+    products: ["nginx"]
+    cpes: ["igor_sysoev:nginx", "nginx:nginx", "f5:nginx"]
+    affected:
+      - {introduced: "0.6.18", fixed: "1.20.1"}
+    reference: https://nginx.org/en/security_advisories.html
+    verified: false
+
+  - id: vm-spring-cloud-gateway-cve-2022-22947
+    cve: CVE-2022-22947
+    products: ["spring-cloud-gateway", "spring cloud gateway"]
+    cpes: ["vmware:spring_cloud_gateway"]
+    affected:
+      - {introduced: "3.0.0", fixed: "3.0.7"}
+      - {introduced: "3.1.0", fixed: "3.1.1"}
+    reference: https://spring.io/security/cve-2022-22947
+    verified: false
+
+  - id: vm-jenkins-cve-2024-23897
+    cve: CVE-2024-23897
+    products: ["jenkins"]
+    cpes: ["jenkins:jenkins"]
+    # Weekly line fixed in 2.442; LTS line fixed in 2.426.3.
+    affected:
+      - {introduced: "0", fixed: "2.426.3"}
+      - {introduced: "2.427", fixed: "2.442"}
+    reference: https://www.jenkins.io/security/advisory/2024-01-24/
+    verified: false
+
+  - id: vm-confluence-cve-2022-26134
+    cve: CVE-2022-26134
+    products: ["atlassian-confluence", "atlassian confluence"]
+    cpes: ["atlassian:confluence_server", "atlassian:confluence_data_center"]
+    # Fixed in 7.4.17, 7.13.7, 7.14.3, 7.15.2, 7.16.4, 7.17.4, 7.18.1; 7.5-7.12 got no fix.
+    affected:
+      - {introduced: "1.3.0", fixed: "7.4.17"}
+      - {introduced: "7.5.0", fixed: "7.13.7"}
+      - {introduced: "7.14.0", fixed: "7.14.3"}
+      - {introduced: "7.15.0", fixed: "7.15.2"}
+      - {introduced: "7.16.0", fixed: "7.16.4"}
+      - {introduced: "7.17.0", fixed: "7.17.4"}
+      - {introduced: "7.18.0", fixed: "7.18.1"}
+    reference: https://confluence.atlassian.com/doc/confluence-security-advisory-2022-06-02-1130377146.html
+    verified: false
+
+  - id: vm-werkzeug-cve-2022-29361
+    cve: CVE-2022-29361
+    products: ["werkzeug httpd", "werkzeug-http"]
+    cpes: ["palletsprojects:werkzeug"]
+    affected:
+      - {introduced: "0", fixed: "2.1.1"}
+    reference: https://nvd.nist.gov/vuln/detail/CVE-2022-29361
+    verified: false
+
+# CVEs in lab/ground_truth.yaml deliberately NOT matched by version, and why. Listed so
+# their absence is a stated decision, not an oversight.
+not_matched:
+  - cve: CVE-2022-0543
+    reason: >-
+      Caused by Debian/Ubuntu packaging of Redis (Lua loaded dynamically), not by an
+      upstream Redis version. A Redis version banner cannot show it; the lab image is
+      redis:5.0.7-alpine, which is not a Debian package.
+  - cve: CVE-2020-15778
+    reason: >-
+      scp command injection needs a valid login on the host, so it is not an
+      unauthenticated foothold, and the OpenSSH project disputes it. Matching it would
+      create an exec edge the facts do not support. "8.3p1" is also not a numeric version.
+  - cve: CVE-2020-14349
+    reason: >-
+      PostgreSQL's advisory lists 12.4 as the fixed release for this CVE, so the lab's
+      postgres:12.4 is not in the affected range. Ground truth expects it on db-primary;
+      see DECISIONS.md D-050. (To be confirmed against the advisory.)

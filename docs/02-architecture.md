@@ -435,5 +435,5 @@ Genuinely undecided, to be logged in `DECISIONS.md` when settled.
 
 1. Identity resolution strategy for assets that different scanners describe differently
 2. Whether BRON is ingested whole or as a filtered subset, pending a size and licence check
-3. Retrieval chunking strategy for the assistant
-4. Report output format
+3. ~~Retrieval chunking strategy for the assistant~~ — settled in D-048 (one fact per document)
+4. ~~Report output format~~ — settled in D-051 (Markdown + JSON from one deterministic builder, `services/report`)

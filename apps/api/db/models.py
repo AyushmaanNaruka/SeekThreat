@@ -1,4 +1,5 @@
-"""SQLAlchemy ORM models for Layer 1 Collection persistence."""
+"""SQLAlchemy ORM models: collection, enrichment, declared network topology and the
+assistant's retrieval index."""
 
 from __future__ import annotations
 
@@ -10,11 +11,13 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from apps.api.db.base import Base
+from apps.api.db.types import EMBEDDING_TYPE
 from packages.schema.models.engagement import Authorization, Engagement
 from packages.schema.models.finding import EnrichedFinding, EnrichmentValue, Finding
 from packages.schema.models.observation import Observation, ObservationKind, RawArtifact
 from packages.schema.models.provenance import Attributed, Provenance
 from packages.schema.models.scoring import ExposureRiskScore, ScoreComponent
+from packages.schema.models.topology import NetworkTopology
 
 # JSONB on PostgreSQL, standard JSON fallback on SQLite.
 JSON_TYPE = JSONB().with_variant(JSON(), "sqlite")
@@ -276,3 +279,62 @@ class EnrichedFindingModel(Base):
             ers = ExposureRiskScore(value=self.ers_value, components=components)
 
         return EnrichedFinding(finding=finding, fields=fields, ers=ers)
+
+
+class EngagementTopologyModel(Base):
+    """The declared network model (NetworkTopology) for one engagement.
+
+    One row per engagement: re-declaring replaces it. ``document`` holds the full
+    declaration as JSON and is the source of truth; ``topology_id`` (its content hash),
+    ``declared_by`` and ``declared_at`` are copied out so they can be queried and
+    audited without parsing the document.
+    """
+
+    __tablename__ = "engagement_topologies"
+
+    engagement_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("engagements.engagement_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    topology_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    document: Mapped[dict[str, Any]] = mapped_column(JSON_TYPE, nullable=False)
+    declared_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    declared_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    def to_schema(self) -> NetworkTopology:
+        """Rebuild the declaration from its stored document. ``topology_id`` is
+        recomputed from the content, never read back from the column."""
+        return NetworkTopology.model_validate(self.document)
+
+
+class AssistantDocumentModel(Base):
+    """One retrievable fact for the Layer 4 assistant, with its embedding (D-005).
+
+    Derived data: rebuilt from observations, findings, the topology and the attack graph
+    by POST /engagements/{id}/assistant/index, never edited by hand. One row per
+    (engagement, document, embedding model), so re-embedding with another model does
+    not disturb the vectors the current model uses. ``content_sha256`` is the hash of
+    ``text`` as embedded.
+    """
+
+    __tablename__ = "assistant_documents"
+
+    engagement_id: Mapped[str] = mapped_column(
+        String(128),
+        ForeignKey("engagements.engagement_id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    doc_id: Mapped[str] = mapped_column(String(256), primary_key=True)
+    embed_model: Mapped[str] = mapped_column(String(128), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    # `metadata` is reserved on declarative classes; the column keeps the plain name.
+    metadata_: Mapped[dict[str, Any]] = mapped_column(
+        "metadata", JSON_TYPE, nullable=False, default=dict
+    )
+    content_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    embedding: Mapped[list[float]] = mapped_column(EMBEDDING_TYPE, nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

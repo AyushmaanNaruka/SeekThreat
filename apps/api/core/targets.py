@@ -275,7 +275,9 @@ def plan_targets(
     plan = TargetPlan()
     seen: set[tuple[str, str]] = set()
 
-    def add(entry: ParsedEntry, target: str, kind: Literal["host", "network"], note: str | None):
+    def add(
+        entry: ParsedEntry, target: str, kind: Literal["host", "network"], note: str | None
+    ) -> None:
         opts = _scan_options(scanner, entry, base, network=kind == "network")
         key = (target, json.dumps(opts, sort_keys=True, default=str))
         if key in seen:

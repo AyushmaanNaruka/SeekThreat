@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from typing import Any
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import Insert as PGInsert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -15,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from apps.api.db.models import (
     EngagementModel,
+    EngagementTopologyModel,
     EnrichedFindingModel,
     ObservationModel,
     RawArtifactModel,
@@ -28,11 +31,14 @@ from packages.schema.models.observation import (
     RawArtifact,
     ScanResult,
 )
+from packages.schema.models.topology import NetworkTopology
 
 # Rows per INSERT ... ON CONFLICT statement. enriched_findings has 7 columns, so
 # 500 rows is 3500 bind parameters -- far below PostgreSQL's 65535 limit and
 # SQLite's 32766 default.
 UPSERT_CHUNK_SIZE = 500
+
+logger = logging.getLogger(__name__)
 
 
 class RawArtifactRepository:
@@ -479,19 +485,40 @@ class EnrichedFindingRepository:
                 .limit(1)
             )
             model = self.session.scalars(stmt).first()
-        return model.to_schema() if model is not None else None
+        if model is None:
+            return None
+        try:
+            return model.to_schema()
+        except (ValidationError, ValueError) as exc:
+            logger.warning(
+                "Enriched finding row is malformed in engagement %s (finding_id=%s): %s",
+                engagement_id or getattr(model, "engagement_id", None),
+                finding_id,
+                exc,
+                extra={
+                    "engagement_id": engagement_id or getattr(model, "engagement_id", None),
+                    "finding_id": finding_id,
+                    "error": str(exc),
+                },
+            )
+            raise
 
     def get_by_engagement(
         self,
         engagement_id: str,
         limit: int | None = None,
         offset: int = 0,
+        skip_invalid: bool = True,
     ) -> list[EnrichedFinding]:
         """Retrieve enriched findings associated with an engagement.
 
         Ordered by finding_id: a key that does not change on re-enrichment, so
         paging with a fixed limit never skips or repeats a row even while
         enrichment is rewriting enriched_at underneath the reader.
+
+        When ``skip_invalid`` is True (default), legacy rows with malformed data
+        (e.g., malformed CVE IDs failing D-040 regex checks) are logged with a
+        structured warning and skipped rather than failing the entire read request.
         """
         stmt = (
             select(EnrichedFindingModel)
@@ -503,7 +530,25 @@ class EnrichedFindingRepository:
         if limit is not None:
             stmt = stmt.limit(limit)
         results = self.session.scalars(stmt).all()
-        return [m.to_schema() for m in results]
+        items: list[EnrichedFinding] = []
+        for m in results:
+            try:
+                items.append(m.to_schema())
+            except (ValidationError, ValueError) as exc:
+                if not skip_invalid:
+                    raise
+                logger.warning(
+                    "Skipping malformed enriched finding row in engagement %s (finding_id=%s): %s",
+                    engagement_id,
+                    m.finding_id,
+                    exc,
+                    extra={
+                        "engagement_id": engagement_id,
+                        "finding_id": m.finding_id,
+                        "error": str(exc),
+                    },
+                )
+        return items
 
     def count_by_engagement(self, engagement_id: str) -> int:
         """Count enriched findings associated with an engagement."""
@@ -514,3 +559,36 @@ class EnrichedFindingRepository:
         )
         count = self.session.scalar(stmt)
         return int(count) if count is not None else 0
+
+
+class TopologyRepository:
+    """Persistence for the one declared NetworkTopology each engagement may have."""
+
+    def __init__(self, session: Session) -> None:
+        self.session = session
+
+    def get(self, engagement_id: str) -> NetworkTopology | None:
+        """Return the engagement's declared topology, or None if none is declared."""
+        model = self.session.get(EngagementTopologyModel, engagement_id)
+        return model.to_schema() if model is not None else None
+
+    def upsert(
+        self, topology: NetworkTopology, updated_at: datetime | None = None
+    ) -> NetworkTopology:
+        """Store ``topology`` as the engagement's declaration, replacing any earlier one.
+
+        The caller checks that the engagement exists; the foreign key enforces it on
+        PostgreSQL (and on SQLite when foreign keys are switched on).
+        """
+        document = topology.model_dump(mode="json", exclude={"topology_id"})
+        model = self.session.get(EngagementTopologyModel, topology.engagement_id)
+        if model is None:
+            model = EngagementTopologyModel(engagement_id=topology.engagement_id)
+            self.session.add(model)
+        model.topology_id = topology.topology_id
+        model.document = document
+        model.declared_by = topology.declared_by
+        model.declared_at = topology.declared_at
+        model.updated_at = updated_at or datetime.now(UTC)
+        self.session.flush()
+        return model.to_schema()

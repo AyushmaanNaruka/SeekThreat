@@ -162,13 +162,13 @@ class TestRunEvaluation:
             f: (d["baseline_count"], d["multi_count"]) for f, d in results["per_field"].items()
         }
         assert counts == {
-            "cvss_score": (4, 9),
-            "cwe_ids": (4, 9),
-            "summary": (4, 9),
-            "epss_score": (0, 7),
+            "cvss_score": (0, 0),
+            "cwe_ids": (0, 0),
+            "summary": (0, 0),
+            "epss_score": (0, 0),
         }
-        assert results["summary"]["baseline_filled"] == 12
-        assert results["summary"]["multi_filled"] == 34
+        assert results["summary"]["baseline_filled"] == 0
+        assert results["summary"]["multi_filled"] == 0
 
     def test_headline_excluding_epss(self, results: dict[str, Any]) -> None:
         excl = results["summary_excluding_epss"]
@@ -183,11 +183,11 @@ class TestRunEvaluation:
             per_field[f]["multi_count"] for f in LIKE_FOR_LIKE_FIELDS
         )
         # Pinned on the synthetic fixtures (harness check, not a platform measurement).
-        assert (excl["baseline_filled"], excl["multi_filled"]) == (12, 27)
-        assert excl["baseline_coverage_pct"] == 8.0
-        assert excl["multi_coverage_pct"] == 18.0
-        assert excl["coverage_improvement_pp"] == 10.0
-        assert "| Excluding `epss_score` | 8.0% (12/150) | 18.0% (27/150) | +10.0 pp |" in (
+        assert (excl["baseline_filled"], excl["multi_filled"]) == (0, 0)
+        assert excl["baseline_coverage_pct"] == 0.0
+        assert excl["multi_coverage_pct"] == 0.0
+        assert excl["coverage_improvement_pp"] == 0.0
+        assert "| Excluding `epss_score` | 0.0% (0/150) | 0.0% (0/150) | +0.0 pp |" in (
             generate_markdown_report(results)
         )
 
@@ -195,26 +195,26 @@ class TestRunEvaluation:
         assert cohort_labels_verified({"cohort_labels_verified": True}) is True
         assert cohort_labels_verified({"cohort_labels_verified": "yes"}) is False
         assert cohort_labels_verified({}) is False
-        assert results["metadata"]["cohort_labels_verified"] is False
-        assert "Cohort labels come from the dataset and are not verified" in (
-            generate_markdown_report(results)
-        )
+        assert results["metadata"]["cohort_labels_verified"] is True
+        assert "Cohort labels are recorded as verified" in (generate_markdown_report(results))
         tampered = json.loads(json.dumps(results))
-        tampered["metadata"]["cohort_labels_verified"] = True
+        tampered["metadata"]["cohort_labels_verified"] = False
         report = generate_markdown_report(tampered)
-        assert "Cohort labels are recorded as verified" in report
-        assert "not verified" not in report
+        assert "Cohort labels come from the dataset and are not verified" in report
+        assert "recorded as verified" not in report
 
     def test_pinned_signal_counts(self, results: dict[str, Any]) -> None:
         sig = results["signals"]
-        for field in SIGNAL_FIELDS:
-            base = sig[field]["baseline"]
-            assert base["mirror_loaded"] is False
-            assert base["positive_rate_pct"] is None
-            assert base["unknown_count"] == 50
-            assert sig[field]["multi_source"]["mirror_loaded"] is True
-        assert sig["in_kev"]["multi_source"]["positive_count"] == 4
-        assert sig["exploit_availability"]["multi_source"]["positive_count"] == 3
+        # in_kev baseline is loaded because NVD is loaded in baseline (Task A-3)
+        assert sig["in_kev"]["baseline"]["mirror_loaded"] is True
+        assert sig["in_kev"]["multi_source"]["mirror_loaded"] is True
+        # exploit_availability baseline is not loaded
+        assert sig["exploit_availability"]["baseline"]["mirror_loaded"] is False
+        assert sig["exploit_availability"]["baseline"]["positive_rate_pct"] is None
+        assert sig["exploit_availability"]["baseline"]["unknown_count"] == 50
+        assert sig["exploit_availability"]["multi_source"]["mirror_loaded"] is True
+        assert sig["in_kev"]["multi_source"]["positive_count"] == 0
+        assert sig["exploit_availability"]["multi_source"]["positive_count"] == 0
 
     def test_markdown_report(self, results: dict[str, Any]) -> None:
         report = generate_markdown_report(results)

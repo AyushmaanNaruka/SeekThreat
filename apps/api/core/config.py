@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from typing import Annotated, Any
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 #: Must equal services.enrichment.sources.sync.DEFAULT_CACHE_DIR (the FeedSyncer
@@ -117,6 +117,81 @@ class Settings(BaseSettings):
             "enrichment task (the hard limit is 120 s more). The targeted sync gets a time "
             "budget inside it and defers what it cannot reach. 1800 s covers the default "
             "200-CVE cap against NVD without an API key (6 s per lookup)."
+        ),
+    )
+    mirror_staleness_threshold_days: int = Field(
+        default=7,
+        ge=1,
+        description=(
+            "MIRROR_STALENESS_THRESHOLD_DAYS: Number of days after which a local feed mirror "
+            "is considered stale. When a mirror is stale, negative assertions produced from it "
+            "(in_kev=False, has_public_exploit=False, has_metasploit_module=False) are "
+            "downgraded from Confidence.HIGH to Confidence.MEDIUM in the fusion engine, "
+            "and an explanatory provenance note is attached. Positive hits are never downgraded. "
+            "Default: 7 days. Set via MIRROR_STALENESS_THRESHOLD_DAYS in .env."
+        ),
+    )
+
+    # Neo4j is a read-only, disposable projection for visualization (D-003), served by
+    # the `viz` compose profile. Unset NEO4J_URI or NEO4J_PASSWORD means "not
+    # configured": the projection endpoint answers 503 and nothing else is affected.
+    neo4j_uri: str | None = Field(
+        default=None,
+        description=(
+            "NEO4J_URI: Bolt URI of the viz-profile Neo4j, e.g. bolt://localhost:7687 for "
+            "native dev, bolt://neo4j:7687 inside the compose network."
+        ),
+    )
+    neo4j_user: str = Field(default="neo4j", description="NEO4J_USER")
+    neo4j_password: str | None = Field(
+        default=None,
+        description="NEO4J_PASSWORD: must match the password in the compose NEO4J_AUTH.",
+    )
+    neo4j_connection_timeout_seconds: float = Field(
+        default=5.0,
+        gt=0,
+        description=(
+            "NEO4J_CONNECTION_TIMEOUT_SECONDS: how long the projection waits for Neo4j "
+            "before answering 503."
+        ),
+    )
+
+    # Layer 4 assistant (D-006): one Ollama server behind the ModelClient interface,
+    # served by the `model` compose profile. Unreachable Ollama never breaks the rest
+    # of the API: the assistant endpoints answer 503 and say how to start it.
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        validation_alias=AliasChoices("OLLAMA_BASE_URL", "OLLAMA_HOST"),
+        description=(
+            "OLLAMA_BASE_URL (OLLAMA_HOST also accepted): http://localhost:11434 for "
+            "native dev, http://ollama:11434 inside the compose network."
+        ),
+    )
+    # D-006 names Foundation-Sec-8B-Reasoning as the target model. It is not pulled on
+    # the dev machines yet, so the default is a general model that is; switch with
+    # ASSISTANT_MODEL once Foundation-Sec is available in Ollama.
+    assistant_model: str = Field(
+        default="qwen2.5:7b",
+        description="ASSISTANT_MODEL: Ollama tag of the text model that answers and narrates.",
+    )
+    assistant_embed_model: str = Field(
+        default="nomic-embed-text",
+        description=(
+            "ASSISTANT_EMBED_MODEL: Ollama tag of the embedding model. Changing it needs a "
+            "re-index (POST /engagements/{id}/assistant/index); vectors are stored per model."
+        ),
+    )
+    assistant_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0,
+        description="ASSISTANT_TIMEOUT_SECONDS: per-request timeout for generate/embed calls.",
+    )
+    assistant_status_timeout_seconds: float = Field(
+        default=3.0,
+        gt=0,
+        description=(
+            "ASSISTANT_STATUS_TIMEOUT_SECONDS: timeout of the cheap /api/tags probe behind "
+            "GET /assistant/status."
         ),
     )
 
