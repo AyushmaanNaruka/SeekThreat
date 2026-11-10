@@ -19,14 +19,9 @@ import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine, event
-from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session
 
-from apps.api.core.audit import clear_audit_log
-from apps.api.db.base import Base
 from apps.api.db.repositories import (
     EngagementRepository,
     ObservationRepository,
@@ -34,8 +29,6 @@ from apps.api.db.repositories import (
     ScanRepository,
     save_scan_result,
 )
-from apps.api.db.session import get_db
-from apps.api.main import app
 from packages.schema.models.engagement import Authorization, Engagement
 from packages.schema.models.observation import ScanResult
 
@@ -56,56 +49,6 @@ FIXTURE_FILES = [
 def _load_scan_result(filename: str) -> ScanResult:
     data = json.loads((FIXTURES_DIR / filename).read_text(encoding="utf-8"))
     return ScanResult.model_validate(data)
-
-
-@pytest.fixture
-def engine():
-    eng = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-        echo=False,
-    )
-
-    @event.listens_for(eng, "connect")
-    def set_pragma(dbapi_conn, _):  # type: ignore[no-untyped-def]
-        cur = dbapi_conn.cursor()
-        cur.execute("PRAGMA foreign_keys=ON")
-        cur.close()
-
-    Base.metadata.create_all(bind=eng)
-    yield eng
-    Base.metadata.drop_all(bind=eng)
-    eng.dispose()
-
-
-@pytest.fixture
-def db_session(engine) -> Session:
-    factory = sessionmaker(bind=engine, autocommit=False, autoflush=False, expire_on_commit=False)
-    session = factory()
-    yield session
-    session.close()
-
-
-@pytest.fixture
-def api_client(db_session: Session) -> TestClient:
-    def _override_get_db():  # type: ignore[no-untyped-def]
-        try:
-            yield db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = _override_get_db
-    with TestClient(app, raise_server_exceptions=True) as client:
-        yield client
-    app.dependency_overrides.clear()
-
-
-@pytest.fixture(autouse=True)
-def reset_audit_log():
-    clear_audit_log()
-    yield
-    clear_audit_log()
 
 
 def test_all_fixtures_persist_and_are_readable_via_repository(db_session: Session) -> None:
