@@ -64,7 +64,7 @@ from packages.schema.models.graph import AttackGraphResult, AttackPath, GraphNod
 from packages.schema.models.observation import Observation, ScanResult
 from packages.schema.models.topology import NetworkTopology
 from services.graph.engine import DEFAULT_MAX_DEPTH, DEFAULT_MAX_PATHS, analyze
-from services.normalize.interim_bridge import findings_from_observations
+from services.normalize import normalize_observations
 
 _DEFAULT_GROUND_TRUTH = _REPO_ROOT / "lab" / "ground_truth.yaml"
 _DEFAULT_TOPOLOGY = _REPO_ROOT / "lab" / "topology.yaml"
@@ -82,7 +82,7 @@ FIXTURE_FILES: tuple[tuple[str, str], ...] = (
     ("lab_extended_nuclei.json", "synthetic"),
 )
 
-# Fixed so the bridge's findings (and therefore the results) are reproducible.
+# Fixed so the normalizer's findings (and therefore the results) are reproducible.
 DETECTED_AT = datetime(2026, 1, 1, tzinfo=UTC)
 
 BANNER = (
@@ -524,7 +524,9 @@ def run_evaluation(
     topology = load_topology(topology_path)
     expected = load_expected(expected_path)
     observations, provenance = load_observations(fixtures_dir)
-    findings = findings_from_observations(observations, DETECTED_AT)
+    # Same normalisation the scan task applies (services/normalize, DECISIONS.md D-045):
+    # identity resolution and cross-scanner dedup over the whole fixture fact base.
+    findings = normalize_observations(observations, DETECTED_AT).findings
     result = analyze(
         engagement_id=topology.engagement_id,
         observations=observations,
@@ -639,7 +641,7 @@ def generate_markdown_report(results: dict[str, Any]) -> str:
         f"**Rules digest:** `{meta['rules_digest']}`  ",
         f"**Engine limits:** max_depth {meta['max_depth']}, max_paths {meta['max_paths']}  ",
         f"**Inputs:** {meta['observations']} observations, {meta['findings']} findings "
-        f"(interim bridge, detected_at fixed at {meta['findings_detected_at']})  ",
+        f"(Track 1 normalizer, detected_at fixed at {meta['findings_detected_at']})  ",
         "**Hosts with only synthetic observations:** "
         + ", ".join(meta["hosts_with_only_synthetic_observations"]),
         "",

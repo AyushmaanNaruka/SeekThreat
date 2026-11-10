@@ -7,7 +7,7 @@
 **Topology:** `lab/topology.yaml` (`topology:sha256:71f641e935d9d577eded9eda`)  
 **Rules digest:** `rules:sha256:56d64b9ef56ac5ecce4256dc`  
 **Engine limits:** max_depth 12, max_paths 1000  
-**Inputs:** 34 observations, 5 findings (interim bridge, detected_at fixed at 2026-01-01T00:00:00+00:00)  
+**Inputs:** 34 observations, 5 findings (Track 1 normalizer, detected_at fixed at 2026-01-01T00:00:00+00:00)  
 **Hosts with only synthetic observations:** bastion-ssh, cache-redis, db-primary, dmz-proxy, internal-api, internal-wiki, jenkins-ci, spring-gateway
 
 | Fixture | Provenance |
@@ -74,7 +74,7 @@ Feasibility (lab/topology.yaml):
 | jenkins-ci | CVE-2024-23897 | True | True | True |
 | cache-redis | CVE-2022-0543 | False | None | False |
 
-Example path `path:edc9f9b15b151632` (confidence low):
+Example path `path:13de37ba4c149723` (confidence low):
 
 `attacker:dmz -> access:172.20.1.13:8080/tcp -> exec:spring-gateway -> access:172.20.2.25:8080/tcp -> read:host:172.20.2.25 -> creds:host:172.20.2.25 -> exec:bastion-ssh -> access:172.20.3.20:6379/tcp`
 
@@ -94,7 +94,7 @@ Feasibility (lab/topology.yaml):
 | dmz-proxy | CVE-2021-23017 | True | True | True |
 | internal-wiki | CVE-2022-26134 | True | True | True |
 
-Example path `path:2e2fafa46fdccf32` (confidence low):
+Example path `path:47887195137a123f` (confidence low):
 
 `attacker:dmz -> access:172.20.1.12:80/tcp -> exec:dmz-proxy -> access:172.20.2.40:8090/tcp -> exec:host:172.20.2.40`
 
@@ -128,8 +128,8 @@ Reported, not corrected. The owner decides whether the lab wiring or the ground 
 
 | Rank | Host | CVEs | Paths broken | Goals cut |
 |---|---|---|---|---|
-| 1 | spring-gateway | CVE-2022-22947 | 11 | exec:spring-gateway |
-| 2 | dmz-proxy | CVE-2021-23017 | 11 | exec:dmz-proxy |
+| 1 | dmz-proxy | CVE-2021-23017 | 11 | exec:dmz-proxy |
+| 2 | spring-gateway | CVE-2022-22947 | 11 | exec:spring-gateway |
 | 3 | internal-wiki | CVE-2022-26134 | 8 | exec:host:172.20.2.40 |
 | 4 | jenkins-ci | CVE-2024-23897 | 6 | - |
 

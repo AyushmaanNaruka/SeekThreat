@@ -68,7 +68,7 @@
     "paths_to_crown_jewel_network_access": 12,
     "unclassified_findings": [
       {
-        "finding_id": "fnd-74d450d70307f49bebca8ae1",
+        "finding_id": "fnd-8213cf3867b585f28d4dc3ee",
         "host": "internal-api",
         "cve_ids": [
           "CVE-2022-29361"
@@ -80,17 +80,6 @@
     "chokepoints": [
       {
         "rank": 1,
-        "host": "spring-gateway",
-        "cve_ids": [
-          "CVE-2022-22947"
-        ],
-        "paths_broken": 11,
-        "goals_cut": [
-          "exec:spring-gateway"
-        ]
-      },
-      {
-        "rank": 2,
         "host": "dmz-proxy",
         "cve_ids": [
           "CVE-2021-23017"
@@ -98,6 +87,17 @@
         "paths_broken": 11,
         "goals_cut": [
           "exec:dmz-proxy"
+        ]
+      },
+      {
+        "rank": 2,
+        "host": "spring-gateway",
+        "cve_ids": [
+          "CVE-2022-22947"
+        ],
+        "paths_broken": 11,
+        "goals_cut": [
+          "exec:spring-gateway"
         ]
       },
       {
@@ -235,7 +235,7 @@
         "matching_paths": 1
       },
       "example_path": {
-        "path_id": "path:edc9f9b15b151632",
+        "path_id": "path:13de37ba4c149723",
         "confidence": "low",
         "hosts": [
           "spring-gateway",
@@ -325,7 +325,7 @@
         "matching_paths": 4
       },
       "example_path": {
-        "path_id": "path:2e2fafa46fdccf32",
+        "path_id": "path:47887195137a123f",
         "confidence": "low",
         "hosts": [
           "dmz-proxy",

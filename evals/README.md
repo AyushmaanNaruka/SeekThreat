@@ -87,7 +87,7 @@ measures fetch success.
 ## Attack path validity (Layer 3 engine, fixture-based)
 
 `evals/attack_paths.py` runs `services.graph.engine.analyze` over the observation fixtures in
-`tests/fixtures/observations/` (findings via the interim bridge, topology from
+`tests/fixtures/observations/` (findings via the Track 1 normalizer, D-045; topology from
 `lab/topology.yaml`) and grades the enumerated paths against `lab/ground_truth.yaml`
 `expected_attack_paths`. The free-text steps are restated as ordered host lists in
 `golden/attack_paths_expected.yaml`; a test checks every host and CVE there against the steps.

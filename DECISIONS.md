@@ -203,6 +203,74 @@ the scan never proved.
 
 ---
 
+### D-045 — Track 1 identity resolution and cross-scanner dedup: evidence-only joins, CVE-keyed merges
+**Date:** 2026-11-06
+**Decided by:** Ayushmaan (proposed); review pending from Utkarsh (Track 1 owner)
+**Type:** Addition (pre-empts Track 1; replaces the D-044 interim bridge in the scan task)
+**Status:** Proposed
+
+**Decision**
+Add `services/normalize/identity.py`, `dedup.py` and `pipeline.py`, and call
+`normalize_scan_observations` from `run_scan` instead of the D-044 bridge. This settles
+"Still open" item 1 in `docs/02-architecture.md`, pending review:
+- **Identity — canonicalise, then join only on observed evidence.** Brackets, IPv6
+  compression, case and FQDN trailing dots are normalised to the D-040 `asset_id` forms.
+  Joins use only what scanners reported: addresses in one nmap `HOST_UP` (`ipv4`/`ipv6`/
+  `mac`) are one host (resolved IPv4 > IPv6 > MAC); nmap `hostnames` (user or PTR) and a
+  nuclei/Nikto record's own `host`+`ip` pair point a hostname at a host. Hostname links are
+  one-way, so a name can never glue two addresses together. No DNS, no network.
+- **Ambiguity is never guessed.** A hostname whose evidence points at two hosts, or an
+  address component holding two IPv4s (e.g. one MAC seen with two IPs), is left unjoined
+  (`host:<itself>`) and returned as an `Ambiguity` with its evidence. Every join records
+  its rule and the observation ids that justified it.
+- **Merge rule.** Findings merge only on (a) same asset, same port/proto, identical
+  non-empty CVE set, any scanner; or (b) same asset, port, scanner and scanner identity
+  keys (the same check twice). Nothing else merges. Merged findings keep every
+  `observation_id`, list every scanner in `scanner`, and carry each scanner's confidence
+  in the description. `finding_id` hashes the merge key, so re-runs upsert.
+- **Engagement context.** The scan task normalises the engagement's stored observations
+  together with the new scan's, and enqueues only findings the scan touched (supported by
+  one of its observations, or whose asset join rests on one).
+
+**Why**
+D-044 made one finding per observation with no joining, so nuclei-by-hostname and
+nmap-by-IP facts never met and the same CVE from two scanners showed twice. Rejected:
+resolving DNS (mutable, attacker-influenced, and a network action outside authorization);
+fuzzy merging on title/template similarity (a false merge hides evidence, a duplicate only
+repeats it); transitive union through hostnames (one bad PTR would merge two hosts). PTR
+names are still accepted as evidence because a conflicting claim makes the name ambiguous
+rather than re-pointing it; the link records `nmap_hostname:PTR` so it is visible.
+
+**Impact on plan**
+Pre-empts Utkarsh's Track 1 work; he may replace any of it. The D-040 `asset_id` model
+validator was *not* added to `Finding`: existing tests use `asset_id="a"`, and persisted
+bridge-era rows are re-validated on read, so a strict validator would ripple into the
+findings API. `identity.is_valid_asset_id` exists for when it lands. `interim_bridge.py`
+stays (still exported, still tested) but is marked superseded.
+
+**Cost if we're wrong**
+Low to moderate. Reverting the import in `apps/api/tasks/scans.py` restores D-044.
+Known costs: CVE finding ids change once versus bridge-era rows (old rows linger until
+cleaned up), and a finding whose asset later joins (hostname -> IP after a new nmap scan)
+gets a new id while the old `host:<hostname>` row is not deleted.
+
+**Update 2026-11-10 — integrated into the Layer 3/4 line.** `feat/normalize-dedup` is merged
+into `feat/integrate-normalize` (on top of `feat/layer4-assistant`). Wiring was already in
+place through `run_scan`: the attack-graph and assistant routers read findings only from the
+enriched rows the scan task enqueues, so they now see normalised findings with no router
+change. `evals/attack_paths.py` now builds its findings with `normalize_observations` instead
+of the D-044 bridge, so the eval exercises the same path as production. On the current
+fixtures nothing merges (5 findings either way, same assets, same path and confidence
+counts, same verdicts). Only finding ids change (they hash the merge key, not the
+observation), and with them two example path ids and the order of the two chokepoints tied at
+11 paths broken (ties break on finding id). `evals/results/attack_paths_results.*` were
+regenerated. The assistant golden set (`evals/scripts/build_assistant_golden.py`) and the web
+fixture `apps/web/tests/fixtures/gen_lab_attack_graph.py` still use the bridge, because
+regenerating them would invalidate the committed assistant eval run; switch them when the
+assistant eval is re-run. Status stays **Proposed** pending Utkarsh's review.
+
+---
+
 ### D-044 — Interim observation→Finding bridge so scans reach enrichment and the UI
 **Date:** 2026-10-15
 **Decided by:** Ayushmaan

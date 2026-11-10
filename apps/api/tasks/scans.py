@@ -27,10 +27,11 @@ from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from apps.api.core.audit import log_audit_event
 from apps.api.db.repositories import (
+    ObservationRepository,
     ScanRepository,
     save_scan_result,
 )
@@ -38,7 +39,7 @@ from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.engagement import Authorization, ScanRequest
 from packages.schema.models.observation import Observation
-from services.normalize import findings_from_observations
+from services.normalize import normalize_scan_observations
 from services.scanners.base import (
     AuthorizationError,
     ScannerAdapter,
@@ -53,6 +54,9 @@ from services.scanners.nuclei_adapter import NucleiAdapter
 from services.scanners.nuclei_json import NucleiParseError
 from services.scanners.ssh_audit_adapter import SshAuditAdapter
 from services.scanners.ssh_audit_json import SshAuditParseError
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 #: Audit ``scanner`` field for post-scan enrichment events raised from here.
 POST_SCAN_AUDIT_SCANNER = "post_scan_enrichment"
@@ -109,10 +113,20 @@ def _dispatch_post_scan_enrichment(
 
 
 def _dispatch_interim_findings(
-    observations: tuple[Observation, ...], engagement_id: str, scan_id: str, actor: str
+    observations: tuple[Observation, ...],
+    engagement_id: str,
+    scan_id: str,
+    actor: str,
+    db: Session | None = None,
 ) -> int:
-    """Fire-and-forget: turn the scan's vuln_candidate observations into findings and
-    enqueue their enrichment (interim bridge, DECISIONS.md D-044).
+    """Fire-and-forget: normalise the scan's observations into findings and enqueue
+    their enrichment (Track 1 normalizer, DECISIONS.md D-045; replaces the D-044 bridge).
+
+    Identity resolution and cross-scanner dedup need the engagement's other scans (the
+    nmap run that ties a hostname to an IP, the nuclei run that reports the same CVE),
+    so the engagement's stored observations are loaded as context when ``db`` is given;
+    only findings this scan touched are enqueued. If that load fails the scan's own
+    observations are normalised alone, which is what the D-044 bridge always did.
 
     Dispatched before ``_dispatch_post_scan_enrichment``. Both tasks share the
     single-concurrency ``enrichment`` queue and either order converges: findings
@@ -122,7 +136,30 @@ def _dispatch_interim_findings(
     try:
         from apps.api.tasks.enrichment import enrich_findings  # noqa: PLC0415
 
-        findings = findings_from_observations(observations, detected_at=datetime.now(UTC))
+        context: list[Observation] = []
+        if db is not None:
+            try:
+                context = ObservationRepository(db).get_by_engagement(engagement_id)
+            except Exception as exc:  # noqa: BLE001
+                db.rollback()
+                logger.warning(
+                    "normalize: engagement context unavailable for scan %s (%s: %s); "
+                    "normalising this scan's observations alone",
+                    scan_id,
+                    type(exc).__name__,
+                    exc,
+                )
+        result = normalize_scan_observations(
+            observations, detected_at=datetime.now(UTC), engagement_observations=context
+        )
+        if result.ambiguities:
+            logger.info(
+                "normalize: %d ambiguous host alias(es) left unjoined in engagement %s: %s",
+                len(result.ambiguities),
+                engagement_id,
+                ", ".join(a.alias for a in result.ambiguities),
+            )
+        findings = result.findings
         if not findings:
             return 0
         enrich_findings.apply_async(
@@ -133,11 +170,11 @@ def _dispatch_interim_findings(
             },
             retry=False,
         )
-        logger.info("interim_findings: enqueued %d finding(s) for scan %s", len(findings), scan_id)
+        logger.info("normalize: enqueued %d finding(s) for scan %s", len(findings), scan_id)
         return len(findings)
     except Exception as exc:  # noqa: BLE001
         error = f"{type(exc).__name__}: {exc}"
-        logger.warning("interim_findings: failed for scan %s: %s", scan_id, error)
+        logger.warning("normalize: failed for scan %s: %s", scan_id, error)
         log_audit_event(
             event="interim_findings.enqueue_failed",
             actor=actor,
@@ -285,6 +322,7 @@ def run_scan(
             engagement_id=engagement_id,
             scan_id=scan_id,
             actor=actor,
+            db=db,
         )
         _dispatch_post_scan_enrichment(
             artifact_id=scan_result.artifact.artifact_id,
