@@ -5,7 +5,7 @@
   "provenance": "FIXTURE-DERIVED, AUTO-GENERATED. Every item is derived mechanically from the observation fixtures (8 of 10 lab hosts synthetic), the interim-bridge findings, services.graph.analyze over lab/topology.yaml, and lab/ground_truth.yaml. No reference answer was written by hand or from memory. Not a lab run.",
   "engagement_id": "eng-lab-baseline",
   "topology_id": "topology:sha256:71f641e935d9d577eded9eda",
-  "rules_digest": "rules:sha256:56d64b9ef56ac5ecce4256dc",
+  "rules_digest": "rules:sha256:e716105c88164a4c6a8ba1da",
   "findings_detected_at": "2026-01-01T00:00:00+00:00",
   "inputs": {
     "tests/fixtures/observations/lab_baseline.json": "724435cbeae406e3499440c4e7a70c932035a6a18bdc491c08d15fef9029058d",

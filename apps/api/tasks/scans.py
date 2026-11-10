@@ -39,7 +39,7 @@ from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.engagement import Authorization, ScanRequest
 from packages.schema.models.observation import Observation
-from services.normalize import normalize_scan_observations
+from services.normalize import normalize_scan_observations, version_match_findings
 from services.scanners.base import (
     AuthorizationError,
     ScannerAdapter,
@@ -128,6 +128,9 @@ def _dispatch_interim_findings(
     only findings this scan touched are enqueued. If that load fails the scan's own
     observations are normalised alone, which is what the D-044 bridge always did.
 
+    Also adds LOW-confidence CVE candidates derived from service_version facts by named
+    version rules (DECISIONS.md D-049, Proposed).
+
     Dispatched before ``_dispatch_post_scan_enrichment``. Both tasks share the
     single-concurrency ``enrichment`` queue and either order converges: findings
     enriched first are re-enriched once the scan's CVE records are synced (D-041).
@@ -159,7 +162,10 @@ def _dispatch_interim_findings(
                 engagement_id,
                 ", ".join(a.alias for a in result.ambiguities),
             )
-        findings = result.findings
+        # LOW-confidence version-matched candidates (D-049, Proposed) are added after
+        # dedup; they carry their own source and never merge with scanner reports.
+        findings = list(result.findings)
+        findings += version_match_findings(observations, detected_at=datetime.now(UTC))
         if not findings:
             return 0
         enrich_findings.apply_async(

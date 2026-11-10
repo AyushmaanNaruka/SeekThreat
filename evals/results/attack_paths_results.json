@@ -39,7 +39,7 @@
     "expected": "evals/golden/attack_paths_expected.yaml",
     "topology": "lab/topology.yaml",
     "topology_id": "topology:sha256:71f641e935d9d577eded9eda",
-    "rules_digest": "rules:sha256:56d64b9ef56ac5ecce4256dc",
+    "rules_digest": "rules:sha256:e716105c88164a4c6a8ba1da",
     "engagement_id": "eng-lab-baseline",
     "max_depth": 12,
     "max_paths": 1000,
