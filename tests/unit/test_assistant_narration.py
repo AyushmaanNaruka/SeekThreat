@@ -130,3 +130,26 @@ def test_evidence_from_another_engagement_is_rejected() -> None:
             client=FakeModelClient(),
             engagement_id=ENGAGEMENT,
         )
+
+
+def test_near_miss_path_citation_is_repaired_and_recorded() -> None:
+    graph = lab_graph()
+    path = graph.paths[0]
+    before = path.model_dump_json()
+
+    def respond(system: str, prompt: str) -> str:
+        return f"Step 1: entry [cite:{path.path_id}#Step 1]."
+
+    narration = narrate_path(
+        path=path,
+        nodes=graph.nodes,
+        evidence=_evidence_for(path),
+        client=FakeModelClient(responses=respond),
+        engagement_id=ENGAGEMENT,
+    )
+    assert path.model_dump_json() == before
+    assert [c.ref_id for c in narration.citations] == [path.path_id]
+    assert narration.grounding.invalid_citations == ()
+    assert [(r.cited, r.resolved) for r in narration.grounding.repaired_citations] == [
+        (f"{path.path_id}#Step", path.path_id)
+    ]

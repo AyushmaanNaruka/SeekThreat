@@ -23,10 +23,15 @@ Rules:
 1. Answer only from the supplied documents. Do not use outside knowledge about hosts, \
 CVEs, products or networks.
 2. Cite every claim with the id of the document that supports it, written exactly as \
-{CITE_FORMAT}, for example [cite:finding:fnd-123]. Cite only ids that appear in the \
-supplied documents.
-3. If the documents do not answer the question, reply with exactly this sentence and \
-nothing else: {REFUSAL_TEXT}
+{CITE_FORMAT}, for example [cite:finding:fnd-123]. Cite only ids from the list of \
+citable ids, copied character for character. Several ids in one marker are separated by \
+commas: [cite:obs:sha256:abc, path:def]. Never add a step number, a "#" fragment, a \
+document number or an extra kind prefix to an id.
+3. If some documents answer the question, answer from them with citations, even if the \
+answer is partial, then say briefly what the documents do not cover. A host name in the \
+question may appear in a document only as its IP address; a document that names the host \
+together with its addresses links the two. Only if no document is relevant to the \
+question at all, reply with exactly this sentence and nothing else: {REFUSAL_TEXT}
 4. Never invent CVE ids, hosts, IP addresses, ports, attack steps or attack paths.
 5. An attack path exists only if a document of kind "path" says so. Do not describe how \
 vulnerabilities might chain together; only report paths that a "path" document states, \
@@ -62,6 +67,11 @@ def render_documents(documents: Sequence[AssistantDocument]) -> str:
         for n, doc in enumerate(documents, start=1)
     ]
     return "\n\n".join(blocks)
+
+
+def render_citable_ids(documents: Sequence[AssistantDocument]) -> str:
+    """One citable id per line, in document order, for the model to copy from."""
+    return "\n".join(f"- {doc.doc_id}" for doc in documents)
 
 
 def first_rendered_document(prompt: str) -> tuple[str, str] | None:

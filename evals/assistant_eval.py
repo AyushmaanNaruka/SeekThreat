@@ -282,6 +282,9 @@ class AnswerView:
     checked_entities: tuple[str, ...] = ()
     unsupported_entities: tuple[str, ...] = ()
     invalid_citations: tuple[str, ...] = ()
+    # (cited, resolved, rule) for near-miss ids the assistant repaired; they count as
+    # valid citations of `resolved`.
+    repaired_citations: tuple[tuple[str, str, str], ...] = ()
 
 
 def answer_view(answer: Any) -> AnswerView:
@@ -299,6 +302,10 @@ def answer_view(answer: Any) -> AnswerView:
         checked_entities=tuple(answer.grounding.checked_entities),
         unsupported_entities=tuple(answer.grounding.unsupported_entities),
         invalid_citations=tuple(answer.grounding.invalid_citations),
+        repaired_citations=tuple(
+            (r.cited, r.resolved, r.rule)
+            for r in getattr(answer.grounding, "repaired_citations", ())
+        ),
     )
 
 
@@ -322,6 +329,7 @@ class ItemScore:
     retrieved_ids: list[str]
     judge: dict[str, Any] | None = None
     diagnostics: list[str] = field(default_factory=list)
+    repaired_citations: list[dict[str, str]] = field(default_factory=list)
 
 
 def score_item(
@@ -367,6 +375,9 @@ def score_item(
         latency_s=latency_s,
         answer=view.text,
         retrieved_ids=list(view.retrieved_ids),
+        repaired_citations=[
+            {"cited": c, "resolved": r, "rule": rule} for c, r, rule in view.repaired_citations
+        ],
     )
 
 
@@ -412,6 +423,7 @@ def aggregate(scores: Sequence[ItemScore]) -> dict[str, Any]:
         "citation_accuracy": _ratio(sum(c["correct"] for c in citations), len(citations)),
         "citations": len(citations),
         "citations_invalid": sum(1 for c in citations if not c["valid"]),
+        "citations_repaired": sum(len(s.repaired_citations) for s in answered),
         "uncited_answer_rate": _ratio(sum(1 for s in answered if not s.citations), len(answered)),
         "answer_correctness_proxy": _mean(s.must_mention_recall for s in other_items),
         "refusal_items": len(refusal_items),
@@ -755,7 +767,8 @@ def generate_markdown_report(results: Mapping[str, Any]) -> str:
         "",
         f"Answered {overall['answered']}/{overall['items']}; grounding entities checked "
         f"{overall['checked_entities']}, unsupported {overall['unsupported_entities']}; "
-        f"citations {overall['citations']} ({overall['citations_invalid']} invalid).",
+        f"citations {overall['citations']} ({overall['citations_invalid']} invalid, "
+        f"{overall.get('citations_repaired', 0)} repaired near-miss ids counted valid).",
         "",
     ]
     if meta["judge_model"]:

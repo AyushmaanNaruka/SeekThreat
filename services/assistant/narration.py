@@ -20,6 +20,7 @@ from services.assistant.citations import (
     build_citations,
     check_grounding,
     parse_citation_ids,
+    resolve_citations,
     strip_citations,
 )
 from services.assistant.documents import is_assumption_step, path_document
@@ -75,8 +76,11 @@ def narrate_path(
 
     supplied = [path_doc, *evidence]
     supplied_ids = {doc.doc_id for doc in supplied}
+    text, repairs = resolve_citations(text, supplied_ids)
     citations = build_citations(parse_citation_ids(text), supplied)
-    general = check_grounding(text=text, cited=supplied, supplied_ids=supplied_ids)
+    general = check_grounding(
+        text=text, cited=supplied, supplied_ids=supplied_ids, repaired=repairs
+    )
 
     # CVEs the path itself rests on: its rendered edges plus the evidence they cite.
     on_path_ids = {ref for edge in path.edges for ref in edge.evidence}
@@ -92,6 +96,7 @@ def narrate_path(
         checked_entities=general.checked_entities,
         unsupported_entities=unsupported,
         invalid_citations=general.invalid_citations,
+        repaired_citations=general.repaired_citations,
     )
     return PathNarration(
         path_id=path.path_id,

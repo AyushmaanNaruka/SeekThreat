@@ -10,6 +10,7 @@ from packages.schema.models.asset import Asset, Service
 from packages.schema.models.assistant import (
     Answer,
     AssistantDocument,
+    CitationRepair,
     GroundingCheck,
     PathNarration,
     RetrievedDocument,
@@ -59,6 +60,7 @@ __all__ = [
     "Chokepoint",
     "Citation",
     "CitationKind",
+    "CitationRepair",
     "Confidence",
     "Engagement",
     "EnrichedFinding",

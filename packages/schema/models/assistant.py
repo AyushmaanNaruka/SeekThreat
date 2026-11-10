@@ -46,6 +46,18 @@ class RetrievedDocument(BaseModel):
     method: RetrievalMethod
 
 
+class CitationRepair(BaseModel):
+    """A malformed citation id the model wrote that resolved to exactly one supplied
+    document by a named deterministic rule (e.g. one character off, a stray `#Step 2`
+    fragment). Kept so the analyst can see what the model actually wrote."""
+
+    model_config = ConfigDict(frozen=True)
+
+    cited: str
+    resolved: str
+    rule: str
+
+
 class GroundingCheck(BaseModel):
     """Deterministic post-generation check: every CVE id, IP address and port the text
     mentions must appear in the documents it cites (or the question). Anything else is
@@ -57,6 +69,8 @@ class GroundingCheck(BaseModel):
     unsupported_entities: tuple[str, ...] = ()
     # Citation ids the model produced that were not among the supplied documents.
     invalid_citations: tuple[str, ...] = ()
+    # Near-miss ids mapped to the one supplied document they unambiguously name.
+    repaired_citations: tuple[CitationRepair, ...] = ()
 
     @property
     def grounded(self) -> bool:
