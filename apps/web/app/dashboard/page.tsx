@@ -107,6 +107,20 @@ function formatScanTarget(scan: ScanItem): string {
 export default function DashboardPage() {
   const [activeNav, setActiveNav] = useState("Overview");
 
+  // Sidebar items are divs styled as nav rows; give them button semantics so they
+  // are reachable and operable from the keyboard.
+  const navItemProps = (activate: () => void) => ({
+    role: "button" as const,
+    tabIndex: 0,
+    onClick: activate,
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        activate();
+      }
+    },
+  });
+
   // Overview, Engagements and Scans share one combined view; the nav scrolls to
   // the matching section (after the view re-renders if Findings was showing).
   const goToSection = (nav: string, sectionId: string) => {
@@ -504,7 +518,7 @@ export default function DashboardPage() {
           <nav className="db-nav">
             <div
               className={`db-nav-item ${activeNav === "Overview" ? "active" : ""}`}
-              onClick={() => goToSection("Overview", "db-section-top")}
+              {...navItemProps(() => goToSection("Overview", "db-section-top"))}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -517,7 +531,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Engagements" ? "active" : ""}`}
-              onClick={() => goToSection("Engagements", "db-section-engagements")}
+              {...navItemProps(() => goToSection("Engagements", "db-section-engagements"))}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -529,7 +543,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Scans" ? "active" : ""}`}
-              onClick={() => goToSection("Scans", "db-section-scans")}
+              {...navItemProps(() => goToSection("Scans", "db-section-scans"))}
             >
               <div className="db-nav-item-inner">
                 <svg className="db-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -542,7 +556,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Findings" ? "active" : ""}`}
-              onClick={() => setActiveNav("Findings")}
+              {...navItemProps(() => setActiveNav("Findings"))}
               style={{ cursor: "pointer" }}
             >
               <div className="db-nav-item-inner">
@@ -559,7 +573,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "AttackPaths" ? "active" : ""}`}
-              onClick={() => setActiveNav("AttackPaths")}
+              {...navItemProps(() => setActiveNav("AttackPaths"))}
               style={{ cursor: "pointer" }}
             >
               <div className="db-nav-item-inner">
@@ -575,7 +589,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Assistant" ? "active" : ""}`}
-              onClick={() => setActiveNav("Assistant")}
+              {...navItemProps(() => setActiveNav("Assistant"))}
               style={{ cursor: "pointer" }}
             >
               <div className="db-nav-item-inner">
@@ -588,7 +602,7 @@ export default function DashboardPage() {
 
             <div
               className={`db-nav-item ${activeNav === "Feeds" ? "active" : ""}`}
-              onClick={() => setActiveNav("Feeds")}
+              {...navItemProps(() => setActiveNav("Feeds"))}
               style={{ cursor: "pointer" }}
             >
               <div className="db-nav-item-inner">
@@ -1146,7 +1160,12 @@ export default function DashboardPage() {
                           <ul className="db-plan-list">
                             {plan.planned.map((item, idx) => (
                               <li key={`${item.target}-${idx}`} className="db-plan-row">
-                                <span className="db-plan-target">{item.target}</span>
+                                <span className="db-plan-target">
+                                  {item.target}
+                                  {typeof item.options.port === "string" || typeof item.options.port === "number"
+                                    ? `:${item.options.port}`
+                                    : ""}
+                                </span>
                                 <span className="db-plan-kind">{item.kind}</span>
                                 {item.note && <span className="db-plan-note">{item.note}</span>}
                               </li>
@@ -1613,10 +1632,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Intelligence Feeds Health Status */}
-          <div style={{ marginTop: "1.5rem" }}>
-            <FeedHealthPanel />
-          </div>
             </>
           )}
         </div>

@@ -102,7 +102,17 @@ docker compose -f infra/docker-compose.yml exec ollama ollama pull nomic-embed-t
 docker compose -f infra/docker-compose.yml -f infra/docker-compose.lab.yml --profile core exec enrichment-worker python -m services.enrichment.sync_feeds
 ```
 
-If Ollama already runs natively on the host (port 11434), skip the `model` profile. The
+If Ollama already runs natively on the host (port 11434), skip the `model` profile and set
+`COMPOSE_OLLAMA_BASE_URL=http://host.docker.internal:11434` in `.env`, then pass
+`--env-file .env` to every `docker compose` command (compose otherwise looks for `.env` next
+to `infra/docker-compose.yml`, not at the repo root). **[verified 2026-11-10]**:
+`/assistant/status` reported `reachable: true` from the compose `api` container this way.
+
+**Memory:** on a 16 GB Windows host, the full lab plus the core stack plus a native Ollama
+plus nine concurrent Nuclei scans exhausted memory and crashed Docker Desktop (2026-11-10).
+Scan in smaller batches, or stop Jenkins/Confluence when not demoing them.
+
+Previously noted: If Ollama already runs natively on the host (port 11434), skip the `model` profile. The
 compose `api` service is pointed at `http://ollama:11434`, which a native Ollama does not
 answer [unverified whether a native Ollama is reachable from the api container]. In that
 case use the `model` profile, or fixture mode.

@@ -106,7 +106,9 @@ services:
       NEO4J_PASSWORD: ${NEO4J_PASSWORD:-changeme}
       # Layer 4 assistant (D-006). Only reachable when the `model` profile is up;
       # otherwise the assistant endpoints answer 503 and nothing else cares.
-      OLLAMA_BASE_URL: http://ollama:11434
+      # A native host Ollama instead of the `model` profile: set
+      # COMPOSE_OLLAMA_BASE_URL=http://host.docker.internal:11434 in .env.
+      OLLAMA_BASE_URL: ${COMPOSE_OLLAMA_BASE_URL:-http://ollama:11434}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-qwen2.5:7b}
       ASSISTANT_EMBED_MODEL: ${ASSISTANT_EMBED_MODEL:-nomic-embed-text}
     volumes: [enrichmentcache:/data/enrichment_cache]
@@ -132,7 +134,9 @@ services:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-seekthreat}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-seekthreat}
       REDIS_URL: redis://redis:6379/0
       ENRICHMENT_CACHE_DIR: /data/enrichment_cache
-      OLLAMA_BASE_URL: http://ollama:11434
+      # A native host Ollama instead of the `model` profile: set
+      # COMPOSE_OLLAMA_BASE_URL=http://host.docker.internal:11434 in .env.
+      OLLAMA_BASE_URL: ${COMPOSE_OLLAMA_BASE_URL:-http://ollama:11434}
       ASSISTANT_MODEL: ${ASSISTANT_MODEL:-qwen2.5:7b}
       ASSISTANT_EMBED_MODEL: ${ASSISTANT_EMBED_MODEL:-nomic-embed-text}
     volumes: [enrichmentcache:/data/enrichment_cache]

@@ -131,6 +131,11 @@
   text-decoration: none;
 }
 
+.db-nav-item:focus-visible {
+  outline: 2px solid #D9E2E5;
+  outline-offset: 2px;
+}
+
 .db-nav-item-inner {
   display: flex;
   align-items: center;

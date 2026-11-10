@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -12,9 +13,21 @@ from apps.api.core.audit import log_audit_event
 from apps.api.db.repositories import EngagementRepository
 from apps.api.db.session import get_db
 from packages.schema.models._time import require_aware
-from packages.schema.models.engagement import Authorization, Engagement
+from packages.schema.models.engagement import Authorization, Engagement, is_valid_hostname
 
 router = APIRouter()
+
+
+def _is_allowlist_pattern(entry: str) -> bool:
+    try:
+        ipaddress.ip_network(entry, strict=False)
+    except ValueError:
+        pass
+    else:
+        return True
+    if entry.startswith("*."):
+        return is_valid_hostname(entry[2:])
+    return is_valid_hostname(entry)
 
 
 class CreateEngagementRequest(BaseModel):
@@ -34,6 +47,25 @@ class CreateEngagementRequest(BaseModel):
         if not stripped:
             raise ValueError("authorized_by must name a human, not be blank")
         return stripped
+
+    @field_validator("allowlist")
+    @classmethod
+    def _reject_malformed_entries(cls, value: list[str]) -> list[str]:
+        # An entry that is not an IP, a CIDR block, a hostname or a `*.domain`
+        # wildcard can never match a target (the gate fails closed), so accepting it
+        # only creates an engagement nothing can be scanned in. Reject it as input.
+        cleaned: list[str] = []
+        for raw in value:
+            entry = raw.strip()
+            if not entry:
+                raise ValueError("allowlist entries must not be blank")
+            if not _is_allowlist_pattern(entry):
+                raise ValueError(
+                    f"allowlist entry {entry!r} is not an IP address, CIDR block, "
+                    "hostname or *.domain wildcard"
+                )
+            cleaned.append(entry)
+        return cleaned
 
     @field_validator("granted_at", "expires_at", mode="after")
     @classmethod
