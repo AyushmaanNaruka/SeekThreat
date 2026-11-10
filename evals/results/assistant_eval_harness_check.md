@@ -11,7 +11,7 @@
 **Ollama:** - (version -)  
 **Golden set:** `evals/golden` sha256 `e53f73b5d74386fc613abc6415fd9179ae4e9b4c3039f16672f9ea103f3a2366` (generator 1.0.0)  
 **Items:** 138 (cve_lookups 39, remediation 15, attack_paths 28, prioritization 17, adversarial 23, multi_hop 16); documents indexed 66; retrieval limit 8  
-**Run at:** 2026-11-07T03:53:29+00:00; **git:** `8484ba6088a9ac9896de936c00c45892643ba9c3`
+**Run at:** 2026-11-10T16:31:18+00:00; **git:** `1f6c11f84011749b8eda5467a9b059217052b31d` (dirty)
 
 ## Results
 
@@ -19,18 +19,18 @@
 |---|---|---|---|---|---|---|---|
 | Faithfulness (answered, entity proxy) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
 | Faithfulness (all items) | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| Claim-entity precision | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 |
-| Context precision | 0.079 | 0.106 | 0.146 | 0.000 | 0.125 | n/a | 0.044 |
-| Context recall | 0.481 | 0.846 | 0.600 | 0.000 | 0.647 | n/a | 0.146 |
-| Citation accuracy | 0.444 | 0.513 | 0.400 | 0.607 | 0.765 | 0.000 | 0.188 |
+| Claim-entity precision | 1.000 | 1.000 | 1.000 | n/a | 1.000 | 1.000 | 1.000 |
+| Context precision | 0.430 | 0.225 | 0.356 | 0.839 | 0.382 | n/a | 0.334 |
+| Context recall | 0.953 | 0.949 | 0.867 | 1.000 | 0.941 | n/a | 0.975 |
+| Citation accuracy | 0.756 | 0.821 | 0.667 | 1.000 | 0.941 | 0.000 | 1.000 |
 | Uncited answer rate | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 |
-| Answer correctness (must-mention recall) | 0.163 | 0.218 | 0.200 | 0.180 | 0.059 | n/a | 0.078 |
-| Refusal accuracy | 0.217 | n/a | n/a | n/a | n/a | 0.217 | n/a |
+| Answer correctness (must-mention recall) | 0.249 | 0.333 | 0.333 | 0.000 | 0.544 | n/a | 0.083 |
+| Refusal accuracy | 0.130 | n/a | n/a | n/a | n/a | 0.130 | n/a |
 | False refusal rate | 0.000 | 0.000 | 0.000 | 0.000 | 0.000 | n/a | 0.000 |
-| Answer relevancy (embedding cosine) | 0.201 | 0.342 | 0.161 | 0.131 | 0.160 | 0.128 | 0.143 |
-| Latency mean / p95 (s) | 0.002 / 0.004 | 0.003 / 0.004 | 0.002 / 0.003 | 0.001 / 0.001 | 0.002 / 0.005 | 0.003 / 0.004 | 0.001 / 0.001 |
+| Answer relevancy (embedding cosine) | 0.287 | 0.305 | 0.148 | 0.565 | 0.195 | 0.053 | 0.274 |
+| Latency mean / p95 (s) | 0.004 / 0.009 | 0.004 / 0.007 | 0.004 / 0.006 | 0.001 / 0.006 | 0.007 / 0.021 | 0.003 / 0.006 | 0.006 / 0.008 |
 
-Answered 133/138; grounding entities checked 212, unsupported 0; citations 133 (0 invalid).
+Answered 135/138; grounding entities checked 154, unsupported 0; citations 135 (0 invalid, 0 repaired near-miss ids counted valid).
 
 ## Golden-set diagnostics
 
@@ -67,8 +67,10 @@ Every required_ref is an indexed document and holds its must_mention entities.
 | adversarial-011 | False | True | - | - |
 | adversarial-012 | False | True | - | - |
 | adversarial-015 | False | True | - | - |
+| adversarial-016 | False | True | - | - |
 | adversarial-017 | False | True | - | - |
 | adversarial-018 | False | True | - | - |
+| adversarial-019 | False | True | - | - |
 | adversarial-020 | False | True | - | - |
 | adversarial-021 | False | True | - | - |
 | adversarial-022 | False | True | - | - |
