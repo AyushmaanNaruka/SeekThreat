@@ -43,6 +43,60 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-049 — Engagement report: Markdown and JSON from one pure, deterministic builder
+**Date:** 2026-11-10
+**Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**
+**Type:** Addition (settles docs/02-architecture.md "Still open" item 4)
+**Status:** Active, pending confirmation
+
+**Decision**
+- **Formats:** Markdown for the analyst to read and hand over, JSON for machines and for
+  archiving. Both are rendered from one `EngagementReport` model built by
+  `services/report.build_report`. JSON is that model serialised, Markdown is a rendering
+  of it, so the two cannot disagree. No HTML or PDF export for now.
+- **Builder is pure:** no clock (the caller passes `generated_at`), no database, no
+  network, no model call. Inputs are sorted into a fixed order, so the same facts give
+  identical bytes. An architecture test (`tests/architecture/test_report_purity.py`)
+  enforces the import and clock rules, like the graph engine's purity test.
+- **Contents, in order:** engagement and authorization reference; scan inventory; assets
+  and services from host and service observations, with scanner, source and confidence on
+  each; findings ordered by stored ERS, each ERS shown with its weighted components and
+  `explain()` text, and every enriched field with its source and confidence (a missing
+  score shows as "not scored", never 0); attack paths in D-047 rank order, each step with
+  its rule name and evidence ids; chokepoints; the remediation simulation for the
+  top-ranked chokepoint; coverage and limitations; an appendix that resolves every cited
+  evidence id.
+- **Graph discipline (Hard Rule 1):** paths, chokepoints and the simulation come from
+  `services.graph` unchanged. The report never adds, edits or filters an edge. Assistant
+  narrations are optional input, attached only to the path they narrate, labelled
+  model-generated and not evidence. Narrations are not stored, so the API export does not
+  include them.
+- **Endpoint:** `GET /engagements/{id}/report?format=md|json`, a file download. It is
+  audited like the attack-graph endpoints (actor, target, engagement id as the
+  authorization reference), and the success event records the SHA-256 of the bytes
+  served. With no topology declared, the report is still produced, and the attack-graph
+  section says why it is missing.
+
+**Why**
+The January deliverable has to be readable by an evaluator and checkable by a machine.
+Markdown reads well as plain text, renders on GitHub and in most editors, and converts to
+PDF with any external tool without this project taking on a dependency. JSON keeps every
+id and attribution in a form a script can verify against the database. Building both from
+one model keeps them in step. Rejected: HTML or PDF generation in the API (a PDF library
+is a new dependency; HTML adds a template surface for scanner-supplied text to escape);
+a template engine such as Jinja (a dependency for what f-strings already do); and having
+the model write the report (Hard Rule 1, and it could not be reproduced).
+
+**Impact on plan**
+The report deliverable exists now. The dashboard has "Download report (.md)" and "JSON"
+buttons on the engagement banner. If a PDF is needed later, it can be produced from the
+Markdown outside the platform, or added as a new decision with its dependency flagged.
+
+**Cost if we're wrong**
+Low. Renderers are separate functions over one model. Adding a format means adding one
+renderer. Changing the layout does not touch the builder. The JSON shape is versioned
+(`report_format: seekthreat.report/1`), so a breaking change can bump the version.
+
 ### D-048 — Layer 4 assistant: one fact per chunk, hybrid retrieval, cite-or-refuse, deterministic grounding check
 **Date:** 2026-11-07
 **Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**

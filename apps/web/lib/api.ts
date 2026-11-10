@@ -9,6 +9,8 @@ import { parseAttackGraphResult } from "./attackGraph";
 import type { AttackGraphResult, NetworkTopology, SimulationResult } from "./attackGraph";
 import { parseAnswer, parseAssistantStatus, parseIndexResult, parsePathNarration } from "./assistant";
 import type { Answer, AssistantStatus, IndexResult, PathNarration } from "./assistant";
+import { filenameFromDisposition, reportFilename, reportPath } from "./report";
+import type { ReportFormat } from "./report";
 
 export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
@@ -500,5 +502,23 @@ export const api = {
       { signal }
     );
     return handleResponse<ObservationItem>(res);
+  },
+
+  /**
+   * GET /engagements/{id}/report?format=md|json: the engagement report built by
+   * the deterministic server-side builder. Returns the bytes as a Blob plus the
+   * filename to save it under.
+   */
+  async downloadReport(
+    engagementId: string,
+    format: ReportFormat,
+    signal?: AbortSignal
+  ): Promise<{ blob: Blob; filename: string }> {
+    const res = await fetch(`${API_BASE_URL}${reportPath(engagementId, format)}`, { signal });
+    if (!res.ok) await handleResponse<unknown>(res);
+    const filename =
+      filenameFromDisposition(res.headers.get("content-disposition")) ??
+      reportFilename(engagementId, format);
+    return { blob: await res.blob(), filename };
   },
 };
