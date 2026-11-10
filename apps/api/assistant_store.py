@@ -62,7 +62,9 @@ class PgVectorStore:
 
     # -- helpers -----------------------------------------------------------------
 
-    def _scoped(self, engagement_id: str) -> Select[tuple[AssistantDocumentModel]]:
+    def _scoped(self, engagement_id: str) -> Select[Any]:
+        # Select[Any]: SQLAlchemy 2.0 types select(Model) as Select[tuple[Model]], 2.1 as
+        # Select[Model]; CI resolves `sqlalchemy>=2.0` to whichever is newest.
         return select(AssistantDocumentModel).where(
             AssistantDocumentModel.engagement_id == engagement_id,
             AssistantDocumentModel.embed_model == self.embed_model,
