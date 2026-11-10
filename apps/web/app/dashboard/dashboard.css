@@ -1455,6 +1455,27 @@
   color: #FFFFFF;
 }
 
+.db-btn-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Engagement report download, beside the banner title */
+.db-banner-title-group {
+  flex-wrap: wrap;
+}
+
+.db-banner-report-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.db-banner-report-actions .db-btn-secondary {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.72rem;
+}
+
 /* Error Banner in Dashboard */
 .db-error-banner {
   background: rgba(228, 93, 104, 0.12);

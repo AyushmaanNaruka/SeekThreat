@@ -24,6 +24,7 @@ import {
   DEFAULT_POLLING_CONFIG,
 } from "../../lib/polling";
 import { scannerTitle, type ScannerName } from "../../lib/scanOptions";
+import type { ReportFormat } from "../../lib/report";
 import "./dashboard.css";
 
 function formatDuration(startedAt: string, completedAt?: string | null): string {
@@ -163,11 +164,36 @@ export default function DashboardPage() {
   } | null>(null);
   const [obsLoading, setObsLoading] = useState(false);
 
+  // Engagement report download (GET /engagements/{id}/report)
+  const [reportDownloading, setReportDownloading] = useState<ReportFormat | null>(null);
+
   // Active Engagement derivation
   const activeEngagement =
     engagements.find((e) => e.engagement_id === selectedEngagementId) ||
     engagements[0] ||
     null;
+
+  const handleDownloadReport = async (format: ReportFormat) => {
+    if (!activeEngagement || reportDownloading) return;
+    setReportDownloading(format);
+    try {
+      const { blob, filename } = await api.downloadReport(activeEngagement.engagement_id, format);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setApiError(
+        err instanceof Error ? `Report download failed: ${err.message}` : "Report download failed."
+      );
+    } finally {
+      setReportDownloading(null);
+    }
+  };
 
   // "none" (not "expired") when no engagement exists yet: nothing has lapsed.
   const authStatus = activeEngagement
@@ -786,6 +812,26 @@ export default function DashboardPage() {
                 <h1 className="db-banner-title">
                   {activeEngagement ? activeEngagement.name : "No Engagement Selected"}
                 </h1>
+                <div className="db-banner-report-actions">
+                  <button
+                    type="button"
+                    className="db-btn-secondary"
+                    disabled={!activeEngagement || reportDownloading !== null}
+                    onClick={() => handleDownloadReport("md")}
+                    title="Engagement report as Markdown, built by the deterministic report builder"
+                  >
+                    {reportDownloading === "md" ? "Preparing report…" : "Download report (.md)"}
+                  </button>
+                  <button
+                    type="button"
+                    className="db-btn-secondary"
+                    disabled={!activeEngagement || reportDownloading !== null}
+                    onClick={() => handleDownloadReport("json")}
+                    title="The same report as JSON"
+                  >
+                    {reportDownloading === "json" ? "Preparing…" : "JSON"}
+                  </button>
+                </div>
               </div>
 
               <div className="db-banner-meta-grid">
