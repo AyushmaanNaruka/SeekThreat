@@ -46,3 +46,11 @@ cwe:
       - CWE-416  # Use After Free
       - CWE-787  # Out-of-bounds Write
     file_read: []
+
+# Findings a named rule derived rather than a scanner reported, keyed by Finding.scanner.
+# The edge built on such a finding never exceeds this confidence, whatever its CWE or tag
+# signals support: the derivation itself is the weakest link. `version-match` findings say
+# only that a banner's product and version fall in a CVE's affected range
+# (services/normalize/version_match.py, DECISIONS.md D-049, Proposed).
+derived_findings:
+  version-match: low

@@ -412,6 +412,12 @@ class _Builder:
         rule = self.ruleset.rule(rule_name)
         target = self.state_node(kind, machine)
         what = ", ".join(finding.cve_ids) or finding.title or finding.finding_id
+        levels = [rule.confidence, match.confidence]
+        cap = self.ruleset.derived_finding_caps.get(finding.scanner.lower())
+        if cap is not None:
+            # A derived finding (e.g. a version match) is no stronger than its derivation.
+            levels.append(cap)
+            note += f"; finding derived by {finding.scanner}, not observed, capped {cap.value}"
         self.add_edge(
             PathEdge(
                 from_node=access,
@@ -422,7 +428,7 @@ class _Builder:
                     f"{what} on {svc.endpoint} ({finding.scanner}) classified "
                     f"{match.capability} by {'; '.join(match.signals)}{note}"
                 ),
-                confidence=weakest([rule.confidence, match.confidence]),
+                confidence=weakest(levels),
                 finding_ids=(finding.finding_id,),
             )
         )

@@ -7,7 +7,8 @@ back into the scan result and a failure here must never mark a scan as failed.
 
 Pipeline (Task 6 – D-036):
 1. Extract unique CVE IDs from ``ObservationKind.VULN_CANDIDATE``
-   observations that were produced by the scan (looked up by artifact_id).
+   observations that were produced by the scan (looked up by artifact_id), plus
+   the version-match CVE candidates of its SERVICE_VERSION observations (D-049).
 2. For each per-CVE source (CVE.org, Vulnrichment, EUVD, NVD) separately,
    identify the CVE IDs that source's mirror lacks. A record in one mirror says
    nothing about the others. IDs the source recently reported as not found
@@ -78,6 +79,7 @@ from services.enrichment.sources.sync import (
     missing_cve_ids_by_source,
     normalize_cve_ids,
 )
+from services.normalize.version_match import version_match_cve_ids
 
 logger = logging.getLogger(__name__)
 
@@ -106,7 +108,8 @@ __all__ = [
 
 
 def _cve_ids_from_artifact(session: Any, artifact_id: str) -> list[str]:
-    """Return all CVE IDs from VULN_CANDIDATE observations for ``artifact_id``.
+    """Return all CVE IDs from VULN_CANDIDATE observations for ``artifact_id``, plus
+    the CVE candidates version matching derives from its SERVICE_VERSION observations.
 
     Observations store CVE IDs in ``attributes["cve_ids"]`` as a
     comma-separated string (e.g. ``"CVE-2021-44228,CVE-2024-3400"``).
@@ -121,6 +124,12 @@ def _cve_ids_from_artifact(session: Any, artifact_id: str) -> list[str]:
         raw = obs.attributes.get("cve_ids", "")
         if isinstance(raw, str) and raw.strip():
             raw_cves.extend(c.strip() for c in raw.split(",") if c.strip())
+    # CVE candidates derived from this scan's service_version facts (D-049), so their
+    # records (and fused CWE ids, which the graph classifies on) are synced too.
+    service_versions = obs_repo.get_by_artifact(
+        artifact_id=artifact_id, kind=ObservationKind.SERVICE_VERSION
+    )
+    raw_cves.extend(version_match_cve_ids(service_versions))
     return normalize_cve_ids(raw_cves)
 
 

@@ -5,7 +5,7 @@
 **Mode:** fixture-based (not a lab run)  
 **Ground truth:** `lab/ground_truth.yaml` (hop lists: `evals/golden/attack_paths_expected.yaml`)  
 **Topology:** `lab/topology.yaml` (`topology:sha256:71f641e935d9d577eded9eda`)  
-**Rules digest:** `rules:sha256:56d64b9ef56ac5ecce4256dc`  
+**Rules digest:** `rules:sha256:e716105c88164a4c6a8ba1da`  
 **Engine limits:** max_depth 12, max_paths 1000  
 **Inputs:** 34 observations, 5 findings (interim bridge, detected_at fixed at 2026-01-01T00:00:00+00:00)  
 **Hosts with only synthetic observations:** bastion-ssh, cache-redis, db-primary, dmz-proxy, internal-api, internal-wiki, jenkins-ci, spring-gateway

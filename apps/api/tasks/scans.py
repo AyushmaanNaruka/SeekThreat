@@ -38,7 +38,7 @@ from apps.api.db.session import SessionLocal
 from apps.api.worker import celery_app
 from packages.schema.models.engagement import Authorization, ScanRequest
 from packages.schema.models.observation import Observation
-from services.normalize import findings_from_observations
+from services.normalize import findings_from_observations, version_match_findings
 from services.scanners.base import (
     AuthorizationError,
     ScannerAdapter,
@@ -111,8 +111,9 @@ def _dispatch_post_scan_enrichment(
 def _dispatch_interim_findings(
     observations: tuple[Observation, ...], engagement_id: str, scan_id: str, actor: str
 ) -> int:
-    """Fire-and-forget: turn the scan's vuln_candidate observations into findings and
-    enqueue their enrichment (interim bridge, DECISIONS.md D-044).
+    """Fire-and-forget: turn the scan's vuln_candidate observations (interim bridge,
+    DECISIONS.md D-044) and version-matched service_version facts (D-049) into findings
+    and enqueue their enrichment.
 
     Dispatched before ``_dispatch_post_scan_enrichment``. Both tasks share the
     single-concurrency ``enrichment`` queue and either order converges: findings
@@ -122,7 +123,11 @@ def _dispatch_interim_findings(
     try:
         from apps.api.tasks.enrichment import enrich_findings  # noqa: PLC0415
 
-        findings = findings_from_observations(observations, detected_at=datetime.now(UTC))
+        detected_at = datetime.now(UTC)
+        # Scanner-reported vuln_candidates (D-044), plus LOW-confidence CVE candidates
+        # derived from service_version facts by named version rules (D-049, Proposed).
+        findings = findings_from_observations(observations, detected_at=detected_at)
+        findings += version_match_findings(observations, detected_at=detected_at)
         if not findings:
             return 0
         enrich_findings.apply_async(

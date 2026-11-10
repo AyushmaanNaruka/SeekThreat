@@ -47,6 +47,8 @@ result = analyze(engagement_id=..., observations=..., findings=..., topology=...
   (`obs:`, `finding:`, `topology:`), a confidence, and the findings it depends on.
 - **Capabilities** (`rules/capabilities.yaml`) come from scanner tags and CWE ids only.
   Findings no rule classifies are returned in `unclassified_findings` with the reason.
+  Findings a rule *derived* rather than a scanner reported (`derived_findings`, today only
+  `version-match`, D-049 proposed) cap their edges at LOW and say so in the description.
 - **Assumptions** (`local_access_exposes_credentials`, `credential_reuse_remote_login`)
   are LOW confidence and say "Assumed, not observed" in their description. A path's
   confidence is its weakest edge.

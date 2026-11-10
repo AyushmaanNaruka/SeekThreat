@@ -43,6 +43,159 @@ Honest estimate. How hard is this to undo?
 
 ## Log
 
+### D-050 — Ground-truth path-1 cannot exist in the lab as built: fix the lab or restate the path
+**Date:** 2026-11-10
+**Decided by:** Proposed by Claude. **Needs Ayushmaan (lab + ground-truth owner) to choose.**
+**Type:** Divergence (lab vs. its own ground truth)
+**Status:** Proposed. `lab/ground_truth.yaml` and `lab/docker-compose.yml` are unchanged.
+
+**Decision (to be made)**
+Path-1 (`dvwa -> internal-api -> db-primary`, "DVWA SSRF pivot -> Internal API leak -> DB")
+is wrong on four separate counts, not only the wiring D-046 found. Pick one:
+
+- **Option A: change the lab so path-1 is real.** All four of these, in `lab/docker-compose.yml`:
+  1. Attach `dvwa` to the `internal` network too (multi-homed, like `dmz-proxy`), and add
+     it to `multi_homed_hosts` in `lab/topology.yaml`.
+  2. Run an Apache httpd 2.4.49 image configured for CVE-2021-41773 instead of
+     `vulnerables/web-dvwa`. Or keep DVWA for the web-app demos and add a separate 2.4.49
+     host.
+  3. Attach `internal-api` to `data`, and make it an app that holds database credentials.
+     Today it is `python -m http.server`, which holds none and is not Werkzeug, so
+     CVE-2022-29361 does not apply either.
+  4. Pin a PostgreSQL release from before the CVE-2020-14349 fix (a 12.3 tag, for example),
+     or replace that CVE in the ground truth.
+
+  Each change then needs a live capture to confirm it. Docker is offline on the machine
+  this was written on, so none of it is verified.
+- **Option B: restate or drop path-1 in the ground truth to match the lab.** Log the
+  change. The eval denominator drops to two chains, or path-1 is rewritten around hosts
+  the lab really has. The only DMZ-to-data routes are through `dmz-proxy`/`spring-gateway`
+  and then `bastion-ssh`.
+
+Recommendation: **A, if path-1's story (web foothold, credential leak, database) is
+wanted for the demo.** Otherwise B. Either is better than the current state, where every
+attack-path metric counts a chain the lab cannot produce as a miss.
+
+**Evidence**
+- *Wiring.* In `lab/docker-compose.yml`, `dvwa` is on `dmz` only, `internal-api` on
+  `internal` only, `db-primary` on `data` only. All three networks are `internal: true`
+  and nothing routes between them. `lab/topology.yaml` transcribes this.
+  `evals/results/attack_paths_results.md` marks both hops of path-1 **INFEASIBLE**, and
+  lists the `reachable_from` claims for internal-api, db-primary and cache-redis as
+  contradicting compose.
+- *dvwa's version.* The only real capture of dvwa (`tests/fixtures/observations/
+  lab_baseline.json`, from `tests/fixtures/nmap/lab_baseline.xml`) reports
+  `Apache httpd 2.4.25` (`cpe:/a:apache:http_server:2.4.25`), not 2.4.49.
+  CVE-2021-41773 affects 2.4.49 only. The ground truth's `version: "2.4.49"` and its
+  `confidence: certain` for CVE-2021-41773 do not match the image. The version-match
+  rules (D-049) correctly derive nothing for it (`test_real_dvwa_capture_yields_no_candidate`).
+- *internal-api.* The compose service is `python:3.9-slim` running `python -m http.server
+  8080`. The ground truth calls it `werkzeug-http 2.0.1`, which only the synthetic fixture
+  repeats. It has no credentials to leak.
+- *db-primary.* PostgreSQL's advisory names 12.4, 11.9 and 10.14 as the fixed releases for
+  CVE-2020-14349, so `postgres:12.4-alpine` is outside the affected range. This was
+  transcribed without network access and must be checked against the advisory. The
+  ground-truth note ("pg_dump ... arbitrary SQL") also reads more like CVE-2020-14350.
+- *cache-redis (path-2's last hop, the same kind of problem).* CVE-2022-0543 comes from
+  Debian/Ubuntu Redis packaging, and the lab runs `redis:5.0.7-alpine`. Path-2's final
+  exploit step is not real as built either. Its network hops are.
+
+**Why a proposal and not an edit**
+Ground truth is the denominator for every metric (D-016). Editing it until the eval passes
+would make the metric meaningless. Option A means swapping images and changing networks,
+and none of that can be checked here. Both options belong to the owner.
+
+**Cost if we're wrong**
+Low to do either. Leaving it is expensive: every reported path-recall number is
+understated by a chain that cannot exist, and a viva examiner who opens compose will
+find it.
+
+---
+
+### D-049 — Version-match CVE candidates from nmap service versions, so live scans feed the graph
+**Date:** 2026-11-10
+**Decided by:** Proposed by Claude. **Needs Ayushmaan (graph owner) to sign off.**
+**Type:** Addition. **Touches what feeds the graph engine** (Hard Rule 1 flag): new
+findings reach `services/graph`. The engine still creates edges only through its named
+rules, and gains a data-driven confidence cap.
+**Status:** Proposed. Implemented on `feat/layer3-livefindings`, not merged.
+
+**Decision**
+- `services/normalize/version_match.py` turns nmap `service_version` observations into
+  `Finding`s with `scanner="version-match"`. It uses named rules in
+  `services/normalize/rules/version_cves.yaml`: product names or CPE vendor:product,
+  half-open affected intervals, and a reference URL for each rule.
+- Each finding:
+  - cites the one observation it was derived from;
+  - names its rule id, the matched interval, the rule-file digest, source
+    `version-match` and confidence `low` in its description;
+  - is titled "unconfirmed".
+- Only numeric dotted versions are compared. Versions from LOW-confidence service facts
+  (nmap `conf` < 7) are skipped.
+- `run_scan` dispatches these findings alongside the D-044 bridge's.
+- The post-scan sync (D-041) also syncs their CVE records. The graph classifies a finding
+  only from its tags and CWE ids, so fused `cwe_ids` from CVE.org, Vulnrichment or NVD are
+  what make these findings usable.
+- `services/graph/rules/capabilities.yaml` adds `derived_findings: {version-match: low}`.
+  An edge built on such a finding is capped at LOW and says "derived by version-match,
+  not observed". Every path that uses one is therefore LOW. This changes the rules digest
+  (`rules:sha256:e716105c88164a4c6a8ba1da`).
+- Not matched, with reasons recorded in the rule file: CVE-2022-0543 (Debian packaging),
+  CVE-2020-15778 (needs a login, and the vendor disputes it), CVE-2020-14349 (12.4 is the
+  fixed release, see D-050).
+
+**Why (root cause of "live scan, 0 paths")**
+1. The graph only builds exploit edges from findings, and findings only came from
+   `vuln_candidate` observations (D-044). nmap emits none by design (D-012,
+   `nmap_xml.py`: CPE-to-CVE matching "belongs to our own enrichment"). That matching
+   was never built.
+2. Nuclei runs with `EXCLUDE_TAGS = dos,intrusive,fuzz,bruteforce,rce,default-login`
+   (D-023, Hard Rule 4). The lab's nuclei CVE templates for spring-gateway, confluence and
+   redis are tagged `rce`, and dmz-proxy's is tagged `dos` (see the tags in
+   `tests/fixtures/observations/lab_extended_nuclei.json`). So they never run, and the
+   tag/CWE evidence the capability rules need never arrives.
+3. Nikto and ssh-audit findings carry no rce/lfi tags and no mapped CWE ids.
+   ssh-audit's CVE-2023-48795 (Terrapin) is not a code-execution or file-read class.
+
+**Considered and rejected**
+- *Enabling nuclei `rce` templates for lab targets.* They send code-execution payloads.
+  Hard Rule 4 and D-023 exclude them for exactly that reason, and an authorization record
+  does not change what a payload does.
+- *Hand-written detection-only nuclei templates for the lab CVEs.* Allowed in principle,
+  but each needs a live lab to prove it is benign and that it fires. Docker is offline
+  here, so a template that cannot be tested would be one more unverified claim. It
+  remains a good follow-up, and it would give HIGH or MEDIUM evidence where version
+  matching gives LOW.
+- *Building the CPE match from the NVD mirror's configurations.* The mirror is targeted
+  per CVE (D-036), so it only holds CVEs we already know about. That is circular for
+  discovery. A full NVD CPE dictionary would be a new, large dependency.
+- *Putting CWE ids in the rule file.* That would duplicate enrichment without its
+  provenance. CWE stays with the enrichment sources.
+
+**Impact on plan**
+A live nmap scan of the lab can now produce LOW-confidence attack paths, once CVE records
+are synced. The fixture eval is unchanged apart from the rules digest: it still runs only
+the D-044 bridge, so its verdicts are comparable with earlier runs. Track 1's normalizer
+should absorb `version_match_findings` together with the bridge.
+
+**What needs the developer's sign-off**
+- The ranges in `version_cves.yaml` were transcribed by hand from the cited advisories
+  without network access, and every rule is marked `verified: false`. Check each one
+  against its reference and flip the flag.
+- The product spellings other than `Apache httpd`, `nginx` and `Werkzeug httpd` come from
+  the ground truth. What nmap really reports for those images must come from a live
+  capture.
+- Whether LOW is the right cap. It is deliberately the floor, so a version-match path
+  never outranks an observed one (D-047 ranks on weakest-step confidence first).
+
+**Cost if we're wrong**
+Low to undo. Remove the dispatch line in `apps/api/tasks/scans.py` and the
+`derived_findings` block, and the engine is back to D-046. The real risk is presentation:
+these findings must stay labelled as derived and unconfirmed in the UI and the assistant's
+narration. If they read as confirmed, the platform reports CVEs it never observed.
+
+---
+
 ### D-048 — Layer 4 assistant: one fact per chunk, hybrid retrieval, cite-or-refuse, deterministic grounding check
 **Date:** 2026-11-07
 **Decided by:** Claude, under the owner's delegation. **Ayushmaan to confirm.**

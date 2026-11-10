@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -40,6 +40,8 @@ class RuleSet:
     remote_login_services: frozenset[str]
     signals: tuple[CapabilitySignal, ...]
     digest: str
+    # Finding.scanner -> the highest confidence an edge built on such a finding may have.
+    derived_finding_caps: dict[str, Confidence] = field(default_factory=dict)
 
     def rule(self, name: str) -> Rule:
         return self.rules[name]
@@ -106,4 +108,8 @@ def load_ruleset(rules_dir: Path = RULES_DIR) -> RuleSet:
         remote_login_services=_lower_set(core.get("remote_login_services")),
         signals=tuple(signals),
         digest=f"rules:sha256:{digest[:24]}",
+        derived_finding_caps={
+            str(scanner).strip().lower(): Confidence(cap)
+            for scanner, cap in (caps.get("derived_findings") or {}).items()
+        },
     )
